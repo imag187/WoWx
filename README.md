@@ -2,6 +2,17 @@
 
 WoWX is a WotLK 3.3.5a addon aimed at couch play, reduced-button control surfaces, and accessibility-focused input. It treats controller mappings as ordinary WoW key presses so Linux tools like AntiMicroX or Steam Input can stay outside the addon.
 
+## Installation
+
+1. Download the latest release zip from the [Releases](../../releases) page.
+2. Unzip the archive.
+3. Inside the unzipped folder you will find a `WoWX` directory.
+4. Copy or move the `WoWX` folder into your WoW addons directory:
+   - **Windows:** `World of Warcraft\_classic_\Interface\AddOns\`
+   - **Linux:** `~/.wine/drive_c/Program Files/World of Warcraft/_classic_/Interface/AddOns/` (or wherever your Wine prefix keeps the game)
+5. Launch (or reload) the game and confirm `WoWX` appears in your AddOns list at the character select screen.
+6. Enable the addon and log in, then run `/wowx init` to begin setup.
+
 ## Accessibility Policy
 
 WoWX is an accessibility surface first.
