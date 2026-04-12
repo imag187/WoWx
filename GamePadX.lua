@@ -46,16 +46,6 @@ local GPX = GamePadX
 local mainFrame
 GPX.version = "1.0.0"
 GPX.brand = "WoWX"
-GPX.utilityActions = {
-    { id = "OPENALLBAGS", label = "Bags", command = "OPENALLBAGS", icon = "Interface\\Icons\\INV_Misc_Bag_08" },
-    { id = "TOGGLEWORLDMAP", label = "World Map", command = "TOGGLEWORLDMAP", icon = "Interface\\Icons\\INV_Misc_Map_01" },
-    { id = "TOGGLEGAMEMENU", label = "Game Menu", command = "TOGGLEGAMEMENU", icon = "Interface\\Icons\\INV_Misc_Gear_01" },
-    { id = "TOGGLECHARACTER0", label = "Character", command = "TOGGLECHARACTER0", icon = "Interface\\PaperDollInfoFrame\\UI-Character-Stats" },
-    { id = "TOGGLESPELLBOOK", label = "Spellbook", command = "TOGGLESPELLBOOK", icon = "Interface\\Icons\\INV_Misc_Book_09" },
-    { id = "TOGGLETALENTS", label = "Talents", command = "TOGGLETALENTS", icon = "Interface\\Icons\\Ability_Marksmanship" },
-    { id = "TOGGLEQUESTLOG", label = "Quest Log", command = "TOGGLEQUESTLOG", icon = "Interface\\GossipFrame\\AvailableQuestIcon" },
-    { id = "TOGGLESOCIAL", label = "Social", command = "TOGGLESOCIAL", icon = "Interface\\FriendsFrame\\PlusManz-BattleNet" },
-}
 GPX.inputStyles = {
     keyboard = {
         id = "keyboard",
@@ -119,6 +109,36 @@ GPX.defaults = {
             showProgress = true,
             progressLocked = true,
             scale = 1.0,
+            layout = {
+                main = {
+                    buttonCount = 12,
+                    buttonWidth = 56,
+                    buttonHeight = 90,
+                    buttonSpacing = 6,
+                    padding = 16,
+                    alpha = 1.0,
+                },
+                bag = {
+                    buttonSize = 22,
+                    buttonSpacing = 8,
+                    padding = 6,
+                    alpha = 1.0,
+                },
+                progress = {
+                    width = 520,
+                    height = 24,
+                    alpha = 1.0,
+                },
+                micro = {
+                    alpha = 1.0,
+                },
+                stance = {
+                    alpha = 1.0,
+                },
+                pet = {
+                    alpha = 1.0,
+                },
+            },
             point = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 48 },
             progressPoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 170 },
             bagPoint = { anchor = "BOTTOMRIGHT", relativeTo = "UIParent", relativePoint = "BOTTOM", x = -220, y = 64 },
@@ -314,29 +334,6 @@ function GPX:GetInputStyle(styleId)
     return self.inputStyles[styleId] or self.inputStyles.keyboard
 end
 
-function GPX:GetUtilityAction(id)
-    if not id then
-        return nil
-    end
-
-    for _, action in ipairs(self.utilityActions or {}) do
-        if action.id == id then
-            return action
-        end
-    end
-    return nil
-end
-
-function GPX:GetUtilityCommandForSlot(setup, slotIndex)
-    if not setup or not setup.utilitySlots then
-        return nil
-    end
-
-    local utilityId = setup.utilitySlots[slotIndex]
-    local action = self:GetUtilityAction(utilityId)
-    return action and action.command or nil
-end
-
 function GPX:HasCalibratedSetup(profile)
     profile = profile or self:GetProfile()
     local setup = profile and profile.setup or nil
@@ -448,7 +445,6 @@ function GPX:ApplySetup(setup)
     end
 
     profile.setup = self:DeepCopy(setup)
-    profile.setup.utilitySlots = profile.setup.utilitySlots or {}
     profile.inputStyle = setup.deviceId
     profile.name = self.brand .. " " .. self:GetInputStyle(setup.deviceId).name
     profile.bindings = self:BuildBindingsFromSetup(setup)
@@ -530,12 +526,10 @@ function GPX:GetOrCreateSetup(profile)
         jumpKey = nil,
         menuKey = nil,
         actionKeys = {},
-        utilitySlots = {},
     }
     profile.setup.movement = profile.setup.movement or {}
     profile.setup.modifiers = profile.setup.modifiers or {}
     profile.setup.actionKeys = profile.setup.actionKeys or {}
-    profile.setup.utilitySlots = profile.setup.utilitySlots or {}
     profile.setup.deviceId = profile.setup.deviceId or profile.inputStyle or "keyboard"
     return profile.setup
 end
@@ -550,37 +544,6 @@ function GPX:ApplySetupFromProfile(profile)
     profile.name = self.brand .. " " .. self:GetInputStyle(profile.inputStyle).name
     profile.bindings = self:BuildBindingsFromSetup(profile.setup)
 
-    if self.db and self.db.enabled then
-        self:ClearBindings()
-        self:ApplyBindings()
-    end
-    if self.VisualBar then
-        self.VisualBar:UpdateAll()
-    end
-    if self.SettingsUI then
-        self.SettingsUI:Refresh()
-    end
-    return true
-end
-
-function GPX:SetUtilitySlot(slotIndex, utilityId)
-    local profile = self:GetProfile()
-    if not profile or not profile.setup then
-        return false, "Run init first to create a controller setup."
-    end
-
-    profile.setup.utilitySlots = profile.setup.utilitySlots or {}
-    if not utilityId or utilityId == "" or utilityId == "NONE" then
-        profile.setup.utilitySlots[slotIndex] = nil
-    else
-        local action = self:GetUtilityAction(utilityId)
-        if not action then
-            return false, "Unknown utility action: " .. tostring(utilityId)
-        end
-        profile.setup.utilitySlots[slotIndex] = utilityId
-    end
-
-    profile.bindings = self:BuildBindingsFromSetup(profile.setup)
     if self.db and self.db.enabled then
         self:ClearBindings()
         self:ApplyBindings()
@@ -868,6 +831,89 @@ local blizzardPageCommands = {
     "PREVACTIONPAGE",
 }
 
+function GPX:IsSpecialActionStateActive()
+    if CanExitVehicle and CanExitVehicle() then
+        return true, "vehicle"
+    end
+    if UnitHasVehicleUI and UnitHasVehicleUI("player") then
+        return true, "vehicle"
+    end
+    if HasVehicleActionBar and HasVehicleActionBar() then
+        return true, "vehicle"
+    end
+    if HasOverrideActionBar and HasOverrideActionBar() then
+        return true, "override"
+    end
+    if HasBonusActionBar and HasBonusActionBar() then
+        return true, "bonus"
+    end
+    if GetBonusBarOffset and (GetBonusBarOffset() or 0) > 0 then
+        return true, "bonus"
+    end
+
+    local possessFrame = _G.PossessBarFrame
+    if possessFrame and possessFrame.IsShown and possessFrame:IsShown() then
+        return true, "possess"
+    end
+
+    return false, nil
+end
+
+function GPX:ShouldSuspendForSpecialActionState()
+    local engine = self:GetBindingEngineConfig()
+    return engine.transport == "click" or engine.transport == "override"
+end
+
+function GPX:RefreshActionStateSafety(silent)
+    if not self.db or not self.db.enabled then
+        return
+    end
+
+    local active, reason = self:IsSpecialActionStateActive()
+    local shouldSuspend = active and self:ShouldSuspendForSpecialActionState()
+
+    if shouldSuspend then
+        self.actionStateSuspended = true
+        self.actionStateReason = reason
+        if next(self.appliedBindings) then
+            self:ClearBindings(true)
+        end
+        if self.VisualBar then
+            self.VisualBar:UpdateAll()
+        end
+        if self.SettingsUI and self.SettingsUI.frame and self.SettingsUI.frame:IsShown() then
+            self.SettingsUI:Refresh()
+        end
+        if not silent and self.lastSafetyNotice ~= reason then
+            self.lastSafetyNotice = reason
+            self:Print("WoWX bindings paused for native " .. reason .. " actions.")
+        end
+        return
+    end
+
+    self.lastSafetyNotice = nil
+    local wasSuspended = self.actionStateSuspended
+    self.actionStateSuspended = nil
+    self.actionStateReason = nil
+
+    if wasSuspended then
+        if InCombatLockdown() then
+            self.pendingSafetyResume = true
+        else
+            self:ApplyBindings(true)
+        end
+        if self.VisualBar then
+            self.VisualBar:UpdateAll()
+        end
+        if self.SettingsUI and self.SettingsUI.frame and self.SettingsUI.frame:IsShown() then
+            self.SettingsUI:Refresh()
+        end
+        if not silent then
+            self:Print("WoWX bindings restored.")
+        end
+    end
+end
+
 function GPX:GetOverrideOwner()
     if not self.overrideOwner then
         self.overrideOwner = CreateFrame("Frame", "WoWXOverrideOwner", UIParent)
@@ -976,7 +1022,7 @@ function GPX:ApplyBaseActionBindings()
     self:PersistBindings("apply")
 end
 
-function GPX:ApplyBindings()
+function GPX:ApplyBindings(silent)
     if not self.db or not self.db.enabled then return end
 
     local engine = self:GetBindingEngineConfig()
@@ -1004,7 +1050,22 @@ function GPX:ApplyBindings()
     end
 
     if InCombatLockdown() then
-        self:Print("Cannot apply WoWX key overrides in combat.")
+        if not silent then
+            self:Print("Cannot apply WoWX key overrides in combat.")
+        end
+        return
+    end
+
+    local specialActive, reason = self:IsSpecialActionStateActive()
+    if specialActive and self:ShouldSuspendForSpecialActionState() then
+        self.actionStateSuspended = true
+        self.actionStateReason = reason
+        if not silent then
+            self:Print("WoWX bindings paused for native " .. reason .. " actions.")
+        end
+        if self.VisualBar then
+            self.VisualBar:UpdateAll()
+        end
         return
     end
 
@@ -1210,14 +1271,20 @@ function GPX:ApplyBindings()
     if fail > 0 then
         msg = msg .. string.format("  |cffff4444(%d failed)|r", fail)
     end
-    self:Print(msg)
+    if not silent then
+        self:Print(msg)
+    end
 end
 
-function GPX:ClearBindings()
+function GPX:ClearBindings(silent)
     if not InCombatLockdown() then
         if self.overrideOwner then
             ClearOverrideBindings(self.overrideOwner)
         end
+    end
+
+    if self.SpellRing then
+        self.SpellRing:ClearBindings()
     end
 
     for key, info in pairs(self.appliedBindings) do
@@ -1235,7 +1302,9 @@ function GPX:ClearBindings()
     end
 
     self.appliedBindings = {}
-    self:Print("|cffffaa00" .. self.brand .. " override bindings cleared for this session.|r")
+    if not silent then
+        self:Print("|cffffaa00" .. self.brand .. " override bindings cleared for this session.|r")
+    end
     if self.VisualBar then
         self.VisualBar:UpdateAll()
     end
@@ -1756,6 +1825,15 @@ mainFrame:RegisterEvent("ADDON_LOADED")
 mainFrame:RegisterEvent("PLAYER_LOGIN")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 mainFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+mainFrame:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
+mainFrame:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
+mainFrame:RegisterEvent("UPDATE_VEHICLE_ACTIONBAR")
+mainFrame:RegisterEvent("UPDATE_OVERRIDE_ACTIONBAR")
+mainFrame:RegisterEvent("UPDATE_POSSESS_BAR")
+mainFrame:RegisterEvent("UNIT_ENTERED_VEHICLE")
+mainFrame:RegisterEvent("UNIT_EXITED_VEHICLE")
+mainFrame:RegisterEvent("PLAYER_CONTROL_GAINED")
+mainFrame:RegisterEvent("PLAYER_CONTROL_LOST")
 
 local function isThisAddon(addonName)
     if not addonName then
@@ -1786,6 +1864,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         if GPX.db then
             if GPX.db.enabled then
                 GPX:ApplyBindings()
+                GPX:RefreshActionStateSafety(true)
             else
                 -- Just a friendly reminder — not annoying if you know what you did
                 local note = GPX.db.machineNote
@@ -1806,11 +1885,30 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
         ensureInitialized()
+        GPX:RefreshActionStateSafety(true)
         GPX:RunAutomaticDiagnosticCapture("entering_world")
     elseif event == "PLAYER_REGEN_ENABLED" then
         if GPX.pendingBindingSave then
             GPX.pendingBindingSave = nil
             GPX:PersistBindings("post-combat")
         end
+        if GPX.pendingSafetyResume then
+            GPX.pendingSafetyResume = nil
+            GPX:ApplyBindings(true)
+        end
+        GPX:RefreshActionStateSafety(true)
+    elseif event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
+        local unit = ...
+        if unit == "player" then
+            GPX:RefreshActionStateSafety()
+        end
+    elseif event == "ACTIONBAR_PAGE_CHANGED"
+        or event == "UPDATE_BONUS_ACTIONBAR"
+        or event == "UPDATE_VEHICLE_ACTIONBAR"
+        or event == "UPDATE_OVERRIDE_ACTIONBAR"
+        or event == "UPDATE_POSSESS_BAR"
+        or event == "PLAYER_CONTROL_GAINED"
+        or event == "PLAYER_CONTROL_LOST" then
+        GPX:RefreshActionStateSafety(true)
     end
 end)

@@ -398,18 +398,6 @@ function UI:CreateFrame()
     end
 end
 
-function UI:GetUtilityChoices()
-    local choices = { "NONE" }
-    for _, action in ipairs(GPX.utilityActions or {}) do
-        choices[#choices + 1] = action.id
-    end
-    return choices
-end
-
-function UI:CycleUtility(slotIndex)
-    GPX:Print("Utility slot click actions were removed from the main bar for reliability.")
-end
-
 function UI:RefreshUtilityButtons()
     if not self.frame then
         return

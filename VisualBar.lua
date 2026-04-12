@@ -24,6 +24,51 @@ local placementRows = {
     { state = "SHIFT-ALT", label = "Combo" },
 }
 
+local layoutDefaults = {
+    main = {
+        buttonCount = 12,
+        buttonWidth = 56,
+        buttonHeight = 90,
+        buttonSpacing = 6,
+        padding = 16,
+        alpha = 1.0,
+        chromeAlpha = 0.12,
+    },
+    bag = {
+        buttonSize = 22,
+        buttonSpacing = 8,
+        padding = 6,
+        alpha = 1.0,
+        chromeAlpha = 0.32,
+    },
+    progress = {
+        width = 520,
+        height = 24,
+        alpha = 1.0,
+    },
+    micro = {
+        alpha = 1.0,
+    },
+    stance = {
+        alpha = 1.0,
+    },
+    pet = {
+        alpha = 1.0,
+    },
+}
+
+local layoutTitles = {
+    main = "Action Bar",
+    bag = "Bag Bar",
+    progress = "XP / Rep Bar",
+    micro = "Micro Menu",
+    stance = "Stance Bar",
+    pet = "Pet Bar",
+}
+
+local RANGE_UPDATE_INTERVAL = 0.08
+local GLOBAL_COOLDOWN_SPELL_ID = 61304
+
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
     frame:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
@@ -153,6 +198,12 @@ local orderedMicroButtons = {
     "HelpMicroButton",
 }
 
+local vehicleLeaveButtonCandidates = {
+    "MainMenuBarVehicleLeaveButton",
+    "VehicleMenuBarLeaveButton",
+    "OverrideActionBarLeaveFrameLeaveButton",
+}
+
 local function getPointFromConfig(config, key, fallback)
     return config[key] or fallback
 end
@@ -161,6 +212,20 @@ local function clamp(value, minV, maxV)
     if value < minV then return minV end
     if value > maxV then return maxV end
     return value
+end
+
+local function roundToStep(value, step)
+    if not step or step <= 0 then
+        return value
+    end
+    return math.floor((value / step) + 0.5) * step
+end
+
+local function formatSliderValue(value, step)
+    if step and step >= 1 then
+        return tostring(math.floor(value + 0.5))
+    end
+    return string.format("%.2f", value)
 end
 
 function Bar:GetCurrentState()
@@ -193,6 +258,60 @@ end
 
 function Bar:GetProfile()
     return GPX:GetProfile()
+end
+
+function Bar:GetLayoutConfig(kind)
+    local config = ensureVisualBarConfig()
+    config.layout = config.layout or {}
+    config.layout[kind] = config.layout[kind] or {}
+
+    local defaults = layoutDefaults[kind] or {}
+    local layout = config.layout[kind]
+    for key, value in pairs(defaults) do
+        if layout[key] == nil then
+            layout[key] = value
+        end
+    end
+    return layout
+end
+
+function Bar:ResetLayoutForKind(kind)
+    local config = ensureVisualBarConfig()
+    config.layout = config.layout or {}
+    config.layout[kind] = GPX:DeepCopy(layoutDefaults[kind] or {})
+
+    if kind == "main" then
+        config.scale = GPX.defaults.ui.visualBar.scale or 1.0
+    elseif kind == "bag" then
+        config.bagScale = nil
+    elseif kind == "micro" then
+        config.microScale = GPX.defaults.ui.visualBar.microScale or 1.0
+    elseif kind == "stance" then
+        config.stanceScale = GPX.defaults.ui.visualBar.stanceScale or 1.0
+    elseif kind == "pet" then
+        config.petScale = GPX.defaults.ui.visualBar.petScale or 1.0
+    end
+
+    self:UpdateAll()
+end
+
+function Bar:GetVisibleButtonCount()
+    local layout = self:GetLayoutConfig("main")
+    return clamp(math.floor((tonumber(layout.buttonCount) or BAR_BUTTON_COUNT) + 0.5), 1, BAR_BUTTON_COUNT)
+end
+
+function Bar:GetMainLayoutMetrics()
+    local layout = self:GetLayoutConfig("main")
+    return {
+        layout = layout,
+        visibleCount = clamp(math.floor((tonumber(layout.buttonCount) or BAR_BUTTON_COUNT) + 0.5), 1, BAR_BUTTON_COUNT),
+        buttonWidth = math.floor(tonumber(layout.buttonWidth) or layoutDefaults.main.buttonWidth),
+        buttonHeight = math.floor(tonumber(layout.buttonHeight) or layoutDefaults.main.buttonHeight),
+        spacing = math.floor(tonumber(layout.buttonSpacing) or layoutDefaults.main.buttonSpacing),
+        padding = math.floor(tonumber(layout.padding) or layoutDefaults.main.padding),
+        alpha = tonumber(layout.alpha) or layoutDefaults.main.alpha,
+        chromeAlpha = tonumber(layout.chromeAlpha) or layoutDefaults.main.chromeAlpha or 0.12,
+    }
 end
 
 function Bar:GetSetup()
@@ -398,6 +517,30 @@ function Bar:AttachMoveHandle(frame, kind)
     frame._wowxMoveKind = kind
 end
 
+function Bar:AttachEditButton(frame, kind)
+    if not frame then
+        return
+    end
+
+    if frame._wowxEditButton and frame._wowxEditKind == kind then
+        return
+    end
+
+    local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    button:SetWidth(46)
+    button:SetHeight(18)
+    button:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -4)
+    button:SetText("Edit")
+    button:SetScript("OnClick", function()
+        if GPX.VisualBar then
+            GPX.VisualBar:OpenLayoutEditor(kind, frame)
+        end
+    end)
+
+    frame._wowxEditButton = button
+    frame._wowxEditKind = kind
+end
+
 function Bar:GetScaleForKind(kind)
     local config = ensureVisualBarConfig()
     if kind == "main" then
@@ -501,12 +644,246 @@ function Bar:UpdateResizeHandles()
         if frame and frame._wowxMoveHandle then
             frame._wowxMoveHandle:SetShown(unlocked)
         end
+        if frame and frame._wowxEditButton then
+            frame._wowxEditButton:SetShown(unlocked)
+        end
     end
     showHandle(self.frame)
     showHandle(self.frame and self.frame.bagBar or nil)
     showHandle(self.microMenuFrame)
     showHandle(_G.StanceBarFrame or _G.ShapeshiftBarFrame or _G.PossessBarFrame)
     showHandle(_G.PetActionBarFrame)
+    showHandle(self.progressFrame)
+end
+
+function Bar:CreateLayoutEditor()
+    if self.layoutEditor then
+        return
+    end
+
+    local frame = CreateFrame("Frame", "WoWXLayoutEditorFrame", UIParent)
+    frame:SetWidth(320)
+    frame:SetHeight(404)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    createBackdrop(frame, 0.96, 0.8, 0.22, 0.9)
+    frame:SetBackdropColor(0.05, 0.07, 0.12, 0.92)
+    frame:Hide()
+
+    frame:SetScript("OnDragStart", function(self)
+        self:StartMoving()
+    end)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+    end)
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -12)
+    title:SetTextColor(0.96, 0.98, 1.0)
+
+    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+    subtitle:SetWidth(288)
+    subtitle:SetJustifyH("LEFT")
+    subtitle:SetTextColor(0.78, 0.84, 0.95)
+
+    local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
+
+    local resetButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    resetButton:SetWidth(82)
+    resetButton:SetHeight(22)
+    resetButton:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 12)
+    resetButton:SetText("Defaults")
+
+    local doneButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    doneButton:SetWidth(82)
+    doneButton:SetHeight(22)
+    doneButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 12)
+    doneButton:SetText("Close")
+    doneButton:SetScript("OnClick", function()
+        frame:Hide()
+    end)
+
+    frame.title = title
+    frame.subtitle = subtitle
+    frame.resetButton = resetButton
+    frame.controls = {}
+
+    for index = 1, 7 do
+        local slider = CreateFrame("Slider", nil, frame)
+        slider:SetOrientation("HORIZONTAL")
+        slider:SetWidth(268)
+        slider:SetHeight(18)
+        slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 26, -72 - ((index - 1) * 44))
+        slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+        slider:SetBackdrop({
+            bgFile = "Interface\\TargetingFrame\\UI-StatusBar",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = false,
+            edgeSize = 8,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 },
+        })
+        slider:SetBackdropColor(0.12, 0.16, 0.22, 0.95)
+        slider:SetBackdropBorderColor(0.22, 0.3, 0.4, 0.75)
+
+        local label = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetPoint("BOTTOMLEFT", slider, "TOPLEFT", 0, 4)
+        label:SetTextColor(0.92, 0.95, 1.0)
+
+        local valueText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        valueText:SetPoint("BOTTOMRIGHT", slider, "TOPRIGHT", 0, 4)
+        valueText:SetTextColor(1.0, 0.92, 0.58)
+
+        slider.label = label
+        slider.valueText = valueText
+        slider:Hide()
+        slider:SetScript("OnValueChanged", function(self, value)
+            if self._suspend or not self.control then
+                return
+            end
+            local control = self.control
+            local stepped = roundToStep(value, control.step)
+            if math.abs(stepped - value) > 0.0001 then
+                self._suspend = true
+                self:SetValue(stepped)
+                self._suspend = false
+                return
+            end
+            self.valueText:SetText((control.format and control.format(stepped)) or formatSliderValue(stepped, control.step))
+            control.set(stepped)
+            if GPX.VisualBar then
+                GPX.VisualBar:UpdateAll()
+            end
+        end)
+
+        frame.controls[index] = slider
+    end
+
+    self.layoutEditor = frame
+end
+
+function Bar:GetEditorControls(kind)
+    local controls = {}
+    local layout = self:GetLayoutConfig(kind)
+
+    local function add(label, minV, maxV, step, getter, setter, formatter)
+        controls[#controls + 1] = {
+            label = label,
+            min = minV,
+            max = maxV,
+            step = step,
+            get = getter,
+            set = setter,
+            format = formatter,
+        }
+    end
+
+    if kind == "main" then
+        add("Scale", 0.75, 1.35, 0.01,
+            function() return select(1, self:GetScaleForKind("main")) end,
+            function(value) self:SetScaleForKind("main", value) end)
+        add("Visible Buttons", 1, 12, 1,
+            function() return self:GetVisibleButtonCount() end,
+            function(value) layout.buttonCount = clamp(math.floor(value + 0.5), 1, BAR_BUTTON_COUNT) end)
+        add("Button Width", 42, 84, 1,
+            function() return tonumber(layout.buttonWidth) or layoutDefaults.main.buttonWidth end,
+            function(value) layout.buttonWidth = math.floor(value + 0.5) end)
+        add("Button Height", 68, 124, 1,
+            function() return tonumber(layout.buttonHeight) or layoutDefaults.main.buttonHeight end,
+            function(value) layout.buttonHeight = math.floor(value + 0.5) end)
+        add("Spacing", 0, 18, 1,
+            function() return tonumber(layout.buttonSpacing) or layoutDefaults.main.buttonSpacing end,
+            function(value) layout.buttonSpacing = math.floor(value + 0.5) end)
+        add("Padding", 6, 28, 1,
+            function() return tonumber(layout.padding) or layoutDefaults.main.padding end,
+            function(value) layout.padding = math.floor(value + 0.5) end)
+        add("Opacity", 0.35, 1.0, 0.01,
+            function() return tonumber(layout.alpha) or layoutDefaults.main.alpha end,
+            function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
+    elseif kind == "bag" then
+        add("Scale", 0.6, 1.6, 0.01,
+            function() return select(1, self:GetScaleForKind("bag")) end,
+            function(value) self:SetScaleForKind("bag", value) end)
+        add("Button Size", 18, 36, 1,
+            function() return tonumber(layout.buttonSize) or layoutDefaults.bag.buttonSize end,
+            function(value) layout.buttonSize = math.floor(value + 0.5) end)
+        add("Spacing", 0, 14, 1,
+            function() return tonumber(layout.buttonSpacing) or layoutDefaults.bag.buttonSpacing end,
+            function(value) layout.buttonSpacing = math.floor(value + 0.5) end)
+        add("Padding", 2, 14, 1,
+            function() return tonumber(layout.padding) or layoutDefaults.bag.padding end,
+            function(value) layout.padding = math.floor(value + 0.5) end)
+        add("Opacity", 0.35, 1.0, 0.01,
+            function() return tonumber(layout.alpha) or layoutDefaults.bag.alpha end,
+            function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
+    elseif kind == "progress" then
+        add("Width", 260, 960, 2,
+            function() return tonumber(layout.width) or layoutDefaults.progress.width end,
+            function(value) layout.width = math.floor(value + 0.5) end)
+        add("Height", 18, 42, 1,
+            function() return tonumber(layout.height) or layoutDefaults.progress.height end,
+            function(value) layout.height = math.floor(value + 0.5) end)
+        add("Opacity", 0.35, 1.0, 0.01,
+            function() return tonumber(layout.alpha) or layoutDefaults.progress.alpha end,
+            function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
+    elseif kind == "micro" or kind == "stance" or kind == "pet" then
+        add("Scale", 0.6, 1.6, 0.01,
+            function() return select(1, self:GetScaleForKind(kind)) end,
+            function(value) self:SetScaleForKind(kind, value) end)
+        add("Opacity", 0.35, 1.0, 0.01,
+            function() return tonumber(layout.alpha) or 1.0 end,
+            function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
+    end
+
+    return controls
+end
+
+function Bar:OpenLayoutEditor(kind, anchorFrame)
+    self:CreateLayoutEditor()
+
+    local editor = self.layoutEditor
+    local controls = self:GetEditorControls(kind)
+    editor.kind = kind
+    editor.title:SetText((layoutTitles[kind] or "Bar") .. " Edit Mode")
+    editor.subtitle:SetText("Adjust this bar in place. Changes save immediately to the current WoWX profile.")
+    editor:ClearAllPoints()
+
+    if anchorFrame and anchorFrame:IsShown() then
+        editor:SetPoint("TOPLEFT", anchorFrame, "TOPRIGHT", 10, 0)
+    else
+        editor:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    end
+
+    for index, slider in ipairs(editor.controls) do
+        local control = controls[index]
+        if control then
+            local value = control.get()
+            slider.control = control
+            slider.label:SetText(control.label)
+            slider:SetMinMaxValues(control.min, control.max)
+            slider:SetValueStep(control.step)
+            slider._suspend = true
+            slider:SetValue(value)
+            slider.valueText:SetText((control.format and control.format(value)) or formatSliderValue(value, control.step))
+            slider._suspend = false
+            slider:Show()
+        else
+            slider.control = nil
+            slider:Hide()
+        end
+    end
+
+    editor.resetButton:SetScript("OnClick", function()
+        if GPX.VisualBar then
+            GPX.VisualBar:ResetLayoutForKind(kind)
+            GPX.VisualBar:OpenLayoutEditor(kind, anchorFrame)
+        end
+    end)
+
+    editor:Show()
 end
 
 function Bar:CreateMicroMenuFrame()
@@ -523,11 +900,13 @@ function Bar:CreateMicroMenuFrame()
     createBackdrop(frame, 0.18, 0.24, 0.3, 0.7)
     self.microMenuFrame = frame
     self:AttachMoveHandle(frame, "micro")
+    self:AttachResizeHandle(frame, "micro")
+    self:AttachEditButton(frame, "micro")
 end
 
 function Bar:UpdateMicroMenu()
     self:CreateMicroMenuFrame()
-    local config = ensureVisualBarConfig()
+    local layout = self:GetLayoutConfig("micro")
     local show = self:ShouldReplaceBlizzardBars() and (not GPX:IsControllerEnabled())
     if not show then
         self.microMenuFrame:Hide()
@@ -538,7 +917,7 @@ function Bar:UpdateMicroMenu()
     self.microMenuFrame:ClearAllPoints()
     self.microMenuFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
     self.microMenuFrame:SetScale(select(1, self:GetScaleForKind("micro")))
-    self:AttachResizeHandle(self.microMenuFrame, "micro")
+    self.microMenuFrame:SetAlpha(tonumber(layout.alpha) or 1.0)
 
     local prev
     for _, name in ipairs(orderedMicroButtons) do
@@ -560,7 +939,8 @@ function Bar:UpdateMicroMenu()
 end
 
 function Bar:UpdateDetachedClassBars()
-    local config = ensureVisualBarConfig()
+    local stanceLayout = self:GetLayoutConfig("stance")
+    local petLayout = self:GetLayoutConfig("pet")
     local show = self:ShouldReplaceBlizzardBars()
 
     local stanceFrame = _G.StanceBarFrame or _G.ShapeshiftBarFrame or _G.PossessBarFrame
@@ -571,12 +951,14 @@ function Bar:UpdateDetachedClassBars()
         stanceFrame:ClearAllPoints()
         stanceFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
         stanceFrame:SetScale(select(1, self:GetScaleForKind("stance")))
+        stanceFrame:SetAlpha(tonumber(stanceLayout.alpha) or 1.0)
         stanceFrame:Show()
         self:EnsureAuxMovable(stanceFrame, function(selfFrame)
             GPX.VisualBar:SaveAuxFramePosition(selfFrame, "stancePoint", "BOTTOM", "BOTTOM")
         end)
         self:AttachMoveHandle(stanceFrame, "stance")
         self:AttachResizeHandle(stanceFrame, "stance")
+        self:AttachEditButton(stanceFrame, "stance")
     end
 
     local petFrame = _G.PetActionBarFrame
@@ -587,43 +969,50 @@ function Bar:UpdateDetachedClassBars()
         petFrame:ClearAllPoints()
         petFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
         petFrame:SetScale(select(1, self:GetScaleForKind("pet")))
+        petFrame:SetAlpha(tonumber(petLayout.alpha) or 1.0)
         petFrame:Show()
         self:EnsureAuxMovable(petFrame, function(selfFrame)
             GPX.VisualBar:SaveAuxFramePosition(selfFrame, "petPoint", "BOTTOM", "BOTTOM")
         end)
         self:AttachMoveHandle(petFrame, "pet")
         self:AttachResizeHandle(petFrame, "pet")
+        self:AttachEditButton(petFrame, "pet")
     end
 end
 
-function Bar:GetUtilityForButton(index, state)
+function Bar:GetVehicleLeaveButton()
+    for _, name in ipairs(vehicleLeaveButtonCandidates) do
+        local button = _G[name]
+        if button then
+            return button
+        end
+    end
     return nil
 end
 
-function Bar:RunUtilityAction(utilityId)
-    if utilityId == "OPENALLBAGS" then
-        if OpenAllBags then
-            OpenAllBags()
-        elseif ToggleBackpack then
-            ToggleBackpack()
-        end
-    elseif utilityId == "TOGGLEWORLDMAP" then
-        if ToggleWorldMap then ToggleWorldMap() end
-    elseif utilityId == "TOGGLEGAMEMENU" then
-        if ToggleGameMenu then ToggleGameMenu() end
-    elseif utilityId == "TOGGLECHARACTER0" then
-        if ToggleCharacter then ToggleCharacter("PaperDollFrame") end
-    elseif utilityId == "TOGGLESPELLBOOK" then
-        if ToggleSpellBook then ToggleSpellBook(BOOKTYPE_SPELL or "spell") end
-    elseif utilityId == "TOGGLETALENTS" then
-        if ToggleTalentFrame then ToggleTalentFrame() end
-    elseif utilityId == "TOGGLEQUESTLOG" then
-        if ToggleQuestLog then ToggleQuestLog() end
-    elseif utilityId == "TOGGLESOCIAL" then
-        if ToggleFriendsFrame then ToggleFriendsFrame(1) end
-    else
-        GPX:Print("Unknown utility action: " .. tostring(utilityId))
+function Bar:UpdateVehicleLeaveButton()
+    local button = self:GetVehicleLeaveButton()
+    if not button then
+        return
     end
+
+    local active = (CanExitVehicle and CanExitVehicle())
+        or (UnitHasVehicleUI and UnitHasVehicleUI("player"))
+        or (HasVehicleActionBar and HasVehicleActionBar())
+
+    if not active then
+        return
+    end
+
+    button:SetParent(UIParent)
+    button:ClearAllPoints()
+    if self.frame and self.frame:IsShown() then
+        button:SetPoint("BOTTOMLEFT", self.frame, "TOPRIGHT", 8, 4)
+    else
+        button:SetPoint("BOTTOM", UIParent, "BOTTOM", 240, 120)
+    end
+    button:SetFrameStrata("HIGH")
+    button:Show()
 end
 
 function Bar:GetBarScale()
@@ -698,13 +1087,21 @@ function Bar:UpdateProgressBar()
     end
 
     local config = ensureVisualBarConfig()
+    local layout = self:GetLayoutConfig("progress")
     if config.showProgress == false then
         self.progressFrame:Hide()
         return
     end
 
+    self.progressFrame:SetWidth(tonumber(layout.width) or layoutDefaults.progress.width)
+    self.progressFrame:SetHeight(tonumber(layout.height) or layoutDefaults.progress.height)
+    self.progressFrame:SetAlpha(tonumber(layout.alpha) or layoutDefaults.progress.alpha)
+
     local progressBar = self.progressFrame.progressBar
     local progressText = self.progressFrame.progressText
+    progressBar:ClearAllPoints()
+    progressBar:SetPoint("TOPLEFT", self.progressFrame, "TOPLEFT", 6, -6)
+    progressBar:SetPoint("BOTTOMRIGHT", self.progressFrame, "BOTTOMRIGHT", -6, 6)
 
     local name, _, standingID, min, max, value = GetWatchedFactionInfo()
     if name and min and max and max > min and value then
@@ -761,19 +1158,44 @@ function Bar:UpdateBagBar()
     end
 
     local config = ensureVisualBarConfig()
+    local layout = self:GetLayoutConfig("bag")
     local show = config.showBagBar ~= false
     self.frame.bagBar:SetShown(show)
     if not show then
         return
     end
 
+    local buttonSize = math.floor(tonumber(layout.buttonSize) or layoutDefaults.bag.buttonSize)
+    local spacing = math.floor(tonumber(layout.buttonSpacing) or layoutDefaults.bag.buttonSpacing)
+    local padding = math.floor(tonumber(layout.padding) or layoutDefaults.bag.padding)
+    local chromeAlpha = tonumber(layout.chromeAlpha) or layoutDefaults.bag.chromeAlpha or 0.32
+    local width = (padding * 2) + (buttonSize * 5) + (spacing * 4)
+    local height = buttonSize + (padding * 2)
+
+    self.frame.bagBar:SetWidth(width)
+    self.frame.bagBar:SetHeight(height)
+    self.frame.bagBar:SetAlpha(tonumber(layout.alpha) or layoutDefaults.bag.alpha)
+    self.frame.bagBar:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha)
     self.frame.bagBar:SetScale(select(1, self:GetScaleForKind("bag")))
     self:ApplyStoredBagPosition()
 
-    for bagID, button in pairs(self.frame.bagButtons) do
+    for bagID = 0, 4 do
+        local button = self.frame.bagButtons[bagID]
         local invSlot = bagID == 0 and 16 or ((ContainerIDToInventoryID and ContainerIDToInventoryID(bagID)) or (19 + bagID))
         local texture = GetInventoryItemTexture("player", invSlot)
+        button:ClearAllPoints()
+        button:SetWidth(buttonSize)
+        button:SetHeight(buttonSize)
+        button:SetPoint("LEFT", self.frame.bagBar, "LEFT", padding + ((4 - bagID) * (buttonSize + spacing)), 0)
         button.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_Bag_08")
+        if not button.border then
+            local bagBorder = button:CreateTexture(nil, "OVERLAY")
+            bagBorder:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+            bagBorder:SetAllPoints(button)
+            button.border = bagBorder
+        end
+        button.border:SetVertexColor(0.95, 0.94, 0.88, 0.95)
+        button:SetBackdropBorderColor(0.54, 0.46, 0.26, 0.95)
     end
 end
 
@@ -1257,6 +1679,11 @@ function Bar:CreateFrame()
             GPX.VisualBar:SavePosition()
         end
     end)
+    frame:SetScript("OnUpdate", function(_, elapsed)
+        if GPX.VisualBar then
+            GPX.VisualBar:OnVisualUpdate(elapsed)
+        end
+    end)
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
@@ -1359,6 +1786,20 @@ function Bar:CreateFrame()
         keyText:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 8, 8)
         keyText:SetTextColor(1.0, 0.92, 0.58)
 
+        local countText = button:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
+        countText:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -8, 8)
+        countText:SetJustifyH("RIGHT")
+        countText:SetTextColor(0.9, 0.96, 1.0)
+
+        local shine = button:CreateTexture(nil, "OVERLAY")
+        shine:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+        shine:SetBlendMode("ADD")
+        shine:SetPoint("CENTER", button, "CENTER", 0, 2)
+        shine:SetWidth(72)
+        shine:SetHeight(72)
+        shine:SetVertexColor(0.2, 1.0, 0.42, 0.85)
+        shine:Hide()
+
         local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
         cooldown:SetAllPoints(icon)
 
@@ -1366,6 +1807,8 @@ function Bar:CreateFrame()
         button.glyph = glyph
         button.name = name
         button.keyText = keyText
+        button.countText = countText
+        button.shine = shine
         button.cooldown = cooldown
         button:SetAttribute("type", nil)
         button:SetAttribute("action", nil)
@@ -1399,8 +1842,10 @@ function Bar:CreateFrame()
     self:ApplyStoredBagPosition()
     self:AttachMoveHandle(frame, "main")
     self:AttachResizeHandle(frame, "main")
+    self:AttachEditButton(frame, "main")
     self:AttachMoveHandle(bagBar, "bag")
     self:AttachResizeHandle(bagBar, "bag")
+    self:AttachEditButton(bagBar, "bag")
 
     if GPX.UIMode then
         GPX.UIMode:RegisterContext("bar", {
@@ -1467,6 +1912,111 @@ function Bar:CreateProgressFrame()
     self.progressFrame.progressBar = progressBar
     self.progressFrame.progressText = progressText
     self:ApplyStoredProgressPosition()
+    self:AttachEditButton(progressFrame, "progress")
+end
+
+function Bar:GetResolvedCooldown(slot)
+    local start, duration, enable = GetActionCooldown(slot)
+
+    if GetSpellCooldown then
+        local gcdStart, gcdDuration, gcdEnable = GetSpellCooldown(GLOBAL_COOLDOWN_SPELL_ID)
+        if gcdEnable and gcdEnable ~= 0 and gcdDuration and gcdDuration > 0 and gcdDuration <= 1.7 then
+            if (not duration or duration <= 0) or gcdDuration > duration then
+                return gcdStart, gcdDuration, gcdEnable
+            end
+        end
+    end
+
+    return start, duration, enable
+end
+
+function Bar:UpdateButtonVisualState(button)
+    if not button then
+        return
+    end
+
+    local display = button.display
+    local alpha = button._wowxBaseAlpha or layoutDefaults.main.alpha
+    local borderR, borderG, borderB, borderA = 0.14, 0.18, 0.24, 0.85
+    if not self:IsLocked() then
+        borderR, borderG, borderB, borderA = 0.96, 0.8, 0.22, 0.9
+    end
+
+    if display and display.slot then
+        local start, duration, enable = self:GetResolvedCooldown(display.slot)
+        CooldownFrame_SetTimer(button.cooldown, start or 0, duration or 0, enable or 0)
+
+        local usable, oom = IsUsableAction(display.slot)
+        local inRange = IsActionInRange(display.slot)
+        local actionCount = GetActionCount and (GetActionCount(display.slot) or 0) or 0
+        local equippedAction = IsEquippedAction and IsEquippedAction(display.slot)
+        local red, green, blue = 1.0, 1.0, 1.0
+        local finalAlpha = alpha
+
+        if inRange == 0 then
+            red, green, blue = 0.95, 0.22, 0.22
+            finalAlpha = math.max(0.35, alpha * 0.7)
+            borderR, borderG, borderB, borderA = 0.9, 0.22, 0.22, 0.95
+        elseif not usable and oom then
+            red, green, blue = 0.3, 0.5, 1.0
+        elseif not usable then
+            red, green, blue = 0.45, 0.45, 0.45
+            finalAlpha = math.max(0.45, alpha * 0.82)
+        end
+
+        button.icon:SetVertexColor(red, green, blue)
+        button:SetAlpha(finalAlpha)
+        if button.countText then
+            if actionCount and actionCount > 1 then
+                button.countText:SetText(actionCount)
+                button.countText:Show()
+            else
+                button.countText:SetText("")
+                button.countText:Hide()
+            end
+        end
+        if button.shine then
+            if equippedAction then
+                button.shine:Show()
+            else
+                button.shine:Hide()
+            end
+        end
+    else
+        CooldownFrame_SetTimer(button.cooldown, 0, 0, 0)
+        button.icon:SetVertexColor(0.35, 0.4, 0.46)
+        button:SetAlpha(math.max(0.45, alpha * 0.9))
+        if button.countText then
+            button.countText:SetText("")
+            button.countText:Hide()
+        end
+        if button.shine then
+            button.shine:Hide()
+        end
+    end
+
+    button:SetBackdropBorderColor(borderR, borderG, borderB, borderA)
+end
+
+function Bar:OnVisualUpdate(elapsed)
+    if not self.frame or not self.frame:IsShown() then
+        return
+    end
+
+    self._rangeTicker = (self._rangeTicker or 0) + (elapsed or 0)
+    if self._rangeTicker < RANGE_UPDATE_INTERVAL then
+        return
+    end
+    self._rangeTicker = 0
+
+    local metrics = self._mainLayoutMetrics or self:GetMainLayoutMetrics()
+    local visibleCount = metrics.visibleCount
+    for index = 1, visibleCount do
+        local button = self.frame.buttons[index]
+        if button and button:IsShown() then
+            self:UpdateButtonVisualState(button)
+        end
+    end
 end
 
 function Bar:UpdateModifierChips(state)
@@ -1494,6 +2044,14 @@ function Bar:UpdateButton(index, state)
     local button = self.frame.buttons[index]
     local display = self:GetDisplayForButton(index, state)
     local physicalKey = self:GetPhysicalKeyForButton(index)
+    local metrics = self._mainLayoutMetrics or self:GetMainLayoutMetrics()
+    local visibleCount = metrics.visibleCount
+    local buttonWidth = metrics.buttonWidth
+    local buttonHeight = metrics.buttonHeight
+    local spacing = metrics.spacing
+    local padding = metrics.padding
+    local iconSize = math.max(20, math.min(buttonWidth - 8, buttonHeight - 36))
+    local buttonTopOffset = self.frame and self.frame._wowxButtonTopOffset or 44
 
     local keyLabel = physicalKey or defaultKeyHints[index] or tostring(index)
     button.glyph:SetText(keyLabel)
@@ -1501,6 +2059,39 @@ function Bar:UpdateButton(index, state)
     button.keyText:SetText(keyLabel)
     button.display = display
     button.physicalKey = physicalKey
+    button._wowxBaseAlpha = metrics.alpha
+
+    if index <= visibleCount then
+        button:Show()
+        button:SetWidth(buttonWidth)
+        button:SetHeight(buttonHeight)
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", self.frame, "TOPLEFT", padding + ((index - 1) * (buttonWidth + spacing)), -buttonTopOffset)
+        button.icon:SetWidth(iconSize)
+        button.icon:SetHeight(iconSize)
+        button.icon:ClearAllPoints()
+        button.icon:SetPoint("TOP", button, "TOP", 0, -10)
+        button.glyph:ClearAllPoints()
+        button.glyph:SetPoint("TOPLEFT", button, "TOPLEFT", 8, -8)
+        button.name:ClearAllPoints()
+        button.name:SetPoint("TOPLEFT", button.icon, "BOTTOMLEFT", -4, -8)
+        button.name:SetPoint("RIGHT", button, "RIGHT", -6, 0)
+        button.keyText:ClearAllPoints()
+        button.keyText:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 8, 8)
+        if button.countText then
+            button.countText:ClearAllPoints()
+            button.countText:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -8, 8)
+        end
+        if button.shine then
+            local shineSize = math.max(iconSize + 20, 54)
+            button.shine:SetWidth(shineSize)
+            button.shine:SetHeight(shineSize)
+            button.shine:ClearAllPoints()
+            button.shine:SetPoint("CENTER", button.icon, "CENTER", 0, 0)
+        end
+    else
+        button:Hide()
+    end
 
     if not InCombatLockdown() then
         local baseSlot = self:GetSlotForButtonState(index, "")
@@ -1510,32 +2101,36 @@ function Bar:UpdateButton(index, state)
         local comboSlot = self:GetSlotForButtonState(index, "SHIFT-ALT")
 
         if baseSlot then
-            button:SetAttribute("type", "action")
-            button:SetAttribute("action", baseSlot)
+            button:SetAttribute("type", nil)
+            button:SetAttribute("action", nil)
+            button:SetAttribute("type1", "action")
+            button:SetAttribute("action1", baseSlot)
         else
             button:SetAttribute("type", nil)
             button:SetAttribute("action", nil)
+            button:SetAttribute("type1", nil)
+            button:SetAttribute("action1", nil)
         end
 
-        button:SetAttribute("shift-type", shiftSlot and "action" or nil)
-        button:SetAttribute("shift-action", shiftSlot)
+        button:SetAttribute("shift-type", nil)
+        button:SetAttribute("shift-action", nil)
         button:SetAttribute("shift-type1", shiftSlot and "action" or nil)
         button:SetAttribute("shift-action1", shiftSlot)
 
-        button:SetAttribute("alt-type", altSlot and "action" or nil)
-        button:SetAttribute("alt-action", altSlot)
+        button:SetAttribute("alt-type", nil)
+        button:SetAttribute("alt-action", nil)
         button:SetAttribute("alt-type1", altSlot and "action" or nil)
         button:SetAttribute("alt-action1", altSlot)
 
-        button:SetAttribute("ctrl-type", ctrlSlot and "action" or nil)
-        button:SetAttribute("ctrl-action", ctrlSlot)
+        button:SetAttribute("ctrl-type", nil)
+        button:SetAttribute("ctrl-action", nil)
         button:SetAttribute("ctrl-type1", ctrlSlot and "action" or nil)
         button:SetAttribute("ctrl-action1", ctrlSlot)
 
-        button:SetAttribute("shift-alt-type", comboSlot and "action" or nil)
-        button:SetAttribute("shift-alt-action", comboSlot)
-        button:SetAttribute("alt-shift-type", comboSlot and "action" or nil)
-        button:SetAttribute("alt-shift-action", comboSlot)
+        button:SetAttribute("shift-alt-type", nil)
+        button:SetAttribute("shift-alt-action", nil)
+        button:SetAttribute("alt-shift-type", nil)
+        button:SetAttribute("alt-shift-action", nil)
         button:SetAttribute("shift-alt-type1", comboSlot and "action" or nil)
         button:SetAttribute("shift-alt-action1", comboSlot)
         button:SetAttribute("alt-shift-type1", comboSlot and "action" or nil)
@@ -1565,24 +2160,7 @@ function Bar:UpdateButton(index, state)
         button.icon:SetVertexColor(0.35, 0.4, 0.46)
     end
 
-    if display.slot then
-        local start, duration, enable = GetActionCooldown(display.slot)
-        CooldownFrame_SetTimer(button.cooldown, start, duration, enable)
-        local usable, oom = IsUsableAction(display.slot)
-        if not usable and oom then
-            button.icon:SetVertexColor(0.3, 0.5, 1.0)
-        elseif not usable then
-            button.icon:SetVertexColor(0.45, 0.45, 0.45)
-        end
-    else
-        CooldownFrame_SetTimer(button.cooldown, 0, 0, 0)
-    end
-
-    if self:IsLocked() then
-        button:SetBackdropBorderColor(0.14, 0.18, 0.24, 0.85)
-    else
-        button:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.9)
-    end
+    self:UpdateButtonVisualState(button)
 end
 
 function Bar:UpdateAll()
@@ -1604,24 +2182,58 @@ function Bar:UpdateAll()
         return
     end
 
-    local setup = self:GetSetup()
+    local metrics = self:GetMainLayoutMetrics()
+    self._mainLayoutMetrics = metrics
+    local visibleCount = metrics.visibleCount
+    local buttonWidth = metrics.buttonWidth
+    local buttonHeight = metrics.buttonHeight
+    local spacing = metrics.spacing
+    local padding = metrics.padding
+    local chromeAlpha = metrics.chromeAlpha
+    local width = (padding * 2) + (visibleCount * buttonWidth) + ((visibleCount - 1) * spacing)
+    if width < 460 then
+        width = 460
+    end
+
+    self.frame:SetWidth(width)
     self.frame:SetScale(self:GetBarScale())
+    self.frame:SetAlpha(metrics.alpha)
+    self.frame:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha)
 
     local state = self:GetCurrentState()
     local page = modifierStates[state] or modifierStates[""]
     local pageLabel = page.title
+    local showHeader = (not self:IsLocked()) or state ~= "" or (GPX.UIMode and GPX.UIMode.activeContext == "bar")
+    local buttonTopOffset = showHeader and 44 or 14
     if not self:UseModifierPages() and state ~= "" then
         pageLabel = "Base (modifier held)"
     end
-    self.frame.title:SetText(GPX.brand .. (setup and " Action Bar" or " Action Bar — Not Calibrated"))
+    self.frame._wowxButtonTopOffset = buttonTopOffset
+    self.frame:SetHeight(buttonHeight + (showHeader and 62 or 26))
+    self.frame.title:SetText("Action Bar")
     self.frame.pageText:SetText(pageLabel)
+    if GPX.actionStateSuspended and GPX.actionStateReason then
+        self.frame.title:SetText("Action Bar — Native " .. GPX.actionStateReason)
+        self.frame:SetBackdropBorderColor(0.95, 0.36, 0.18, 0.98)
+        self.frame:SetBackdropColor(0.1, 0.05, 0.04, math.max(chromeAlpha, 0.18))
+        showHeader = true
+    end
     if GPX.UIMode and GPX.UIMode.activeContext == "bar" then
-        self.frame.title:SetText(GPX.brand .. " Action Bar — UI Mode")
+        self.frame.title:SetText("Action Bar — UI Mode")
         self.frame:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.98)
     else
-        self.frame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.9)
+        if not (GPX.actionStateSuspended and GPX.actionStateReason) then
+            self.frame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.9)
+        end
     end
+    self.frame.title:SetShown(showHeader)
+    self.frame.pageText:SetShown(showHeader)
     self.frame.pageText:SetTextColor(self:IsLocked() and 0.85 or 1.0, self:IsLocked() and 0.88 or 0.9, self:IsLocked() and 0.98 or 0.35)
+    if self.frame.chips then
+        for _, chip in ipairs(self.frame.chips) do
+            chip:SetShown(showHeader)
+        end
+    end
     if self.progressFrame then
         if self:IsProgressLocked() then
             self.progressFrame:SetBackdropBorderColor(0.18, 0.24, 0.3, 0.8)
@@ -1634,6 +2246,7 @@ function Bar:UpdateAll()
     self:UpdateBagBar()
     self:UpdateMicroMenu()
     self:UpdateDetachedClassBars()
+    self:UpdateVehicleLeaveButton()
     self:UpdateResizeHandles()
 
     for index = 1, BAR_BUTTON_COUNT do
@@ -1727,6 +2340,7 @@ eventFrame:RegisterEvent("MODIFIER_STATE_CHANGED")
 eventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_USABLE")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("SPELLS_CHANGED")
 eventFrame:RegisterEvent("UPDATE_BINDINGS")
 eventFrame:RegisterEvent("PLAYER_XP_UPDATE")
