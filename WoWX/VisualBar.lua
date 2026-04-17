@@ -49,6 +49,10 @@ local layoutDefaults = {
     micro = {
         alpha = 1.0,
     },
+    modifier = {
+        alpha = 1.0,
+        chromeAlpha = 0.2,
+    },
     stance = {
         alpha = 1.0,
     },
@@ -62,6 +66,7 @@ local layoutTitles = {
     bag = "Bag Bar",
     progress = "XP / Rep Bar",
     micro = "Micro Menu",
+    modifier = "Modifier Indicator",
     stance = "Stance Bar",
     pet = "Pet Bar",
 }
@@ -228,6 +233,165 @@ local function formatSliderValue(value, step)
     return string.format("%.2f", value)
 end
 
+local function getEffectiveFrameWidth(frame)
+    if not frame then
+        return 0
+    end
+    return (frame.GetWidth and frame:GetWidth()) or 0
+end
+
+local function formatScaleValue(value)
+    return string.format("%.2fx", value)
+end
+
+local function ensureSlotWrapper(frame)
+    if not frame or frame._wowxSlotWrapper then
+        return
+    end
+
+    local panel = frame:CreateTexture(nil, "BACKGROUND")
+    panel:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+    panel:SetVertexColor(0.07, 0.09, 0.12, 0.96)
+
+    local border = frame:CreateTexture(nil, "OVERLAY")
+    border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+    border:SetVertexColor(0.92, 0.93, 0.9, 0.92)
+
+    frame.slotPanel = panel
+    frame.slotBorder = border
+    frame._wowxSlotWrapper = true
+end
+
+local function layoutSlotWrapper(frame, leftInset, topInset, rightInset, bottomInset)
+    ensureSlotWrapper(frame)
+    frame.slotPanel:ClearAllPoints()
+    frame.slotPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", leftInset, -topInset)
+    frame.slotPanel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -rightInset, bottomInset)
+
+    frame.slotBorder:ClearAllPoints()
+    frame.slotBorder:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", -6, 6)
+    frame.slotBorder:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 6, -6)
+end
+
+local function layoutSquareSlotWrapper(frame, leftInset, topInset, rightInset, bottomInset)
+    ensureSlotWrapper(frame)
+
+    local width = (frame.GetWidth and frame:GetWidth()) or 0
+    local height = (frame.GetHeight and frame:GetHeight()) or 0
+    local availableWidth = math.max(0, width - leftInset - rightInset)
+    local availableHeight = math.max(0, height - topInset - bottomInset)
+    local size = math.max(18, math.min(availableWidth, availableHeight))
+    local left = leftInset + math.floor((availableWidth - size) * 0.5)
+    local top = topInset + math.floor((availableHeight - size) * 0.5)
+
+    frame.slotPanel:ClearAllPoints()
+    frame.slotPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", left, -top)
+    frame.slotPanel:SetWidth(size)
+    frame.slotPanel:SetHeight(size)
+
+    frame.slotBorder:ClearAllPoints()
+    frame.slotBorder:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", -6, 6)
+    frame.slotBorder:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 6, -6)
+end
+
+local function layoutIconPriorityWrapper(frame, icon, iconSize, bottomReserve)
+    ensureSlotWrapper(frame)
+
+    local width = (frame.GetWidth and frame:GetWidth()) or iconSize
+    local height = (frame.GetHeight and frame:GetHeight()) or iconSize
+    local reserve = bottomReserve or 6
+    local topInset = 2
+    local x = math.max(4, math.floor((width - iconSize) * 0.5))
+    local y = topInset + math.max(0, math.floor((height - reserve - topInset - iconSize) * 0.5))
+
+    icon:ClearAllPoints()
+    icon:SetWidth(iconSize)
+    icon:SetHeight(iconSize)
+    icon:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -y)
+
+    frame.slotPanel:ClearAllPoints()
+    frame.slotPanel:SetPoint("TOPLEFT", icon, "TOPLEFT", -3, 3)
+    frame.slotPanel:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 3, -3)
+
+    frame.slotBorder:ClearAllPoints()
+    frame.slotBorder:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", -6, 6)
+    frame.slotBorder:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 6, -6)
+end
+
+local function stripFrameTextures(frame)
+    if not frame or frame._wowxArtStripped then
+        return
+    end
+
+    local regions = { frame:GetRegions() }
+    for _, region in ipairs(regions) do
+        if region and region.GetObjectType and region:GetObjectType() == "Texture" then
+            region:SetTexture(nil)
+            region:SetAlpha(0)
+            region:Hide()
+        end
+    end
+
+    frame._wowxArtStripped = true
+end
+
+local function updateShellAroundButtons(ownerFrame, buttonList, insetX, insetY)
+    if not ownerFrame then
+        return
+    end
+
+    local firstButton
+    local lastButton
+    for _, button in ipairs(buttonList or {}) do
+        if button and button.IsShown and button:IsShown() then
+            firstButton = firstButton or button
+            lastButton = button
+        end
+    end
+
+    if not firstButton or not lastButton then
+        if ownerFrame._wowxShell then
+            ownerFrame._wowxShell:Hide()
+        end
+        return
+    end
+
+    if not ownerFrame._wowxShell then
+        local shell = CreateFrame("Frame", nil, UIParent)
+        shell:SetFrameStrata("LOW")
+        createBackdrop(shell, 0.18, 0.24, 0.3, 0.7)
+        ownerFrame._wowxShell = shell
+    end
+
+    ownerFrame._wowxShell:ClearAllPoints()
+    ownerFrame._wowxShell:SetPoint("TOPLEFT", firstButton, "TOPLEFT", -(insetX or 6), insetY or 6)
+    ownerFrame._wowxShell:SetPoint("BOTTOMRIGHT", lastButton, "BOTTOMRIGHT", insetX or 6, -(insetY or 6))
+    ownerFrame._wowxShell:SetAlpha(ownerFrame:GetAlpha() or 1.0)
+    ownerFrame._wowxShell:Show()
+end
+
+local function getVisibleButtons(buttonList)
+    local visibleButtons = {}
+    for _, button in ipairs(buttonList or {}) do
+        if button and button.IsShown and button:IsShown() and ((button.GetAlpha and button:GetAlpha() > 0) or not button.GetAlpha) then
+            visibleButtons[#visibleButtons + 1] = button
+        end
+    end
+    return visibleButtons
+end
+
+local function ensurePlaceholderLabel(frame)
+    if not frame or frame._wowxPlaceholderLabel then
+        return frame and frame._wowxPlaceholderLabel or nil
+    end
+
+    local label = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    label:SetPoint("CENTER", frame, "CENTER", 0, 0)
+    label:SetTextColor(1.0, 0.92, 0.58)
+    frame._wowxPlaceholderLabel = label
+    return label
+end
+
 function Bar:GetCurrentState()
     local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() or nil
     if focus and focus.IsObjectType and focus:IsObjectType("EditBox") then
@@ -286,6 +450,8 @@ function Bar:ResetLayoutForKind(kind)
         config.bagScale = nil
     elseif kind == "micro" then
         config.microScale = GPX.defaults.ui.visualBar.microScale or 1.0
+    elseif kind == "modifier" then
+        config.modifierScale = GPX.defaults.ui.visualBar.modifierScale or 1.0
     elseif kind == "stance" then
         config.stanceScale = GPX.defaults.ui.visualBar.stanceScale or 1.0
     elseif kind == "pet" then
@@ -404,6 +570,26 @@ function Bar:GetStoredMicroPosition()
     return getPointFromConfig(config, "microPoint", GPX:DeepCopy(GPX.defaults.ui.visualBar.microPoint))
 end
 
+function Bar:GetStoredModifierPosition()
+    local config = ensureVisualBarConfig()
+    return getPointFromConfig(config, "modifierPoint", GPX:DeepCopy(GPX.defaults.ui.visualBar.modifierPoint))
+end
+
+function Bar:SaveModifierPosition()
+    if not self.modifierFrame then
+        return
+    end
+    local config = ensureVisualBarConfig()
+    local anchor, _, relativePoint, x, y = self.modifierFrame:GetPoint(1)
+    config.modifierPoint = {
+        anchor = anchor or "BOTTOM",
+        relativeTo = "UIParent",
+        relativePoint = relativePoint or "BOTTOM",
+        x = x or 0,
+        y = y or 150,
+    }
+end
+
 function Bar:SaveMicroPosition()
     if not self.microMenuFrame then
         return
@@ -472,6 +658,8 @@ function Bar:SavePositionForKind(frame, kind)
         self:SaveBagPosition()
     elseif kind == "micro" then
         self:SaveMicroPosition()
+    elseif kind == "modifier" then
+        self:SaveModifierPosition()
     elseif kind == "stance" then
         self:SaveAuxFramePosition(frame, "stancePoint", "BOTTOM", "BOTTOM")
     elseif kind == "pet" then
@@ -544,25 +732,29 @@ end
 function Bar:GetScaleForKind(kind)
     local config = ensureVisualBarConfig()
     if kind == "main" then
-        return self:GetBarScale(), 0.75, 1.35, "scale"
+        return self:GetBarScale(), 0.5, 2.0, "scale"
     end
     if kind == "bag" then
         local scale = tonumber(config.bagScale) or self:GetBarScale()
-        return clamp(scale, 0.6, 1.6), 0.6, 1.6, "bagScale"
+        return clamp(scale, 0.5, 2.0), 0.5, 2.0, "bagScale"
     end
     if kind == "micro" then
         local scale = tonumber(config.microScale) or 1.0
-        return clamp(scale, 0.6, 1.6), 0.6, 1.6, "microScale"
+        return clamp(scale, 0.5, 2.0), 0.5, 2.0, "microScale"
+    end
+    if kind == "modifier" then
+        local scale = tonumber(config.modifierScale) or 1.0
+        return clamp(scale, 0.5, 2.0), 0.5, 2.0, "modifierScale"
     end
     if kind == "stance" then
         local scale = tonumber(config.stanceScale) or 1.0
-        return clamp(scale, 0.6, 1.6), 0.6, 1.6, "stanceScale"
+        return clamp(scale, 0.5, 2.0), 0.5, 2.0, "stanceScale"
     end
     if kind == "pet" then
         local scale = tonumber(config.petScale) or 1.0
-        return clamp(scale, 0.6, 1.6), 0.6, 1.6, "petScale"
+        return clamp(scale, 0.5, 2.0), 0.5, 2.0, "petScale"
     end
-    return 1.0, 0.6, 1.6, nil
+    return 1.0, 0.5, 2.0, nil
 end
 
 function Bar:SetScaleForKind(kind, newScale)
@@ -580,6 +772,8 @@ function Bar:SetScaleForKind(kind, newScale)
         self.frame.bagBar:SetScale(finalScale)
     elseif kind == "micro" and self.microMenuFrame then
         self.microMenuFrame:SetScale(finalScale)
+    elseif kind == "modifier" and self.modifierFrame then
+        self.modifierFrame:SetScale(finalScale)
     elseif kind == "stance" then
         local stanceFrame = _G.StanceBarFrame or _G.ShapeshiftBarFrame or _G.PossessBarFrame
         if stanceFrame then
@@ -623,7 +817,7 @@ function Bar:AttachResizeHandle(frame, kind)
         self._startScale = select(1, GPX.VisualBar:GetScaleForKind(kind))
         self:SetScript("OnUpdate", function(btn)
             local nowX = GetCursorPosition() / uiScale
-            local delta = (nowX - btn._startX) / 220
+            local delta = (nowX - btn._startX) / 120
             GPX.VisualBar:SetScaleForKind(kind, btn._startScale + delta)
         end)
     end)
@@ -651,6 +845,7 @@ function Bar:UpdateResizeHandles()
     showHandle(self.frame)
     showHandle(self.frame and self.frame.bagBar or nil)
     showHandle(self.microMenuFrame)
+    showHandle(self.modifierFrame)
     showHandle(_G.StanceBarFrame or _G.ShapeshiftBarFrame or _G.PossessBarFrame)
     showHandle(_G.PetActionBarFrame)
     showHandle(self.progressFrame)
@@ -662,11 +857,12 @@ function Bar:CreateLayoutEditor()
     end
 
     local frame = CreateFrame("Frame", "WoWXLayoutEditorFrame", UIParent)
-    frame:SetWidth(320)
-    frame:SetHeight(404)
+    frame:SetWidth(296)
+    frame:SetHeight(352)
     frame:SetFrameStrata("DIALOG")
     frame:SetMovable(true)
     frame:EnableMouse(true)
+    frame:SetClampedToScreen(true)
     frame:RegisterForDrag("LeftButton")
     createBackdrop(frame, 0.96, 0.8, 0.22, 0.9)
     frame:SetBackdropColor(0.05, 0.07, 0.12, 0.92)
@@ -685,7 +881,7 @@ function Bar:CreateLayoutEditor()
 
     local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    subtitle:SetWidth(288)
+    subtitle:SetWidth(252)
     subtitle:SetJustifyH("LEFT")
     subtitle:SetTextColor(0.78, 0.84, 0.95)
 
@@ -715,9 +911,9 @@ function Bar:CreateLayoutEditor()
     for index = 1, 7 do
         local slider = CreateFrame("Slider", nil, frame)
         slider:SetOrientation("HORIZONTAL")
-        slider:SetWidth(268)
+        slider:SetWidth(240)
         slider:SetHeight(18)
-        slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 26, -72 - ((index - 1) * 44))
+        slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 26, -72 - ((index - 1) * 36))
         slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
         slider:SetBackdrop({
             bgFile = "Interface\\TargetingFrame\\UI-StatusBar",
@@ -782,38 +978,40 @@ function Bar:GetEditorControls(kind)
     end
 
     if kind == "main" then
-        add("Scale", 0.75, 1.35, 0.01,
+        add("Scale", 0.5, 2.0, 0.01,
             function() return select(1, self:GetScaleForKind("main")) end,
-            function(value) self:SetScaleForKind("main", value) end)
+            function(value) self:SetScaleForKind("main", value) end,
+            formatScaleValue)
         add("Visible Buttons", 1, 12, 1,
             function() return self:GetVisibleButtonCount() end,
             function(value) layout.buttonCount = clamp(math.floor(value + 0.5), 1, BAR_BUTTON_COUNT) end)
-        add("Button Width", 42, 84, 1,
+        add("Button Width", 42, 120, 1,
             function() return tonumber(layout.buttonWidth) or layoutDefaults.main.buttonWidth end,
             function(value) layout.buttonWidth = math.floor(value + 0.5) end)
-        add("Button Height", 68, 124, 1,
+        add("Button Height", 68, 156, 1,
             function() return tonumber(layout.buttonHeight) or layoutDefaults.main.buttonHeight end,
             function(value) layout.buttonHeight = math.floor(value + 0.5) end)
-        add("Spacing", 0, 18, 1,
+        add("Spacing", 0, 28, 1,
             function() return tonumber(layout.buttonSpacing) or layoutDefaults.main.buttonSpacing end,
             function(value) layout.buttonSpacing = math.floor(value + 0.5) end)
-        add("Padding", 6, 28, 1,
+        add("Padding", 4, 36, 1,
             function() return tonumber(layout.padding) or layoutDefaults.main.padding end,
             function(value) layout.padding = math.floor(value + 0.5) end)
         add("Opacity", 0.35, 1.0, 0.01,
             function() return tonumber(layout.alpha) or layoutDefaults.main.alpha end,
             function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
     elseif kind == "bag" then
-        add("Scale", 0.6, 1.6, 0.01,
+        add("Scale", 0.5, 2.0, 0.01,
             function() return select(1, self:GetScaleForKind("bag")) end,
-            function(value) self:SetScaleForKind("bag", value) end)
-        add("Button Size", 18, 36, 1,
+            function(value) self:SetScaleForKind("bag", value) end,
+            formatScaleValue)
+        add("Button Size", 18, 48, 1,
             function() return tonumber(layout.buttonSize) or layoutDefaults.bag.buttonSize end,
             function(value) layout.buttonSize = math.floor(value + 0.5) end)
-        add("Spacing", 0, 14, 1,
+        add("Spacing", 0, 20, 1,
             function() return tonumber(layout.buttonSpacing) or layoutDefaults.bag.buttonSpacing end,
             function(value) layout.buttonSpacing = math.floor(value + 0.5) end)
-        add("Padding", 2, 14, 1,
+        add("Padding", 2, 20, 1,
             function() return tonumber(layout.padding) or layoutDefaults.bag.padding end,
             function(value) layout.padding = math.floor(value + 0.5) end)
         add("Opacity", 0.35, 1.0, 0.01,
@@ -829,10 +1027,11 @@ function Bar:GetEditorControls(kind)
         add("Opacity", 0.35, 1.0, 0.01,
             function() return tonumber(layout.alpha) or layoutDefaults.progress.alpha end,
             function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
-    elseif kind == "micro" or kind == "stance" or kind == "pet" then
-        add("Scale", 0.6, 1.6, 0.01,
+    elseif kind == "micro" or kind == "modifier" or kind == "stance" or kind == "pet" then
+        add("Scale", 0.5, 2.0, 0.01,
             function() return select(1, self:GetScaleForKind(kind)) end,
-            function(value) self:SetScaleForKind(kind, value) end)
+            function(value) self:SetScaleForKind(kind, value) end,
+            formatScaleValue)
         add("Opacity", 0.35, 1.0, 0.01,
             function() return tonumber(layout.alpha) or 1.0 end,
             function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
@@ -851,8 +1050,26 @@ function Bar:OpenLayoutEditor(kind, anchorFrame)
     editor.subtitle:SetText("Adjust this bar in place. Changes save immediately to the current WoWX profile.")
     editor:ClearAllPoints()
 
-    if anchorFrame and anchorFrame:IsShown() then
-        editor:SetPoint("TOPLEFT", anchorFrame, "TOPRIGHT", 10, 0)
+    if anchorFrame and anchorFrame.IsShown and anchorFrame:IsShown() and anchorFrame.GetCenter then
+        local anchorX, anchorY = anchorFrame:GetCenter()
+        local parentMidX = UIParent:GetWidth() / 2
+        local parentMidY = UIParent:GetHeight() / 2
+        local onRightSide = anchorX and anchorX > parentMidX
+        local nearBottom = anchorY and anchorY < parentMidY
+
+        if nearBottom then
+            if onRightSide then
+                editor:SetPoint("BOTTOMRIGHT", anchorFrame, "TOPRIGHT", 0, 12)
+            else
+                editor:SetPoint("BOTTOMLEFT", anchorFrame, "TOPLEFT", 0, 12)
+            end
+        else
+            if onRightSide then
+                editor:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", 0, -12)
+            else
+                editor:SetPoint("TOPLEFT", anchorFrame, "BOTTOMLEFT", 0, -12)
+            end
+        end
     else
         editor:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     end
@@ -904,6 +1121,99 @@ function Bar:CreateMicroMenuFrame()
     self:AttachEditButton(frame, "micro")
 end
 
+function Bar:CreateModifierFrame()
+    if self.modifierFrame then
+        return
+    end
+
+    local frame = CreateFrame("Frame", "WoWXModifierIndicatorFrame", UIParent)
+    frame:SetWidth(320)
+    frame:SetHeight(30)
+    frame:SetFrameStrata("MEDIUM")
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    createBackdrop(frame, 0.18, 0.24, 0.3, 0.7)
+
+    local chipContainer = CreateFrame("Frame", nil, frame)
+    chipContainer:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -4)
+    chipContainer:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 4)
+
+    frame.chips = {}
+    local chipLabels = { "SHIFT", "ALT", "CTRL", "SHIFT+ALT" }
+    local xOffset = 0
+    for index = #chipLabels, 1, -1 do
+        local text = chipLabels[index]
+        local chip = CreateFrame("Frame", nil, chipContainer)
+        chip:SetWidth(index == 4 and 86 or 66)
+        chip:SetHeight(22)
+        chip:SetPoint("RIGHT", chipContainer, "RIGHT", -xOffset, 0)
+        createBackdrop(chip, 0.25, 0.32, 0.42, 0.8)
+
+        local label = chip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        label:SetPoint("CENTER", chip, "CENTER", 0, 0)
+        label:SetText(text)
+        chip.label = label
+        frame.chips[index] = chip
+        xOffset = xOffset + chip:GetWidth() + 8
+    end
+
+    self.modifierFrame = frame
+    self:AttachMoveHandle(frame, "modifier")
+    self:AttachResizeHandle(frame, "modifier")
+    self:AttachEditButton(frame, "modifier")
+end
+
+function Bar:UpdateModifierIndicator(state)
+    self:CreateModifierFrame()
+
+    local layout = self:GetLayoutConfig("modifier")
+    local point = self:GetStoredModifierPosition()
+    local chromeAlpha = tonumber(layout.chromeAlpha) or layoutDefaults.modifier.chromeAlpha or 0.2
+    local show = self:ShouldReplaceBlizzardBars() and self.frame and self.frame:IsShown()
+
+    if not show then
+        self.modifierFrame:Hide()
+        return
+    end
+
+    self.modifierFrame:ClearAllPoints()
+    self.modifierFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
+    self.modifierFrame:SetScale(select(1, self:GetScaleForKind("modifier")))
+    self.modifierFrame:SetAlpha(tonumber(layout.alpha) or 1.0)
+    self.modifierFrame:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha)
+    self.modifierFrame:Show()
+
+    local active = {
+        SHIFT = state == "SHIFT" or state == "SHIFT-ALT",
+        ALT = state == "ALT" or state == "SHIFT-ALT",
+        CTRL = state == "CTRL",
+        ["SHIFT+ALT"] = state == "SHIFT-ALT",
+    }
+
+    local totalWidth = 16
+    local order = { "SHIFT", "ALT", "CTRL", "SHIFT+ALT" }
+    for index, key in ipairs(order) do
+        local chip = self.modifierFrame.chips[index]
+        totalWidth = totalWidth + chip:GetWidth()
+        if index > 1 then
+            totalWidth = totalWidth + 8
+        end
+        if active[key] then
+            chip:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.95)
+            chip:SetBackdropColor(0.18, 0.14, 0.05, 0.95)
+            chip:SetAlpha(1.0)
+        else
+            chip:SetBackdropBorderColor(0.25, 0.32, 0.42, 0.8)
+            chip:SetBackdropColor(0.05, 0.07, 0.12, 0.86)
+            chip:SetAlpha(0.42)
+        end
+        chip:Show()
+    end
+
+    self.modifierFrame:SetWidth(totalWidth)
+    self.modifierFrame:SetHeight(30)
+end
+
 function Bar:UpdateMicroMenu()
     self:CreateMicroMenuFrame()
     local layout = self:GetLayoutConfig("micro")
@@ -920,6 +1230,8 @@ function Bar:UpdateMicroMenu()
     self.microMenuFrame:SetAlpha(tonumber(layout.alpha) or 1.0)
 
     local prev
+    local buttonCount = 0
+    local contentWidth = 16
     for _, name in ipairs(orderedMicroButtons) do
         local btn = _G[name]
         if btn then
@@ -932,8 +1244,20 @@ function Bar:UpdateMicroMenu()
             end
             btn:Show()
             prev = btn
+            buttonCount = buttonCount + 1
+            contentWidth = contentWidth + getEffectiveFrameWidth(btn)
+            if buttonCount > 1 then
+                contentWidth = contentWidth - 2
+            end
         end
     end
+
+    if buttonCount == 0 then
+        self.microMenuFrame:Hide()
+        return
+    end
+
+    self.microMenuFrame:SetWidth(math.max(36, contentWidth + 8))
 
     self.microMenuFrame:Show()
 end
@@ -945,7 +1269,22 @@ function Bar:UpdateDetachedClassBars()
 
     local stanceFrame = _G.StanceBarFrame or _G.ShapeshiftBarFrame or _G.PossessBarFrame
     if stanceFrame and show then
+        local stanceButtons = {}
+        for index = 1, 12 do
+            local button = _G["ShapeshiftButton" .. index] or _G["StanceButton" .. index] or _G["PossessButton" .. index]
+            if button then
+                stanceButtons[#stanceButtons + 1] = button
+            end
+        end
+        local visibleStanceButtons = getVisibleButtons(stanceButtons)
+        if #visibleStanceButtons == 0 then
+            stanceFrame:Hide()
+            if stanceFrame._wowxShell then
+                stanceFrame._wowxShell:Hide()
+            end
+        else
         ensureFrameChrome(stanceFrame)
+        stripFrameTextures(stanceFrame)
         local point = self:GetStoredStancePosition()
         stanceFrame:SetParent(UIParent)
         stanceFrame:ClearAllPoints()
@@ -953,17 +1292,56 @@ function Bar:UpdateDetachedClassBars()
         stanceFrame:SetScale(select(1, self:GetScaleForKind("stance")))
         stanceFrame:SetAlpha(tonumber(stanceLayout.alpha) or 1.0)
         stanceFrame:Show()
+        updateShellAroundButtons(stanceFrame, visibleStanceButtons, 8, 8)
         self:EnsureAuxMovable(stanceFrame, function(selfFrame)
             GPX.VisualBar:SaveAuxFramePosition(selfFrame, "stancePoint", "BOTTOM", "BOTTOM")
         end)
         self:AttachMoveHandle(stanceFrame, "stance")
         self:AttachResizeHandle(stanceFrame, "stance")
         self:AttachEditButton(stanceFrame, "stance")
+        end
     end
 
     local petFrame = _G.PetActionBarFrame
     if petFrame and show then
+        local petButtons = {}
+        for index = 1, 12 do
+            local button = _G["PetActionButton" .. index]
+            if button then
+                petButtons[#petButtons + 1] = button
+            end
+        end
+        local visiblePetButtons = getVisibleButtons(petButtons)
+        if #visiblePetButtons == 0 then
+            if not self:IsLocked() then
+                ensureFrameChrome(petFrame)
+                stripFrameTextures(petFrame)
+                local point = self:GetStoredPetPosition()
+                petFrame:SetParent(UIParent)
+                petFrame:ClearAllPoints()
+                petFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
+                petFrame:SetScale(select(1, self:GetScaleForKind("pet")))
+                petFrame:SetAlpha(tonumber(petLayout.alpha) or 1.0)
+                petFrame:SetWidth(120)
+                petFrame:SetHeight(28)
+                petFrame:Show()
+                local placeholder = ensurePlaceholderLabel(petFrame)
+                if placeholder then
+                    placeholder:SetText("Pet")
+                    placeholder:Show()
+                end
+            else
+                petFrame:Hide()
+                if petFrame._wowxPlaceholderLabel then
+                    petFrame._wowxPlaceholderLabel:Hide()
+                end
+            end
+            if petFrame._wowxShell then
+                petFrame._wowxShell:Hide()
+            end
+        else
         ensureFrameChrome(petFrame)
+        stripFrameTextures(petFrame)
         local point = self:GetStoredPetPosition()
         petFrame:SetParent(UIParent)
         petFrame:ClearAllPoints()
@@ -971,12 +1349,17 @@ function Bar:UpdateDetachedClassBars()
         petFrame:SetScale(select(1, self:GetScaleForKind("pet")))
         petFrame:SetAlpha(tonumber(petLayout.alpha) or 1.0)
         petFrame:Show()
+        if petFrame._wowxPlaceholderLabel then
+            petFrame._wowxPlaceholderLabel:Hide()
+        end
+        updateShellAroundButtons(petFrame, visiblePetButtons, 8, 8)
         self:EnsureAuxMovable(petFrame, function(selfFrame)
             GPX.VisualBar:SaveAuxFramePosition(selfFrame, "petPoint", "BOTTOM", "BOTTOM")
         end)
         self:AttachMoveHandle(petFrame, "pet")
         self:AttachResizeHandle(petFrame, "pet")
         self:AttachEditButton(petFrame, "pet")
+        end
     end
 end
 
@@ -1018,8 +1401,8 @@ end
 function Bar:GetBarScale()
     local config = ensureVisualBarConfig()
     local scale = tonumber(config.scale) or 1.0
-    if scale < 0.75 then scale = 0.75 end
-    if scale > 1.35 then scale = 1.35 end
+    if scale < 0.5 then scale = 0.5 end
+    if scale > 2.0 then scale = 2.0 end
     return scale
 end
 
@@ -1031,8 +1414,8 @@ function Bar:AdjustScale(delta)
 
     local config = ensureVisualBarConfig()
     local scale = self:GetBarScale() + delta
-    if scale < 0.75 then scale = 0.75 end
-    if scale > 1.35 then scale = 1.35 end
+    if scale < 0.5 then scale = 0.5 end
+    if scale > 2.0 then scale = 2.0 end
     config.scale = scale
     self:UpdateAll()
     GPX:Print(string.format("Visual bar scale: %.2f", scale))
@@ -1135,10 +1518,15 @@ function Bar:UpdateProgressBar()
         return
     end
 
+    if self:IsLocked() then
+        self.progressFrame:Hide()
+        return
+    end
+
     progressBar:SetMinMaxValues(0, 1)
     progressBar:SetValue(1)
-    progressBar:SetStatusBarColor(0.25, 0.45, 0.25)
-    progressText:SetText("No XP/Rep Track")
+    progressBar:SetStatusBarColor(0.2, 0.28, 0.34)
+    progressText:SetText("XP / Rep")
     self.progressFrame:Show()
 end
 
@@ -1175,7 +1563,7 @@ function Bar:UpdateBagBar()
     self.frame.bagBar:SetWidth(width)
     self.frame.bagBar:SetHeight(height)
     self.frame.bagBar:SetAlpha(tonumber(layout.alpha) or layoutDefaults.bag.alpha)
-    self.frame.bagBar:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha)
+    self.frame.bagBar:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha * 0.8)
     self.frame.bagBar:SetScale(select(1, self:GetScaleForKind("bag")))
     self:ApplyStoredBagPosition()
 
@@ -1187,15 +1575,14 @@ function Bar:UpdateBagBar()
         button:SetWidth(buttonSize)
         button:SetHeight(buttonSize)
         button:SetPoint("LEFT", self.frame.bagBar, "LEFT", padding + ((4 - bagID) * (buttonSize + spacing)), 0)
+        layoutSlotWrapper(button, 2, 2, 2, 2)
         button.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_Bag_08")
-        if not button.border then
-            local bagBorder = button:CreateTexture(nil, "OVERLAY")
-            bagBorder:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-            bagBorder:SetAllPoints(button)
-            button.border = bagBorder
-        end
-        button.border:SetVertexColor(0.95, 0.94, 0.88, 0.95)
-        button:SetBackdropBorderColor(0.54, 0.46, 0.26, 0.95)
+        button.icon:ClearAllPoints()
+        button.icon:SetPoint("TOPLEFT", button.slotPanel, "TOPLEFT", 2, -2)
+        button.icon:SetPoint("BOTTOMRIGHT", button.slotPanel, "BOTTOMRIGHT", -2, 2)
+        button.slotBorder:SetVertexColor(0.95, 0.94, 0.88, 0.95)
+        button:SetBackdropColor(0.05, 0.07, 0.12, 0.08)
+        button:SetBackdropBorderColor(0.32, 0.36, 0.42, 0.28)
     end
 end
 
@@ -1686,36 +2073,12 @@ function Bar:CreateFrame()
     end)
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -10)
     title:SetTextColor(0.92, 0.96, 1.0)
 
     local pageText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    pageText:SetPoint("LEFT", title, "RIGHT", 12, 0)
+    pageText:SetPoint("LEFT", title, "RIGHT", 8, 0)
     pageText:SetTextColor(0.85, 0.88, 0.98)
-
-    local chipContainer = CreateFrame("Frame", nil, frame)
-    chipContainer:SetWidth(320)
-    chipContainer:SetHeight(26)
-    chipContainer:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -16, -10)
-
-    frame.chips = {}
-    local chipLabels = { "SHIFT", "ALT", "CTRL", "SHIFT+ALT" }
-    local xOffset = 0
-    for index = #chipLabels, 1, -1 do
-        local text = chipLabels[index]
-        local chip = CreateFrame("Frame", nil, chipContainer)
-        chip:SetWidth(index == 4 and 86 or 66)
-        chip:SetHeight(22)
-        chip:SetPoint("RIGHT", chipContainer, "RIGHT", -xOffset, 0)
-        createBackdrop(chip, 0.25, 0.32, 0.42, 0.8)
-
-        local label = chip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        label:SetPoint("CENTER", chip, "CENTER", 0, 0)
-        label:SetText(text)
-        chip.label = label
-        frame.chips[index] = chip
-        xOffset = xOffset + chip:GetWidth() + 8
-    end
 
     local bagBar = CreateFrame("Frame", nil, frame)
     bagBar:SetWidth(156)
@@ -1743,9 +2106,13 @@ function Bar:CreateFrame()
         bagButton:SetHeight(22)
         bagButton:SetPoint("RIGHT", bagBar, "RIGHT", -(bagID * 30), 0)
         createBackdrop(bagButton, 0.22, 0.3, 0.4, 0.9)
+        bagButton:SetBackdropColor(0.05, 0.07, 0.12, 0.08)
+        bagButton:SetBackdropBorderColor(0.32, 0.36, 0.42, 0.28)
+        layoutSlotWrapper(bagButton, 2, 2, 2, 2)
 
         local bagIcon = bagButton:CreateTexture(nil, "ARTWORK")
-        bagIcon:SetAllPoints(bagButton)
+        bagIcon:SetPoint("TOPLEFT", bagButton.slotPanel, "TOPLEFT", 2, -2)
+        bagIcon:SetPoint("BOTTOMRIGHT", bagButton.slotPanel, "BOTTOMRIGHT", -2, 2)
         bagIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         bagButton.icon = bagIcon
         bagButton:SetScript("OnClick", function()
@@ -1765,12 +2132,14 @@ function Bar:CreateFrame()
         button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         button:RegisterForDrag("LeftButton")
         createBackdrop(button, 0.14, 0.18, 0.24, 0.85)
+        button:SetBackdropColor(0.05, 0.07, 0.12, 0.1)
+        button:SetBackdropBorderColor(0.2, 0.24, 0.3, 0.32)
 
         local icon = button:CreateTexture(nil, "ARTWORK")
         icon:SetWidth(52)
         icon:SetHeight(52)
-        icon:SetPoint("TOP", button, "TOP", 0, -10)
         icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        layoutIconPriorityWrapper(button, icon, 48, 6)
 
         local glyph = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         glyph:SetPoint("TOPLEFT", button, "TOPLEFT", 8, -8)
@@ -1781,6 +2150,7 @@ function Bar:CreateFrame()
         name:SetPoint("TOPLEFT", icon, "BOTTOMLEFT", -4, -8)
         name:SetPoint("RIGHT", button, "RIGHT", -6, 0)
         name:SetJustifyH("LEFT")
+        name:Hide()
 
         local keyText = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         keyText:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 8, 8)
@@ -1982,6 +2352,14 @@ function Bar:UpdateButtonVisualState(button)
                 button.shine:Hide()
             end
         end
+        if button.slotPanel then
+            button.slotPanel:Hide()
+        end
+        if button.slotBorder then
+            button.slotBorder:Hide()
+        end
+        button:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
+        button:SetBackdropBorderColor(borderR, borderG, borderB, 0.0)
     else
         CooldownFrame_SetTimer(button.cooldown, 0, 0, 0)
         button.icon:SetVertexColor(0.35, 0.4, 0.46)
@@ -1993,9 +2371,15 @@ function Bar:UpdateButtonVisualState(button)
         if button.shine then
             button.shine:Hide()
         end
+        if button.slotPanel then
+            button.slotPanel:Show()
+        end
+        if button.slotBorder then
+            button.slotBorder:Show()
+        end
+        button:SetBackdropColor(0.05, 0.07, 0.12, 0.08)
+        button:SetBackdropBorderColor(borderR, borderG, borderB, 0.24)
     end
-
-    button:SetBackdropBorderColor(borderR, borderG, borderB, borderA)
 end
 
 function Bar:OnVisualUpdate(elapsed)
@@ -2019,27 +2403,6 @@ function Bar:OnVisualUpdate(elapsed)
     end
 end
 
-function Bar:UpdateModifierChips(state)
-    local active = {
-        SHIFT = state == "SHIFT" or state == "SHIFT-ALT",
-        ALT = state == "ALT" or state == "SHIFT-ALT",
-        CTRL = state == "CTRL",
-        ["SHIFT+ALT"] = state == "SHIFT-ALT",
-    }
-
-    local order = { "SHIFT", "ALT", "CTRL", "SHIFT+ALT" }
-    for index, key in ipairs(order) do
-        local chip = self.frame.chips[index]
-        if active[key] then
-            chip:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.95)
-            chip:SetBackdropColor(0.18, 0.14, 0.05, 0.95)
-        else
-            chip:SetBackdropBorderColor(0.25, 0.32, 0.42, 0.8)
-            chip:SetBackdropColor(0.05, 0.07, 0.12, 0.86)
-        end
-    end
-end
-
 function Bar:UpdateButton(index, state)
     local button = self.frame.buttons[index]
     local display = self:GetDisplayForButton(index, state)
@@ -2050,13 +2413,23 @@ function Bar:UpdateButton(index, state)
     local buttonHeight = metrics.buttonHeight
     local spacing = metrics.spacing
     local padding = metrics.padding
-    local iconSize = math.max(20, math.min(buttonWidth - 8, buttonHeight - 36))
+    local showSecondaryKeyText = GPX:IsControllerEnabled()
+    local bottomReserve = showSecondaryKeyText and 24 or 2
+    local iconSize = math.max(20, math.min(buttonWidth - 4, buttonHeight - bottomReserve - 4))
     local buttonTopOffset = self.frame and self.frame._wowxButtonTopOffset or 44
+    local iconInset = hasAction and 2 or 4
 
     local keyLabel = physicalKey or defaultKeyHints[index] or tostring(index)
+    local hasAction = display and display.slot
     button.glyph:SetText(keyLabel)
     button.name:SetText("")
-    button.keyText:SetText(keyLabel)
+    if showSecondaryKeyText then
+        button.keyText:SetText(keyLabel)
+        button.keyText:Show()
+    else
+        button.keyText:SetText("")
+        button.keyText:Hide()
+    end
     button.display = display
     button.physicalKey = physicalKey
     button._wowxBaseAlpha = metrics.alpha
@@ -2067,20 +2440,45 @@ function Bar:UpdateButton(index, state)
         button:SetHeight(buttonHeight)
         button:ClearAllPoints()
         button:SetPoint("TOPLEFT", self.frame, "TOPLEFT", padding + ((index - 1) * (buttonWidth + spacing)), -buttonTopOffset)
-        button.icon:SetWidth(iconSize)
-        button.icon:SetHeight(iconSize)
-        button.icon:ClearAllPoints()
-        button.icon:SetPoint("TOP", button, "TOP", 0, -10)
+        if hasAction then
+            ensureSlotWrapper(button)
+            if button.slotPanel then
+                button.slotPanel:Hide()
+            end
+            if button.slotBorder then
+                button.slotBorder:Hide()
+            end
+            button.icon:SetWidth(iconSize)
+            button.icon:SetHeight(iconSize)
+            button.icon:ClearAllPoints()
+            button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", iconInset, -iconInset)
+        else
+            layoutIconPriorityWrapper(button, button.icon, iconSize, bottomReserve)
+            if button.slotPanel then
+                button.slotPanel:Show()
+            end
+            if button.slotBorder then
+                button.slotBorder:Show()
+            end
+        end
         button.glyph:ClearAllPoints()
-        button.glyph:SetPoint("TOPLEFT", button, "TOPLEFT", 8, -8)
+        if hasAction then
+            button.glyph:SetPoint("TOPLEFT", button.icon, "TOPLEFT", 3, -3)
+        else
+            button.glyph:SetPoint("TOPLEFT", button.slotPanel, "TOPLEFT", 4, -4)
+        end
         button.name:ClearAllPoints()
-        button.name:SetPoint("TOPLEFT", button.icon, "BOTTOMLEFT", -4, -8)
+        button.name:SetPoint("TOPLEFT", button.slotPanel, "BOTTOMLEFT", 0, -8)
         button.name:SetPoint("RIGHT", button, "RIGHT", -6, 0)
         button.keyText:ClearAllPoints()
         button.keyText:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 8, 8)
         if button.countText then
             button.countText:ClearAllPoints()
-            button.countText:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -8, 8)
+            if hasAction then
+                button.countText:SetPoint("BOTTOMRIGHT", button.icon, "BOTTOMRIGHT", 2, 2)
+            else
+                button.countText:SetPoint("BOTTOMRIGHT", button.slotPanel, "BOTTOMRIGHT", -2, 2)
+            end
         end
         if button.shine then
             local shineSize = math.max(iconSize + 20, 54)
@@ -2155,9 +2553,15 @@ function Bar:UpdateButton(index, state)
     if display.icon then
         button.icon:SetTexture(display.icon)
         button.icon:SetVertexColor(1.0, 1.0, 1.0)
+        if button.slotBorder then
+            button.slotBorder:SetVertexColor(0.92, 0.93, 0.9, 0.92)
+        end
     else
-        button.icon:SetTexture("Interface\\Buttons\\UI-Quickslot2")
+        button.icon:SetTexture(nil)
         button.icon:SetVertexColor(0.35, 0.4, 0.46)
+        if button.slotBorder then
+            button.slotBorder:SetVertexColor(0.62, 0.7, 0.82, 0.82)
+        end
     end
 
     self:UpdateButtonVisualState(button)
@@ -2204,12 +2608,12 @@ function Bar:UpdateAll()
     local page = modifierStates[state] or modifierStates[""]
     local pageLabel = page.title
     local showHeader = (not self:IsLocked()) or state ~= "" or (GPX.UIMode and GPX.UIMode.activeContext == "bar")
-    local buttonTopOffset = showHeader and 44 or 14
+    local buttonTopOffset = 34
     if not self:UseModifierPages() and state ~= "" then
         pageLabel = "Base (modifier held)"
     end
     self.frame._wowxButtonTopOffset = buttonTopOffset
-    self.frame:SetHeight(buttonHeight + (showHeader and 62 or 26))
+    self.frame:SetHeight(buttonHeight + 44)
     self.frame.title:SetText("Action Bar")
     self.frame.pageText:SetText(pageLabel)
     if GPX.actionStateSuspended and GPX.actionStateReason then
@@ -2229,11 +2633,6 @@ function Bar:UpdateAll()
     self.frame.title:SetShown(showHeader)
     self.frame.pageText:SetShown(showHeader)
     self.frame.pageText:SetTextColor(self:IsLocked() and 0.85 or 1.0, self:IsLocked() and 0.88 or 0.9, self:IsLocked() and 0.98 or 0.35)
-    if self.frame.chips then
-        for _, chip in ipairs(self.frame.chips) do
-            chip:SetShown(showHeader)
-        end
-    end
     if self.progressFrame then
         if self:IsProgressLocked() then
             self.progressFrame:SetBackdropBorderColor(0.18, 0.24, 0.3, 0.8)
@@ -2241,7 +2640,7 @@ function Bar:UpdateAll()
             self.progressFrame:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.9)
         end
     end
-    self:UpdateModifierChips(state)
+    self:UpdateModifierIndicator(state)
     self:UpdateProgressBar()
     self:UpdateBagBar()
     self:UpdateMicroMenu()

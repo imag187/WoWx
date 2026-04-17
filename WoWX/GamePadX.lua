@@ -93,7 +93,7 @@ GPX.defaults = {
         scope = "character", -- character or account
     },
     diagnostics = {
-        autoCapture = true,
+        autoCapture = false,
     },
     ui = {
         visualBar = {
@@ -132,6 +132,10 @@ GPX.defaults = {
                 micro = {
                     alpha = 1.0,
                 },
+                modifier = {
+                    alpha = 1.0,
+                    chromeAlpha = 0.2,
+                },
                 stance = {
                     alpha = 1.0,
                 },
@@ -143,9 +147,11 @@ GPX.defaults = {
             progressPoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 170 },
             bagPoint = { anchor = "BOTTOMRIGHT", relativeTo = "UIParent", relativePoint = "BOTTOM", x = -220, y = 64 },
             microPoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 26 },
+            modifierPoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 150 },
             stancePoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 250, y = 120 },
             petPoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 120 },
             microScale = 1.0,
+            modifierScale = 1.0,
             stanceScale = 1.0,
             petScale = 1.0,
         },
@@ -567,7 +573,7 @@ end
 function GPX:GetDiagnosticsConfig()
     self.db.diagnostics = self.db.diagnostics or {}
     if self.db.diagnostics.autoCapture == nil then
-        self.db.diagnostics.autoCapture = true
+        self.db.diagnostics.autoCapture = false
     end
     return self.db.diagnostics
 end
