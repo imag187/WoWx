@@ -219,8 +219,7 @@ function UI:CreateFrame()
         { key = "reload", label = "Reapply Binds", x = 140, y = -122, width = 116, click = function() GPX:ClearBindings() GPX:ApplyBindings() UI:Refresh() end },
         { key = "focusBar", label = "Focus Bar", x = 266, y = -122, width = 140, click = function() if GPX.UIMode then GPX.UIMode:Enter("bar", { returnContext = "settings" }) end end },
         { key = "spellbook", label = "Open Spellbook", x = 14, y = -162, width = 116, click = function() if GPX.SpellbookUI then GPX.SpellbookUI:Open(nil, "settings") end end },
-        { key = "menuNav", label = "Menu Navigator", x = 266, y = -162, width = 140, click = function() GPX:OpenMenuNav("settings") end },
-        { key = "lockProgress", label = "Lock XP Bar", x = 140, y = -162, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash("progresslock") end UI:Refresh() end },
+        { key = "menuNav", label = "Menu Navigator", x = 140, y = -162, width = 140, click = function() GPX:OpenMenuNav("settings") end },
         { key = "close", label = "Close", x = 140, y = -242, width = 116, click = function() frame:Hide() end },
     }
 
@@ -364,7 +363,7 @@ function UI:CreateFrame()
     footer:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 24, 4)
     footer:SetWidth(500)
     footer:SetJustifyH("LEFT")
-    footer:SetText("Tip: Turn Layout Edit on, then drag bars by the Drag handle and resize with corner grips. Turn Layout Edit off when finished.")
+    footer:SetText("Tip: Turn Layout Edit on, then drag bars from their surrounding chrome and use Edit for precise size and spacing values. Turn Layout Edit off when finished.")
 
     self.frame = frame
     self.frame.statusText = statusText
@@ -442,9 +441,6 @@ function UI:RefreshUtilityButtons()
         end
         if self.frame.barOptions.toggleProgress then
             self.frame.barOptions.toggleProgress:SetText((cfg.showProgress ~= false) and "XP/Rep: On" or "XP/Rep: Off")
-        end
-        if self.frame.buttons and self.frame.buttons.lockProgress then
-            self.frame.buttons.lockProgress:SetText((cfg.progressLocked ~= false) and "Unlock XP Bar" or "Lock XP Bar")
         end
     end
 end

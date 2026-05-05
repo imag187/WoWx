@@ -117,10 +117,9 @@ function Button:ShowMenu()
         { text = "Open Config", notCheckable = true, func = function() GPX:OpenSettings() end },
         { text = "Run Setup Wizard", notCheckable = true, func = function() GPX:OpenSetupWizard("init") end },
         { text = layoutLabel, notCheckable = true, func = function() if bar then bar:Slash((bar:IsLocked() and "unlock") or "lock") end end },
-        { text = "Lock/Unlock XP Bar", notCheckable = true, func = function() if bar then bar:Slash("progresslock") end end },
         { text = "Toggle XP/Rep Bar", notCheckable = true, func = function() if bar then bar:Slash("progress") end end },
         { text = "Toggle Bag Bar", notCheckable = true, func = function() if bar then bar:Slash("bagbar") end end },
-        { text = "Layout Edit uses Drag + corner grip", notCheckable = true, disabled = true },
+        { text = "Layout Edit uses chrome drag + Edit sizing", notCheckable = true, disabled = true },
     }
     EasyMenu(menu, dropdown, "cursor", 0, 0, "MENU")
 end

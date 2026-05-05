@@ -142,6 +142,9 @@ GPX.defaults = {
                 pet = {
                     alpha = 1.0,
                 },
+                vehicle = {
+                    alpha = 1.0,
+                },
             },
             point = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 48 },
             progressPoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 170 },
@@ -150,10 +153,12 @@ GPX.defaults = {
             modifierPoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 150 },
             stancePoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 250, y = 120 },
             petPoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 0, y = 120 },
+            vehiclePoint = { anchor = "BOTTOM", relativeTo = "UIParent", relativePoint = "BOTTOM", x = 240, y = 120 },
             microScale = 1.0,
             modifierScale = 1.0,
             stanceScale = 1.0,
             petScale = 1.0,
+            vehicleScale = 1.0,
         },
         minimapButton = {
             enabled = true,
@@ -584,6 +589,12 @@ function GPX:CollectDiagnosticsLines()
         lines[#lines + 1] = tostring(msg)
     end
 
+    local function append(source)
+        for _, line in ipairs(source or {}) do
+            add(line)
+        end
+    end
+
     local function sanitizeBindingAction(text)
         if not text then
             return ""
@@ -741,6 +752,73 @@ function GPX:CollectDiagnosticsLines()
 
     if self.db and self.db.lastError and self.db.lastError ~= "" then
         add("  LastError: " .. self.db.lastError)
+    end
+
+    append(self:CollectStanceDiagnosticsLines())
+
+    return lines
+end
+
+function GPX:CollectStanceDiagnosticsLines()
+    local lines = {}
+    local function add(msg)
+        lines[#lines + 1] = tostring(msg)
+    end
+
+    local function frameName(frame, fallback)
+        if not frame then
+            return fallback or "nil"
+        end
+        if frame.GetName then
+            local name = frame:GetName()
+            if name and name ~= "" then
+                return name
+            end
+        end
+        return fallback or "anonymous"
+    end
+
+    local className, classFile = UnitClass("player")
+    add("StanceDiag:")
+    add("  PlayerClass: " .. tostring(className or "") .. " (" .. tostring(classFile or "") .. ")")
+
+    local formCount = GetNumShapeshiftForms and (GetNumShapeshiftForms() or 0) or 0
+    local currentForm = GetShapeshiftForm and (GetShapeshiftForm() or 0) or 0
+    add("  ShapeshiftForms: count=" .. tostring(formCount) .. " current=" .. tostring(currentForm))
+
+    local frameNames = { "StanceBarFrame", "ShapeshiftBarFrame", "PossessBarFrame" }
+    for _, name in ipairs(frameNames) do
+        local frame = _G[name]
+        if frame then
+            local parent = frame.GetParent and frame:GetParent() or nil
+            add("  Frame " .. name
+                .. ": shown=" .. tostring(frame.IsShown and frame:IsShown() or false)
+                .. " alpha=" .. tostring(frame.GetAlpha and frame:GetAlpha() or "n/a")
+                .. " parent=" .. frameName(parent, "nil"))
+        else
+            add("  Frame " .. name .. ": missing")
+        end
+    end
+
+    for index = 1, math.max(12, formCount) do
+        local button = _G["ShapeshiftButton" .. index] or _G["StanceButton" .. index] or _G["PossessButton" .. index]
+        if button then
+            local parent = button.GetParent and button:GetParent() or nil
+            local icon, name, active, castable = nil, nil, nil, nil
+            if GetShapeshiftFormInfo then
+                icon, name, active, castable = GetShapeshiftFormInfo(index)
+            end
+            add("  Button" .. index
+                .. ": shown=" .. tostring(button.IsShown and button:IsShown() or false)
+                .. " alpha=" .. tostring(button.GetAlpha and button:GetAlpha() or "n/a")
+                .. " parent=" .. frameName(parent, "nil")
+                .. " formName=" .. tostring(name or "")
+                .. " active=" .. tostring(active)
+                .. " castable=" .. tostring(castable)
+                .. " icon=" .. tostring(icon))
+        elseif index <= formCount then
+            add("  Button" .. index .. ": missing despite formCount")
+        end
     end
 
     return lines
@@ -1551,11 +1629,16 @@ function GPX:Slash(msg)
         local arg = string.lower((rest or ""):match("^%s*(.-)%s*$"))
         if arg == "" or arg == "now" then
             self:PrintDiagnostics()
+        elseif arg == "stance" or arg == "aura" or arg == "forms" then
+            local lines = self:CollectStanceDiagnosticsLines()
+            for _, line in ipairs(lines) do
+                self:Print(line)
+            end
         elseif arg == "verbose" or arg == "save" or arg == "run" then
             self:RunDiagnosticSpeedRun("verbose")
             self:PrintLastDiagnosticRun()
         else
-            self:Print("Usage: /wowx diag [verbose]")
+            self:Print("Usage: /wowx diag [stance|verbose]")
         end
 
     elseif cmd == "diagshow" then
@@ -1669,6 +1752,7 @@ function GPX:PrintHelp()
     self:Print("  "..c.."/wowx selfcast [on|off]"..r.."  Toggle or set auto self-cast")
     self:Print("  "..c.."/wowx bindsync ..."..r.."       Save WoWX binding changes (on/off/account/character/now)")
     self:Print("  "..c.."/wowx diag"..r.."               Quick on-the-spot diagnostics in chat")
+    self:Print("  "..c.."/wowx diag stance"..r.."        Print aura/stance frame and button diagnostics")
     self:Print("  "..c.."/wowx diag verbose"..r.."       Save a new timestamped diag + print it now")
     self:Print("  "..c.."/wowx diagshow"..r.."           Print the most recent saved diagnostic run")
     self:Print("  "..c.."/wowx diagauto [on|off]"..r.."   Toggle auto diagnostics on login/loading")

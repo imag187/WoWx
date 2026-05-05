@@ -6,6 +6,7 @@ local Bar = {}
 GPX.VisualBar = Bar
 
 local BAR_BUTTON_COUNT = 12
+local PET_ACTION_BUTTON_COUNT = 10
 local defaultKeyHints = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
 
 local modifierStates = {
@@ -59,6 +60,9 @@ local layoutDefaults = {
     pet = {
         alpha = 1.0,
     },
+    vehicle = {
+        alpha = 1.0,
+    },
 }
 
 local layoutTitles = {
@@ -69,6 +73,7 @@ local layoutTitles = {
     modifier = "Modifier Indicator",
     stance = "Stance Bar",
     pet = "Pet Bar",
+    vehicle = "Vehicle Exit",
 }
 
 local RANGE_UPDATE_INTERVAL = 0.08
@@ -342,10 +347,14 @@ local function updateShellAroundButtons(ownerFrame, buttonList, insetX, insetY)
 
     local firstButton
     local lastButton
+    local firstAnchor
+    local lastAnchor
     for _, button in ipairs(buttonList or {}) do
         if button and button.IsShown and button:IsShown() then
             firstButton = firstButton or button
             lastButton = button
+            firstAnchor = firstAnchor or button._wowxShellAnchorTarget or button
+            lastAnchor = button._wowxShellAnchorTarget or button
         end
     end
 
@@ -360,12 +369,40 @@ local function updateShellAroundButtons(ownerFrame, buttonList, insetX, insetY)
         local shell = CreateFrame("Frame", nil, UIParent)
         shell:SetFrameStrata("LOW")
         createBackdrop(shell, 0.18, 0.24, 0.3, 0.7)
+        shell:EnableMouse(true)
+        shell:SetMovable(true)
+        shell:RegisterForDrag("LeftButton")
+        shell:SetScript("OnDragStart", function(self)
+            if not GPX.VisualBar or GPX.VisualBar:IsLayoutEditLocked() then
+                return
+            end
+            if not self._wowxOwnerFrame then
+                return
+            end
+            self._wowxOwnerFrame:StartMoving()
+            self._wowxDragStarted = true
+        end)
+        shell:SetScript("OnDragStop", function(self)
+            if not self._wowxDragStarted or not self._wowxOwnerFrame then
+                return
+            end
+            self._wowxDragStarted = nil
+            self._wowxOwnerFrame:StopMovingOrSizing()
+            if GPX.VisualBar and self._wowxOwnerKind then
+                GPX.VisualBar:SavePositionForKind(self._wowxOwnerFrame, self._wowxOwnerKind)
+            end
+        end)
         ownerFrame._wowxShell = shell
     end
 
+    ownerFrame._wowxShell._wowxOwnerFrame = ownerFrame
+    ownerFrame._wowxShell._wowxOwnerKind = ownerFrame._wowxFrameDragKind
+    ownerFrame._wowxShell:SetFrameStrata(ownerFrame:GetFrameStrata() or "MEDIUM")
+    ownerFrame._wowxShell:SetFrameLevel((ownerFrame:GetFrameLevel() or 1) + 24)
+    ownerFrame._wowxShell:EnableMouse(GPX.VisualBar and not GPX.VisualBar:IsLayoutEditLocked())
     ownerFrame._wowxShell:ClearAllPoints()
-    ownerFrame._wowxShell:SetPoint("TOPLEFT", firstButton, "TOPLEFT", -(insetX or 6), insetY or 6)
-    ownerFrame._wowxShell:SetPoint("BOTTOMRIGHT", lastButton, "BOTTOMRIGHT", insetX or 6, -(insetY or 6))
+    ownerFrame._wowxShell:SetPoint("TOPLEFT", firstAnchor or firstButton, "TOPLEFT", -(insetX or 6), insetY or 6)
+    ownerFrame._wowxShell:SetPoint("BOTTOMRIGHT", lastAnchor or lastButton, "BOTTOMRIGHT", insetX or 6, -(insetY or 6))
     ownerFrame._wowxShell:SetAlpha(ownerFrame:GetAlpha() or 1.0)
     ownerFrame._wowxShell:Show()
 end
@@ -380,6 +417,59 @@ local function getVisibleButtons(buttonList)
     return visibleButtons
 end
 
+local function getShapeshiftFormCount()
+    if GetNumShapeshiftForms then
+        return GetNumShapeshiftForms() or 0
+    end
+    return 0
+end
+
+local function getFormBackedButtons(buttonList, formCount)
+    local usableButtons = {}
+    local count = math.min(formCount or 0, #(buttonList or {}))
+    for index = 1, count do
+        local button = buttonList[index]
+        if button then
+            usableButtons[#usableButtons + 1] = button
+        end
+    end
+    return usableButtons
+end
+
+local function layoutAuxButtons(frame, buttonList, padding, spacing)
+    if not frame then
+        return
+    end
+
+    local inset = padding or 8
+    local gap = spacing or 6
+    local prev
+    local maxHeight = 0
+    local totalWidth = inset * 2
+
+    for _, button in ipairs(buttonList or {}) do
+        if button then
+            local width = (button.GetWidth and button:GetWidth()) or 36
+            local height = (button.GetHeight and button:GetHeight()) or 36
+            button:ClearAllPoints()
+            if not prev then
+                button:SetPoint("LEFT", frame, "LEFT", inset, 0)
+            else
+                button:SetPoint("LEFT", prev, "RIGHT", gap, 0)
+                totalWidth = totalWidth + gap
+            end
+            totalWidth = totalWidth + width
+            if height > maxHeight then
+                maxHeight = height
+            end
+            prev = button
+        end
+    end
+
+    frame:SetWidth(math.max(64, totalWidth))
+    frame:SetHeight(math.max(28, maxHeight + (inset * 2)))
+end
+
 local function ensurePlaceholderLabel(frame)
     if not frame or frame._wowxPlaceholderLabel then
         return frame and frame._wowxPlaceholderLabel or nil
@@ -390,6 +480,116 @@ local function ensurePlaceholderLabel(frame)
     label:SetTextColor(1.0, 0.92, 0.58)
     frame._wowxPlaceholderLabel = label
     return label
+end
+
+local function ensureAuxPlaceholderButtons(frame, key, count, buttonSize)
+    if not frame then
+        return {}
+    end
+
+    frame._wowxPlaceholderButtons = frame._wowxPlaceholderButtons or {}
+    frame._wowxPlaceholderButtons[key] = frame._wowxPlaceholderButtons[key] or {}
+    local buttons = frame._wowxPlaceholderButtons[key]
+    local finalSize = math.max(20, buttonSize or 28)
+
+    for index = 1, count do
+        local button = buttons[index]
+        if not button then
+            button = CreateFrame("Frame", nil, frame)
+            createBackdrop(button, 0.22, 0.66, 0.98, 0.28)
+            button:SetBackdropColor(0.05, 0.07, 0.12, 0.08)
+            layoutSquareSlotWrapper(button, 2, 2, 2, 2)
+
+            local icon = button:CreateTexture(nil, "ARTWORK")
+            icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+            icon:SetVertexColor(0.45, 0.5, 0.58, 0.65)
+            button.icon = icon
+
+            buttons[index] = button
+        end
+
+        button:SetWidth(finalSize)
+        button:SetHeight(finalSize)
+        layoutSquareSlotWrapper(button, 2, 2, 2, 2)
+        if button.icon then
+            button.icon:ClearAllPoints()
+            button.icon:SetPoint("TOPLEFT", button.slotPanel, "TOPLEFT", 2, -2)
+            button.icon:SetPoint("BOTTOMRIGHT", button.slotPanel, "BOTTOMRIGHT", -2, 2)
+        end
+        button:Show()
+    end
+
+    for index = count + 1, #buttons do
+        if buttons[index] then
+            buttons[index]:Hide()
+        end
+    end
+
+    return buttons
+end
+
+local function hideAuxPlaceholderButtons(frame, key)
+    if not frame or not frame._wowxPlaceholderButtons or not frame._wowxPlaceholderButtons[key] then
+        return
+    end
+    for _, button in ipairs(frame._wowxPlaceholderButtons[key]) do
+        if button then
+            button:Hide()
+        end
+    end
+end
+
+local function isCursorCarryingActionPayload()
+    local cursorType = GetCursorInfo and select(1, GetCursorInfo()) or nil
+    return cursorType or CursorHasItem() or CursorHasSpell() or CursorHasMacro() or CursorHasMoney()
+end
+
+local function getFrameMouseFocus(frame)
+    if not frame or not frame.IsMouseOver or not frame:IsMouseOver() then
+        return nil
+    end
+
+    local focus = GetMouseFocus and GetMouseFocus() or nil
+    while focus do
+        if focus == frame then
+            return frame
+        end
+        focus = focus.GetParent and focus:GetParent() or nil
+    end
+
+    return nil
+end
+
+local function shouldStartFrameDrag(frame)
+    local focus = getFrameMouseFocus(frame)
+    if not focus then
+        return false
+    end
+
+    if focus == frame then
+        return true
+    end
+
+    if focus._wowxDisableFrameDrag then
+        return false
+    end
+
+    return not (focus.GetObjectType and focus:GetObjectType() == "Button")
+end
+
+local function getActiveStanceFrames()
+    local frames = {}
+    local candidates = { _G.StanceBarFrame, _G.ShapeshiftBarFrame, _G.PossessBarFrame }
+    for _, frame in ipairs(candidates) do
+        if frame and not frame._wowxListed then
+            frame._wowxListed = true
+            frames[#frames + 1] = frame
+        end
+    end
+    for _, frame in ipairs(frames) do
+        frame._wowxListed = nil
+    end
+    return frames
 end
 
 function Bar:GetCurrentState()
@@ -456,6 +656,8 @@ function Bar:ResetLayoutForKind(kind)
         config.stanceScale = GPX.defaults.ui.visualBar.stanceScale or 1.0
     elseif kind == "pet" then
         config.petScale = GPX.defaults.ui.visualBar.petScale or 1.0
+    elseif kind == "vehicle" then
+        config.vehicleScale = GPX.defaults.ui.visualBar.vehicleScale or 1.0
     end
 
     self:UpdateAll()
@@ -615,6 +817,11 @@ function Bar:GetStoredPetPosition()
     return getPointFromConfig(config, "petPoint", GPX:DeepCopy(GPX.defaults.ui.visualBar.petPoint))
 end
 
+function Bar:GetStoredVehiclePosition()
+    local config = ensureVisualBarConfig()
+    return getPointFromConfig(config, "vehiclePoint", GPX:DeepCopy(GPX.defaults.ui.visualBar.vehiclePoint))
+end
+
 function Bar:SaveAuxFramePosition(frame, key, anchorDefault, relativeDefault)
     if not frame then
         return
@@ -639,7 +846,7 @@ function Bar:EnsureAuxMovable(frame, saveFn)
     frame:SetMovable(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", function(self)
-        if GPX.VisualBar and not GPX.VisualBar:IsLocked() then
+        if GPX.VisualBar and not GPX.VisualBar:IsLayoutEditLocked() then
             self:StartMoving()
         end
     end)
@@ -649,6 +856,69 @@ function Bar:EnsureAuxMovable(frame, saveFn)
             saveFn(self)
         end
     end)
+end
+
+function Bar:EnableFrameDrag(frame, kind)
+    if not frame or frame._wowxFrameDragKind == kind then
+        return
+    end
+
+    frame:EnableMouse(true)
+    frame:SetMovable(true)
+    frame:RegisterForDrag("LeftButton")
+    frame._wowxFrameDragKind = kind
+
+    frame:HookScript("OnDragStart", function(self)
+        if not GPX.VisualBar or GPX.VisualBar:IsLayoutEditLocked() then
+            return
+        end
+        if not shouldStartFrameDrag(self) then
+            return
+        end
+        self:StartMoving()
+        self._wowxDragStarted = true
+    end)
+
+    frame:HookScript("OnDragStop", function(self)
+        if not self._wowxDragStarted then
+            return
+        end
+        self._wowxDragStarted = nil
+        self:StopMovingOrSizing()
+        if GPX.VisualBar then
+            GPX.VisualBar:SavePositionForKind(self, kind)
+        end
+    end)
+end
+
+function Bar:SyncStanceFramePositions(sourceFrame)
+    local frames = {}
+    if self.stanceHostFrame then
+        frames[#frames + 1] = self.stanceHostFrame
+    end
+    for _, frame in ipairs(getActiveStanceFrames()) do
+        frames[#frames + 1] = frame
+    end
+    if #frames == 0 then
+        return
+    end
+
+    local anchor, _, relativePoint, x, y
+    if sourceFrame and sourceFrame.GetPoint then
+        anchor, _, relativePoint, x, y = sourceFrame:GetPoint(1)
+    else
+        local point = self:GetStoredStancePosition()
+        anchor = point.anchor
+        relativePoint = point.relativePoint
+        x = point.x
+        y = point.y
+    end
+
+    for _, frame in ipairs(frames) do
+        frame:SetParent(UIParent)
+        frame:ClearAllPoints()
+        frame:SetPoint(anchor or "BOTTOM", UIParent, relativePoint or "BOTTOM", x or 0, y or 0)
+    end
 end
 
 function Bar:SavePositionForKind(frame, kind)
@@ -664,6 +934,8 @@ function Bar:SavePositionForKind(frame, kind)
         self:SaveAuxFramePosition(frame, "stancePoint", "BOTTOM", "BOTTOM")
     elseif kind == "pet" then
         self:SaveAuxFramePosition(frame, "petPoint", "BOTTOM", "BOTTOM")
+    elseif kind == "vehicle" then
+        self:SaveAuxFramePosition(frame, "vehiclePoint", "BOTTOM", "BOTTOM")
     end
 end
 
@@ -673,23 +945,40 @@ function Bar:AttachMoveHandle(frame, kind)
     end
 
     local handle = CreateFrame("Button", nil, frame)
-    handle:SetWidth(120)
-    handle:SetHeight(20)
-    handle:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+    if kind == "modifier" then
+        handle:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        handle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    else
+        handle:SetWidth(120)
+        handle:SetHeight(20)
+        handle:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
+    end
     handle:RegisterForDrag("LeftButton")
     handle:EnableMouse(true)
-
-    createBackdrop(handle, 0.96, 0.8, 0.22, 0.85)
-    handle:SetBackdropColor(0.1, 0.08, 0.03, 0.75)
+    handle:SetFrameStrata("HIGH")
+    if kind == "modifier" then
+        handle:SetFrameLevel((frame:GetFrameLevel() or 1) + 11)
+        createBackdrop(handle, 0.96, 0.8, 0.22, 0.0)
+        handle:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
+    else
+        handle:SetFrameLevel((frame:GetFrameLevel() or 1) + 12)
+        createBackdrop(handle, 0.96, 0.8, 0.22, 0.85)
+        handle:SetBackdropColor(0.1, 0.08, 0.03, 0.75)
+    end
 
     local text = handle:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     text:SetPoint("CENTER", handle, "CENTER", 0, 0)
-    text:SetText("Drag")
-    text:SetTextColor(1.0, 0.92, 0.58)
+    if kind == "modifier" then
+        text:SetText("")
+        text:Hide()
+    else
+        text:SetText("Drag")
+        text:SetTextColor(1.0, 0.92, 0.58)
+    end
     handle.text = text
 
     handle:SetScript("OnDragStart", function(self)
-        if not GPX.VisualBar or GPX.VisualBar:IsLocked() then
+        if not GPX.VisualBar or GPX.VisualBar:IsLayoutEditLocked() then
             return
         end
         frame:StartMoving()
@@ -718,6 +1007,8 @@ function Bar:AttachEditButton(frame, kind)
     button:SetWidth(46)
     button:SetHeight(18)
     button:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -4)
+    button:SetFrameStrata("HIGH")
+    button:SetFrameLevel((frame:GetFrameLevel() or 1) + 14)
     button:SetText("Edit")
     button:SetScript("OnClick", function()
         if GPX.VisualBar then
@@ -754,6 +1045,10 @@ function Bar:GetScaleForKind(kind)
         local scale = tonumber(config.petScale) or 1.0
         return clamp(scale, 0.5, 2.0), 0.5, 2.0, "petScale"
     end
+    if kind == "vehicle" then
+        local scale = tonumber(config.vehicleScale) or 1.0
+        return clamp(scale, 0.5, 2.0), 0.5, 2.0, "vehicleScale"
+    end
     return 1.0, 0.5, 2.0, nil
 end
 
@@ -775,12 +1070,17 @@ function Bar:SetScaleForKind(kind, newScale)
     elseif kind == "modifier" and self.modifierFrame then
         self.modifierFrame:SetScale(finalScale)
     elseif kind == "stance" then
-        local stanceFrame = _G.StanceBarFrame or _G.ShapeshiftBarFrame or _G.PossessBarFrame
+        local stanceFrame = self.stanceHostFrame
         if stanceFrame then
             stanceFrame:SetScale(finalScale)
         end
+        for _, frame in ipairs(getActiveStanceFrames()) do
+            frame:SetScale(finalScale)
+        end
     elseif kind == "pet" and _G.PetActionBarFrame then
         _G.PetActionBarFrame:SetScale(finalScale)
+    elseif kind == "vehicle" and self.vehicleFrame then
+        self.vehicleFrame:SetScale(finalScale)
     end
 end
 
@@ -792,9 +1092,15 @@ function Bar:AttachResizeHandle(frame, kind)
     local handle = CreateFrame("Button", nil, frame)
     handle:SetWidth(14)
     handle:SetHeight(14)
-    handle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+    if kind == "bag" or kind == "micro" then
+        handle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 8, -8)
+    else
+        handle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -2, 2)
+    end
     handle:RegisterForDrag("LeftButton")
     handle:EnableMouse(true)
+    handle:SetFrameStrata("HIGH")
+    handle:SetFrameLevel((frame:GetFrameLevel() or 1) + 12)
 
     local grip = handle:CreateTexture(nil, "ARTWORK")
     grip:SetAllPoints(handle)
@@ -809,7 +1115,7 @@ function Bar:AttachResizeHandle(frame, kind)
         self.grip:SetTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
     end)
     handle:SetScript("OnDragStart", function(self)
-        if not GPX.VisualBar or GPX.VisualBar:IsLocked() then
+        if not GPX.VisualBar or GPX.VisualBar:IsLayoutEditLocked() then
             return
         end
         local uiScale = UIParent:GetEffectiveScale()
@@ -830,13 +1136,13 @@ function Bar:AttachResizeHandle(frame, kind)
 end
 
 function Bar:UpdateResizeHandles()
-    local unlocked = not self:IsLocked()
+    local unlocked = not self:IsLayoutEditLocked()
     local function showHandle(frame)
         if frame and frame._wowxResizeHandle then
             frame._wowxResizeHandle:SetShown(unlocked)
         end
         if frame and frame._wowxMoveHandle then
-            frame._wowxMoveHandle:SetShown(unlocked)
+            frame._wowxMoveHandle:SetShown(unlocked and frame == self.modifierFrame)
         end
         if frame and frame._wowxEditButton then
             frame._wowxEditButton:SetShown(unlocked)
@@ -846,9 +1152,42 @@ function Bar:UpdateResizeHandles()
     showHandle(self.frame and self.frame.bagBar or nil)
     showHandle(self.microMenuFrame)
     showHandle(self.modifierFrame)
-    showHandle(_G.StanceBarFrame or _G.ShapeshiftBarFrame or _G.PossessBarFrame)
+    showHandle(self.stanceHostFrame)
     showHandle(_G.PetActionBarFrame)
+    showHandle(self.vehicleFrame)
     showHandle(self.progressFrame)
+end
+
+function Bar:GetDetachedStanceFrame()
+    if self.stanceHostFrame then
+        return self.stanceHostFrame
+    end
+
+    local frame = CreateFrame("Frame", "WoWXDetachedStanceFrame", UIParent)
+    frame:SetWidth(132)
+    frame:SetHeight(30)
+    frame:SetFrameStrata("MEDIUM")
+    frame:EnableMouse(true)
+    frame:SetMovable(true)
+    ensureFrameChrome(frame)
+    self.stanceHostFrame = frame
+    return frame
+end
+
+function Bar:GetVehicleHostFrame()
+    if self.vehicleFrame then
+        return self.vehicleFrame
+    end
+
+    local frame = CreateFrame("Frame", "WoWXVehicleHostFrame", UIParent)
+    frame:SetWidth(56)
+    frame:SetHeight(56)
+    frame:SetFrameStrata("MEDIUM")
+    frame:EnableMouse(true)
+    frame:SetMovable(true)
+    ensureFrameChrome(frame)
+    self.vehicleFrame = frame
+    return frame
 end
 
 function Bar:CreateLayoutEditor()
@@ -1027,7 +1366,7 @@ function Bar:GetEditorControls(kind)
         add("Opacity", 0.35, 1.0, 0.01,
             function() return tonumber(layout.alpha) or layoutDefaults.progress.alpha end,
             function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
-    elseif kind == "micro" or kind == "modifier" or kind == "stance" or kind == "pet" then
+    elseif kind == "micro" or kind == "modifier" or kind == "stance" or kind == "pet" or kind == "vehicle" then
         add("Scale", 0.5, 2.0, 0.01,
             function() return select(1, self:GetScaleForKind(kind)) end,
             function(value) self:SetScaleForKind(kind, value) end,
@@ -1116,6 +1455,7 @@ function Bar:CreateMicroMenuFrame()
     frame:EnableMouse(true)
     createBackdrop(frame, 0.18, 0.24, 0.3, 0.7)
     self.microMenuFrame = frame
+    self:EnableFrameDrag(frame, "micro")
     self:AttachMoveHandle(frame, "micro")
     self:AttachResizeHandle(frame, "micro")
     self:AttachEditButton(frame, "micro")
@@ -1158,6 +1498,7 @@ function Bar:CreateModifierFrame()
     end
 
     self.modifierFrame = frame
+    self:EnableFrameDrag(frame, "modifier")
     self:AttachMoveHandle(frame, "modifier")
     self:AttachResizeHandle(frame, "modifier")
     self:AttachEditButton(frame, "modifier")
@@ -1180,7 +1521,7 @@ function Bar:UpdateModifierIndicator(state)
     self.modifierFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
     self.modifierFrame:SetScale(select(1, self:GetScaleForKind("modifier")))
     self.modifierFrame:SetAlpha(tonumber(layout.alpha) or 1.0)
-    self.modifierFrame:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha)
+    self:ApplyChromeBackdrop(self.modifierFrame, chromeAlpha)
     self.modifierFrame:Show()
 
     local active = {
@@ -1230,6 +1571,7 @@ function Bar:UpdateMicroMenu()
     self.microMenuFrame:SetAlpha(tonumber(layout.alpha) or 1.0)
 
     local prev
+    local visibleButtons = {}
     local buttonCount = 0
     local contentWidth = 16
     for _, name in ipairs(orderedMicroButtons) do
@@ -1242,7 +1584,9 @@ function Bar:UpdateMicroMenu()
             else
                 btn:SetPoint("LEFT", prev, "RIGHT", -2, 0)
             end
+            btn._wowxShellAnchorTarget = (btn.GetNormalTexture and btn:GetNormalTexture()) or btn
             btn:Show()
+            visibleButtons[#visibleButtons + 1] = btn
             prev = btn
             buttonCount = buttonCount + 1
             contentWidth = contentWidth + getEffectiveFrameWidth(btn)
@@ -1258,6 +1602,13 @@ function Bar:UpdateMicroMenu()
     end
 
     self.microMenuFrame:SetWidth(math.max(36, contentWidth + 8))
+    self.microMenuFrame:SetHeight(26)
+    self:ApplyChromeBackdrop(self.microMenuFrame, 0.12)
+    updateShellAroundButtons(self.microMenuFrame, visibleButtons, 4, 4)
+    if self.microMenuFrame._wowxShell then
+        self.microMenuFrame._wowxShell:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
+        self.microMenuFrame._wowxShell:SetBackdropBorderColor(0.0, 0.0, 0.0, 0.0)
+    end
 
     self.microMenuFrame:Show()
 end
@@ -1266,9 +1617,10 @@ function Bar:UpdateDetachedClassBars()
     local stanceLayout = self:GetLayoutConfig("stance")
     local petLayout = self:GetLayoutConfig("pet")
     local show = self:ShouldReplaceBlizzardBars()
+    local inCombat = InCombatLockdown()
 
-    local stanceFrame = _G.StanceBarFrame or _G.ShapeshiftBarFrame or _G.PossessBarFrame
-    if stanceFrame and show then
+    local stanceFrame = self:GetDetachedStanceFrame()
+    if show then
         local stanceButtons = {}
         for index = 1, 12 do
             local button = _G["ShapeshiftButton" .. index] or _G["StanceButton" .. index] or _G["PossessButton" .. index]
@@ -1276,29 +1628,76 @@ function Bar:UpdateDetachedClassBars()
                 stanceButtons[#stanceButtons + 1] = button
             end
         end
+        local formCount = getShapeshiftFormCount()
         local visibleStanceButtons = getVisibleButtons(stanceButtons)
+        if #visibleStanceButtons == 0 and formCount > 0 then
+            visibleStanceButtons = getFormBackedButtons(stanceButtons, formCount)
+        end
         if #visibleStanceButtons == 0 then
-            stanceFrame:Hide()
-            if stanceFrame._wowxShell then
+            if not self:IsLayoutEditLocked() and stanceFrame then
+                ensureFrameChrome(stanceFrame)
+                self:SyncStanceFramePositions()
+                stanceFrame:SetScale(select(1, self:GetScaleForKind("stance")))
+                stanceFrame:SetAlpha(tonumber(stanceLayout.alpha) or 1.0)
+                self:ApplyChromeBackdrop(stanceFrame, 0.12)
+                stanceFrame:SetWidth(132)
+                stanceFrame:SetHeight(30)
+                stanceFrame:Show()
+                local placeholder = ensurePlaceholderLabel(stanceFrame)
+                if placeholder then
+                    placeholder:SetText("Aura / Stance")
+                    placeholder:Show()
+                end
+                self:EnsureAuxMovable(stanceFrame, function(selfFrame)
+                    GPX.VisualBar:SaveAuxFramePosition(selfFrame, "stancePoint", "BOTTOM", "BOTTOM")
+                    GPX.VisualBar:SyncStanceFramePositions(selfFrame)
+                end)
+                self:AttachMoveHandle(stanceFrame, "stance")
+                self:AttachResizeHandle(stanceFrame, "stance")
+                self:AttachEditButton(stanceFrame, "stance")
+                self:EnableFrameDrag(stanceFrame, "stance")
+            elseif stanceFrame then
+                stanceFrame:Hide()
+            end
+            if stanceFrame and stanceFrame._wowxShell then
                 stanceFrame._wowxShell:Hide()
             end
         else
         ensureFrameChrome(stanceFrame)
-        stripFrameTextures(stanceFrame)
-        local point = self:GetStoredStancePosition()
-        stanceFrame:SetParent(UIParent)
-        stanceFrame:ClearAllPoints()
-        stanceFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
-        stanceFrame:SetScale(select(1, self:GetScaleForKind("stance")))
-        stanceFrame:SetAlpha(tonumber(stanceLayout.alpha) or 1.0)
+        if not inCombat then
+            self:SyncStanceFramePositions()
+            stanceFrame:SetScale(select(1, self:GetScaleForKind("stance")))
+            stanceFrame:SetAlpha(tonumber(stanceLayout.alpha) or 1.0)
+            for _, button in ipairs(visibleStanceButtons) do
+                button:SetParent(stanceFrame)
+                button:Show()
+                button:SetAlpha(1.0)
+            end
+            layoutAuxButtons(stanceFrame, visibleStanceButtons, 8, 6)
+        end
         stanceFrame:Show()
+        if stanceFrame._wowxPlaceholderLabel then
+            stanceFrame._wowxPlaceholderLabel:Hide()
+        end
         updateShellAroundButtons(stanceFrame, visibleStanceButtons, 8, 8)
+        if stanceFrame._wowxShell then
+            stanceFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
+            stanceFrame:SetBackdropColor(0.05, 0.07, 0.12, 0.0)
+            self:ApplyChromeBackdrop(stanceFrame._wowxShell, 0.12)
+        end
         self:EnsureAuxMovable(stanceFrame, function(selfFrame)
             GPX.VisualBar:SaveAuxFramePosition(selfFrame, "stancePoint", "BOTTOM", "BOTTOM")
+            GPX.VisualBar:SyncStanceFramePositions(selfFrame)
         end)
         self:AttachMoveHandle(stanceFrame, "stance")
         self:AttachResizeHandle(stanceFrame, "stance")
         self:AttachEditButton(stanceFrame, "stance")
+        self:EnableFrameDrag(stanceFrame, "stance")
+        end
+    elseif self.stanceHostFrame then
+        self.stanceHostFrame:Hide()
+        if self.stanceHostFrame._wowxShell then
+            self.stanceHostFrame._wowxShell:Hide()
         end
     end
 
@@ -1313,7 +1712,7 @@ function Bar:UpdateDetachedClassBars()
         end
         local visiblePetButtons = getVisibleButtons(petButtons)
         if #visiblePetButtons == 0 then
-            if not self:IsLocked() then
+            if not self:IsLayoutEditLocked() then
                 ensureFrameChrome(petFrame)
                 stripFrameTextures(petFrame)
                 local point = self:GetStoredPetPosition()
@@ -1322,43 +1721,68 @@ function Bar:UpdateDetachedClassBars()
                 petFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
                 petFrame:SetScale(select(1, self:GetScaleForKind("pet")))
                 petFrame:SetAlpha(tonumber(petLayout.alpha) or 1.0)
-                petFrame:SetWidth(120)
-                petFrame:SetHeight(28)
+                self:ApplyChromeBackdrop(petFrame, 0.12)
+                petFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.9)
+                local placeholderButtons = ensureAuxPlaceholderButtons(petFrame, "pet", PET_ACTION_BUTTON_COUNT, 28)
+                layoutAuxButtons(petFrame, placeholderButtons, 8, 6)
+                updateShellAroundButtons(petFrame, placeholderButtons, 8, 8)
+                if petFrame._wowxShell then
+                    petFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
+                    self:ApplyChromeBackdrop(petFrame._wowxShell, 0.12)
+                end
                 petFrame:Show()
                 local placeholder = ensurePlaceholderLabel(petFrame)
                 if placeholder then
                     placeholder:SetText("Pet")
                     placeholder:Show()
                 end
+                self:EnsureAuxMovable(petFrame, function(selfFrame)
+                    GPX.VisualBar:SaveAuxFramePosition(selfFrame, "petPoint", "BOTTOM", "BOTTOM")
+                end)
+                self:AttachMoveHandle(petFrame, "pet")
+                self:AttachResizeHandle(petFrame, "pet")
+                self:AttachEditButton(petFrame, "pet")
+                self:EnableFrameDrag(petFrame, "pet")
             else
                 petFrame:Hide()
+                hideAuxPlaceholderButtons(petFrame, "pet")
                 if petFrame._wowxPlaceholderLabel then
                     petFrame._wowxPlaceholderLabel:Hide()
                 end
             end
             if petFrame._wowxShell then
-                petFrame._wowxShell:Hide()
+                if self:IsLayoutEditLocked() then
+                    petFrame._wowxShell:Hide()
+                end
             end
         else
         ensureFrameChrome(petFrame)
         stripFrameTextures(petFrame)
-        local point = self:GetStoredPetPosition()
-        petFrame:SetParent(UIParent)
-        petFrame:ClearAllPoints()
-        petFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
-        petFrame:SetScale(select(1, self:GetScaleForKind("pet")))
-        petFrame:SetAlpha(tonumber(petLayout.alpha) or 1.0)
+        hideAuxPlaceholderButtons(petFrame, "pet")
+        if not inCombat then
+            local point = self:GetStoredPetPosition()
+            petFrame:SetParent(UIParent)
+            petFrame:ClearAllPoints()
+            petFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
+            petFrame:SetScale(select(1, self:GetScaleForKind("pet")))
+            petFrame:SetAlpha(tonumber(petLayout.alpha) or 1.0)
+        end
         petFrame:Show()
         if petFrame._wowxPlaceholderLabel then
             petFrame._wowxPlaceholderLabel:Hide()
         end
         updateShellAroundButtons(petFrame, visiblePetButtons, 8, 8)
+        if petFrame._wowxShell then
+            petFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
+            self:ApplyChromeBackdrop(petFrame._wowxShell, 0.12)
+        end
         self:EnsureAuxMovable(petFrame, function(selfFrame)
             GPX.VisualBar:SaveAuxFramePosition(selfFrame, "petPoint", "BOTTOM", "BOTTOM")
         end)
         self:AttachMoveHandle(petFrame, "pet")
         self:AttachResizeHandle(petFrame, "pet")
         self:AttachEditButton(petFrame, "pet")
+        self:EnableFrameDrag(petFrame, "pet")
         end
     end
 end
@@ -1374,28 +1798,84 @@ function Bar:GetVehicleLeaveButton()
 end
 
 function Bar:UpdateVehicleLeaveButton()
+    local hostFrame = self:GetVehicleHostFrame()
+    local layout = self:GetLayoutConfig("vehicle")
+    local point = self:GetStoredVehiclePosition()
     local button = self:GetVehicleLeaveButton()
-    if not button then
-        return
-    end
-
     local active = (CanExitVehicle and CanExitVehicle())
         or (UnitHasVehicleUI and UnitHasVehicleUI("player"))
         or (HasVehicleActionBar and HasVehicleActionBar())
 
-    if not active then
+    hostFrame:SetParent(UIParent)
+    hostFrame:ClearAllPoints()
+    hostFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
+    hostFrame:SetScale(select(1, self:GetScaleForKind("vehicle")))
+    hostFrame:SetAlpha(tonumber(layout.alpha) or 1.0)
+
+    if active and button then
+        hideAuxPlaceholderButtons(hostFrame, "vehicle")
+        if hostFrame._wowxPlaceholderLabel then
+            hostFrame._wowxPlaceholderLabel:Hide()
+        end
+
+        ensureFrameChrome(hostFrame)
+        self:ApplyChromeBackdrop(hostFrame, 0.12)
+        button:SetParent(hostFrame)
+        button:ClearAllPoints()
+        button:SetPoint("CENTER", hostFrame, "CENTER", 0, 0)
+        hostFrame:SetWidth(math.max(40, getEffectiveFrameWidth(button) + 12))
+        hostFrame:SetHeight(math.max(40, (button.GetHeight and button:GetHeight() or 24) + 12))
+        updateShellAroundButtons(hostFrame, { button }, 6, 6)
+        if hostFrame._wowxShell then
+            hostFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
+            self:ApplyChromeBackdrop(hostFrame._wowxShell, 0.12)
+        end
+        hostFrame:Show()
+        button:SetFrameStrata("HIGH")
+        button:Show()
+        self:EnsureAuxMovable(hostFrame, function(selfFrame)
+            GPX.VisualBar:SaveAuxFramePosition(selfFrame, "vehiclePoint", "BOTTOM", "BOTTOM")
+        end)
+        self:AttachMoveHandle(hostFrame, "vehicle")
+        self:AttachResizeHandle(hostFrame, "vehicle")
+        self:AttachEditButton(hostFrame, "vehicle")
+        self:EnableFrameDrag(hostFrame, "vehicle")
         return
     end
 
-    button:SetParent(UIParent)
-    button:ClearAllPoints()
-    if self.frame and self.frame:IsShown() then
-        button:SetPoint("BOTTOMLEFT", self.frame, "TOPRIGHT", 8, 4)
+    if not self:IsLayoutEditLocked() then
+        ensureFrameChrome(hostFrame)
+        self:ApplyChromeBackdrop(hostFrame, 0.12)
+        local placeholderButtons = ensureAuxPlaceholderButtons(hostFrame, "vehicle", 1, 30)
+        layoutAuxButtons(hostFrame, placeholderButtons, 8, 0)
+        updateShellAroundButtons(hostFrame, placeholderButtons, 8, 8)
+        if hostFrame._wowxShell then
+            hostFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
+            self:ApplyChromeBackdrop(hostFrame._wowxShell, 0.12)
+        end
+        hostFrame:Show()
+        local placeholder = ensurePlaceholderLabel(hostFrame)
+        if placeholder then
+            placeholder:SetText("Vehicle Exit")
+            placeholder:Show()
+        end
+        self:EnsureAuxMovable(hostFrame, function(selfFrame)
+            GPX.VisualBar:SaveAuxFramePosition(selfFrame, "vehiclePoint", "BOTTOM", "BOTTOM")
+        end)
+        self:AttachMoveHandle(hostFrame, "vehicle")
+        self:AttachResizeHandle(hostFrame, "vehicle")
+        self:AttachEditButton(hostFrame, "vehicle")
+        self:EnableFrameDrag(hostFrame, "vehicle")
     else
-        button:SetPoint("BOTTOM", UIParent, "BOTTOM", 240, 120)
+        hostFrame:Hide()
+        hideAuxPlaceholderButtons(hostFrame, "vehicle")
+        if hostFrame._wowxPlaceholderLabel then
+            hostFrame._wowxPlaceholderLabel:Hide()
+        end
+        if hostFrame._wowxShell then
+            hostFrame._wowxShell:Hide()
+        end
     end
-    button:SetFrameStrata("HIGH")
-    button:Show()
 end
 
 function Bar:GetBarScale()
@@ -1407,7 +1887,7 @@ function Bar:GetBarScale()
 end
 
 function Bar:AdjustScale(delta)
-    if self:IsLocked() then
+    if self:IsLayoutEditLocked() then
         GPX:Print("Visual bar is locked. Unlock it to resize.")
         return
     end
@@ -1443,6 +1923,20 @@ function Bar:AdjustAuxScale(kind, delta)
     self:SetScaleForKind(kind, nextScale)
     self:UpdateResizeHandles()
     GPX:Print(string.format("%s scale: %.2f", kind, select(1, self:GetScaleForKind(kind))))
+end
+
+function Bar:ResetAuxPosition(kind)
+    local config = ensureVisualBarConfig()
+    if kind == "stance" then
+        config.stancePoint = GPX:DeepCopy(GPX.defaults.ui.visualBar.stancePoint)
+        self:SyncStanceFramePositions()
+        self:UpdateAll()
+        GPX:Print("Aura / stance bar position reset.")
+    elseif kind == "pet" then
+        config.petPoint = GPX:DeepCopy(GPX.defaults.ui.visualBar.petPoint)
+        self:UpdateAll()
+        GPX:Print("Pet bar position reset.")
+    end
 end
 
 function Bar:ToggleBagBar()
@@ -1563,9 +2057,16 @@ function Bar:UpdateBagBar()
     self.frame.bagBar:SetWidth(width)
     self.frame.bagBar:SetHeight(height)
     self.frame.bagBar:SetAlpha(tonumber(layout.alpha) or layoutDefaults.bag.alpha)
-    self.frame.bagBar:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha * 0.8)
+    self:ApplyChromeBackdrop(self.frame.bagBar, chromeAlpha * 0.8)
     self.frame.bagBar:SetScale(select(1, self:GetScaleForKind("bag")))
     self:ApplyStoredBagPosition()
+
+    local buttonBorderR, buttonBorderG, buttonBorderB = 0.22, 0.66, 0.98
+    if self:IsEditChromeActive() then
+        buttonBorderR, buttonBorderG, buttonBorderB = 0.96, 0.8, 0.22
+    end
+
+    local bagButtons = {}
 
     for bagID = 0, 4 do
         local button = self.frame.bagButtons[bagID]
@@ -1575,14 +2076,21 @@ function Bar:UpdateBagBar()
         button:SetWidth(buttonSize)
         button:SetHeight(buttonSize)
         button:SetPoint("LEFT", self.frame.bagBar, "LEFT", padding + ((4 - bagID) * (buttonSize + spacing)), 0)
-        layoutSlotWrapper(button, 2, 2, 2, 2)
+        layoutSlotWrapper(button, 1, 1, 1, 1)
         button.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_Bag_08")
         button.icon:ClearAllPoints()
         button.icon:SetPoint("TOPLEFT", button.slotPanel, "TOPLEFT", 2, -2)
         button.icon:SetPoint("BOTTOMRIGHT", button.slotPanel, "BOTTOMRIGHT", -2, 2)
-        button.slotBorder:SetVertexColor(0.95, 0.94, 0.88, 0.95)
+        button.slotBorder:SetVertexColor(buttonBorderR, buttonBorderG, buttonBorderB, 0.95)
         button:SetBackdropColor(0.05, 0.07, 0.12, 0.08)
-        button:SetBackdropBorderColor(0.32, 0.36, 0.42, 0.28)
+        button:SetBackdropBorderColor(buttonBorderR, buttonBorderG, buttonBorderB, 0.28)
+        bagButtons[#bagButtons + 1] = button
+    end
+
+    updateShellAroundButtons(self.frame.bagBar, bagButtons, 4, 4)
+    if self.frame.bagBar._wowxShell then
+        self.frame.bagBar._wowxShell:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
+        self.frame.bagBar._wowxShell:SetBackdropBorderColor(0.0, 0.0, 0.0, 0.0)
     end
 end
 
@@ -1613,8 +2121,39 @@ function Bar:IsLocked()
     return ensureVisualBarConfig().locked ~= false
 end
 
+function Bar:IsLayoutEditLocked()
+    return self:IsLocked() or InCombatLockdown()
+end
+
+function Bar:IsEditChromeActive()
+    return (not self:IsLayoutEditLocked()) or (GPX.UIMode and GPX.UIMode.activeContext == "bar")
+end
+
+function Bar:ApplyChromeBackdrop(frame, alpha, isActive)
+    if not frame or not frame.SetBackdropBorderColor or not frame.SetBackdropColor then
+        return
+    end
+
+    local active = isActive
+    if active == nil then
+        active = self:IsEditChromeActive()
+    end
+
+    if active then
+        frame:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.96)
+        frame:SetBackdropColor(0.12, 0.09, 0.03, math.max(alpha or 0.12, 0.16))
+    else
+        frame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.9)
+        frame:SetBackdropColor(0.05, 0.07, 0.12, alpha or 0.12)
+    end
+end
+
+function Bar:IsButtonEditLocked()
+    return self:IsLocked() or InCombatLockdown()
+end
+
 function Bar:IsProgressLocked()
-    return ensureVisualBarConfig().progressLocked ~= false
+    return self:IsLayoutEditLocked()
 end
 
 function Bar:GetStoredProgressPosition()
@@ -1647,10 +2186,7 @@ function Bar:SaveProgressPosition()
 end
 
 function Bar:ToggleProgressLock()
-    local config = ensureVisualBarConfig()
-    config.progressLocked = not (config.progressLocked ~= false)
-    self:UpdateAll()
-    GPX:Print(config.progressLocked and "XP/Rep bar locked." or "XP/Rep bar unlocked. Drag to move.")
+    self:Slash((self:IsLocked() and "unlock") or "lock")
 end
 
 function Bar:GetPhysicalKeyForButton(index)
@@ -1707,14 +2243,28 @@ function Bar:GetButtonCandidates(command)
     return nil
 end
 
+local function getCurrentMainActionPage()
+    if GetBonusBarOffset then
+        local bonusOffset = tonumber(GetBonusBarOffset()) or 0
+        if bonusOffset > 0 then
+            return 6 + bonusOffset
+        end
+    end
+
+    if GetActionBarPage then
+        local page = tonumber(GetActionBarPage())
+        if page and page > 0 then
+            return page
+        end
+    end
+    return 1
+end
+
 function Bar:ResolveCommand(command)
     local mainIndex = tonumber(command and command:match("^ACTIONBUTTON(%d+)$"))
     if mainIndex then
-        local liveButton = _G["ActionButton" .. mainIndex]
-        if liveButton and liveButton.action then
-            return liveButton.action
-        end
-        return mainIndex
+        local page = getCurrentMainActionPage()
+        return ((page - 1) * 12) + mainIndex
     end
 
     local candidates = self:GetButtonCandidates(command)
@@ -1810,12 +2360,16 @@ function Bar:PlaceCursorIntoButton(button)
     if not button.display or not button.display.slot or button.display.utilityId then
         return
     end
-    if self:IsLocked() then
-        GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+    if self:IsButtonEditLocked() then
+        if not isCursorCarryingActionPayload() then
+            if InCombatLockdown() then
+                return
+            end
+            GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+        end
         return
     end
-    local cursorType = GetCursorInfo and select(1, GetCursorInfo()) or nil
-    if cursorType or CursorHasItem() or CursorHasSpell() or CursorHasMacro() or CursorHasMoney() then
+    if isCursorCarryingActionPayload() then
         PlaceAction(button.display.slot)
         self:UpdateAll()
     end
@@ -1825,13 +2379,17 @@ function Bar:HandleRightClickEdit(button)
     if not button or not button.display or not button.display.slot or button.display.utilityId then
         return
     end
-    if self:IsLocked() then
-        GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+    if self:IsButtonEditLocked() then
+        if not isCursorCarryingActionPayload() then
+            if InCombatLockdown() then
+                return
+            end
+            GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+        end
         return
     end
 
-    local cursorType = GetCursorInfo and select(1, GetCursorInfo()) or nil
-    if cursorType or CursorHasItem() or CursorHasSpell() or CursorHasMacro() or CursorHasMoney() then
+    if isCursorCarryingActionPayload() then
         PlaceAction(button.display.slot)
         self:UpdateAll()
     else
@@ -1843,7 +2401,10 @@ function Bar:PickupFromButton(button)
     if not button.display or not button.display.slot or button.display.utilityId then
         return
     end
-    if self:IsLocked() then
+    if self:IsButtonEditLocked() then
+        if InCombatLockdown() then
+            return
+        end
         GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
         return
     end
@@ -1887,8 +2448,13 @@ function Bar:HandlePlacementButtonEdit(button)
     if not button then
         return
     end
-    if self:IsLocked() then
-        GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+    if self:IsButtonEditLocked() then
+        if not isCursorCarryingActionPayload() then
+            if InCombatLockdown() then
+                return
+            end
+            GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+        end
         return
     end
 
@@ -1897,8 +2463,7 @@ function Bar:HandlePlacementButtonEdit(button)
         return
     end
 
-    local cursorType = GetCursorInfo and select(1, GetCursorInfo()) or nil
-    if cursorType or CursorHasItem() or CursorHasSpell() or CursorHasMacro() or CursorHasMoney() then
+    if isCursorCarryingActionPayload() then
         PlaceAction(slot)
         self:UpdateAll()
     else
@@ -1985,7 +2550,7 @@ end
 function Bar:UpdatePlacementFrame()
     self:CreatePlacementFrame()
 
-    if not self.frame or not self:IsPlacementModeEnabled() or not GPX.db or not GPX.db.enabled then
+    if not self.frame or not self:IsPlacementModeEnabled() or not GPX.db or not GPX.db.enabled or InCombatLockdown() then
         self.placementFrame:Hide()
         return
     end
@@ -2055,7 +2620,7 @@ function Bar:CreateFrame()
     frame:Hide()
 
     frame:SetScript("OnDragStart", function(self)
-        if GPX.VisualBar and not GPX.VisualBar:IsLocked() then
+        if GPX.VisualBar and not GPX.VisualBar:IsLayoutEditLocked() then
             self:StartMoving()
         end
     end)
@@ -2087,9 +2652,10 @@ function Bar:CreateFrame()
     ensureFrameChrome(bagBar)
     bagBar:SetParent(UIParent)
     bagBar:SetMovable(true)
+    bagBar:EnableMouse(true)
     bagBar:RegisterForDrag("LeftButton")
     bagBar:SetScript("OnDragStart", function(self)
-        if GPX.VisualBar and not GPX.VisualBar:IsLocked() then
+        if GPX.VisualBar and not GPX.VisualBar:IsLayoutEditLocked() then
             self:StartMoving()
         end
     end)
@@ -2210,9 +2776,11 @@ function Bar:CreateFrame()
     self.frame.bagBar = bagBar
     self:ApplyStoredPosition()
     self:ApplyStoredBagPosition()
+    self:EnableFrameDrag(frame, "main")
     self:AttachMoveHandle(frame, "main")
     self:AttachResizeHandle(frame, "main")
     self:AttachEditButton(frame, "main")
+    self:EnableFrameDrag(bagBar, "bag")
     self:AttachMoveHandle(bagBar, "bag")
     self:AttachResizeHandle(bagBar, "bag")
     self:AttachEditButton(bagBar, "bag")
@@ -2225,7 +2793,7 @@ function Bar:CreateFrame()
             end,
             columns = BAR_BUTTON_COUNT,
             isAvailable = function()
-                return Bar.frame and Bar.frame:IsShown()
+                return Bar.frame and Bar.frame:IsShown() and not InCombatLockdown()
             end,
             getIndicatorText = function(_, baseText)
                 return "Confirm opens spell assignment for the focused WoWX button.   " .. baseText
@@ -2256,12 +2824,17 @@ function Bar:CreateProgressFrame()
     createBackdrop(progressFrame, 0.18, 0.24, 0.3, 0.8)
 
     progressFrame:SetScript("OnDragStart", function(self)
-        if GPX.VisualBar and not GPX.VisualBar:IsProgressLocked() then
+        if GPX.VisualBar and not GPX.VisualBar:IsLayoutEditLocked() and shouldStartFrameDrag(self) then
             self:StartMoving()
+            self._wowxDragStarted = true
         end
     end)
 
     progressFrame:SetScript("OnDragStop", function(self)
+        if not self._wowxDragStarted then
+            return
+        end
+        self._wowxDragStarted = nil
         self:StopMovingOrSizing()
         if GPX.VisualBar then
             GPX.VisualBar:SaveProgressPosition()
@@ -2281,6 +2854,8 @@ function Bar:CreateProgressFrame()
     self.progressFrame = progressFrame
     self.progressFrame.progressBar = progressBar
     self.progressFrame.progressText = progressText
+    progressBar._wowxDisableFrameDrag = true
+    progressText._wowxDisableFrameDrag = true
     self:ApplyStoredProgressPosition()
     self:AttachEditButton(progressFrame, "progress")
 end
@@ -2308,8 +2883,10 @@ function Bar:UpdateButtonVisualState(button)
     local display = button.display
     local alpha = button._wowxBaseAlpha or layoutDefaults.main.alpha
     local borderR, borderG, borderB, borderA = 0.14, 0.18, 0.24, 0.85
-    if not self:IsLocked() then
+    if self:IsEditChromeActive() then
         borderR, borderG, borderB, borderA = 0.96, 0.8, 0.22, 0.9
+    else
+        borderR, borderG, borderB, borderA = 0.22, 0.66, 0.98, 0.9
     end
 
     if display and display.slot then
@@ -2417,6 +2994,7 @@ function Bar:UpdateButton(index, state)
     local bottomReserve = showSecondaryKeyText and 24 or 2
     local iconSize = math.max(20, math.min(buttonWidth - 4, buttonHeight - bottomReserve - 4))
     local buttonTopOffset = self.frame and self.frame._wowxButtonTopOffset or 44
+    local iconTopInset = math.max(2, math.floor((buttonHeight - bottomReserve - iconSize) * 0.5))
     local iconInset = hasAction and 2 or 4
 
     local keyLabel = physicalKey or defaultKeyHints[index] or tostring(index)
@@ -2451,7 +3029,7 @@ function Bar:UpdateButton(index, state)
             button.icon:SetWidth(iconSize)
             button.icon:SetHeight(iconSize)
             button.icon:ClearAllPoints()
-            button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", iconInset, -iconInset)
+            button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", iconInset, -iconTopInset)
         else
             layoutIconPriorityWrapper(button, button.icon, iconSize, bottomReserve)
             if button.slotPanel then
@@ -2574,6 +3152,9 @@ function Bar:UpdateAll()
 
     if not GPX.db or not GPX.db.enabled or not GPX.db.ui or not GPX.db.ui.visualBar or not GPX.db.ui.visualBar.enabled then
         self.frame:Hide()
+        if self.frame and self.frame._wowxShell then
+            self.frame._wowxShell:Hide()
+        end
         if self.placementFrame then
             self.placementFrame:Hide()
         end
@@ -2602,18 +3183,20 @@ function Bar:UpdateAll()
     self.frame:SetWidth(width)
     self.frame:SetScale(self:GetBarScale())
     self.frame:SetAlpha(metrics.alpha)
-    self.frame:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha)
+    self.frame:SetBackdropColor(0.05, 0.07, 0.12, 0.0)
+    self.frame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
 
     local state = self:GetCurrentState()
     local page = modifierStates[state] or modifierStates[""]
     local pageLabel = page.title
-    local showHeader = (not self:IsLocked()) or state ~= "" or (GPX.UIMode and GPX.UIMode.activeContext == "bar")
-    local buttonTopOffset = 34
+    local showHeader = (not self:IsLayoutEditLocked()) or (GPX.UIMode and GPX.UIMode.activeContext == "bar")
+    local buttonTopOffset = showHeader and 34 or 12
+    local bottomInset = 10
     if not self:UseModifierPages() and state ~= "" then
         pageLabel = "Base (modifier held)"
     end
     self.frame._wowxButtonTopOffset = buttonTopOffset
-    self.frame:SetHeight(buttonHeight + 44)
+    self.frame:SetHeight(buttonHeight + buttonTopOffset + bottomInset)
     self.frame.title:SetText("Action Bar")
     self.frame.pageText:SetText(pageLabel)
     if GPX.actionStateSuspended and GPX.actionStateReason then
@@ -2632,13 +3215,9 @@ function Bar:UpdateAll()
     end
     self.frame.title:SetShown(showHeader)
     self.frame.pageText:SetShown(showHeader)
-    self.frame.pageText:SetTextColor(self:IsLocked() and 0.85 or 1.0, self:IsLocked() and 0.88 or 0.9, self:IsLocked() and 0.98 or 0.35)
+    self.frame.pageText:SetTextColor(self:IsLayoutEditLocked() and 0.85 or 1.0, self:IsLayoutEditLocked() and 0.88 or 0.9, self:IsLayoutEditLocked() and 0.98 or 0.35)
     if self.progressFrame then
-        if self:IsProgressLocked() then
-            self.progressFrame:SetBackdropBorderColor(0.18, 0.24, 0.3, 0.8)
-        else
-            self.progressFrame:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.9)
-        end
+        self:ApplyChromeBackdrop(self.progressFrame, 0.12)
     end
     self:UpdateModifierIndicator(state)
     self:UpdateProgressBar()
@@ -2650,6 +3229,24 @@ function Bar:UpdateAll()
 
     for index = 1, BAR_BUTTON_COUNT do
         self:UpdateButton(index, state)
+    end
+
+    updateShellAroundButtons(self.frame, self.frame.buttons, 4, 4)
+    if self.frame._wowxShell then
+        self.frame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
+        if GPX.actionStateSuspended and GPX.actionStateReason then
+            self.frame._wowxShell:SetBackdropBorderColor(0.95, 0.36, 0.18, 0.98)
+            self.frame._wowxShell:SetBackdropColor(0.1, 0.05, 0.04, math.max(chromeAlpha, 0.18))
+        elseif GPX.UIMode and GPX.UIMode.activeContext == "bar" then
+            self.frame._wowxShell:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.98)
+            self.frame._wowxShell:SetBackdropColor(0.12, 0.09, 0.03, math.max(chromeAlpha, 0.16))
+        elseif self:IsLayoutEditLocked() then
+            self.frame._wowxShell:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.9)
+            self.frame._wowxShell:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha)
+        else
+            self.frame._wowxShell:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.96)
+            self.frame._wowxShell:SetBackdropColor(0.12, 0.09, 0.03, math.max(chromeAlpha, 0.16))
+        end
     end
 
     self.frame:Show()
@@ -2676,18 +3273,40 @@ function Bar:Slash(msg)
         GPX:Print("Visual bar shown.")
     elseif cmd == "lock" then
         config.locked = true
+        config.progressLocked = true
         self:UpdateAll()
         GPX:Print("Visual bar locked.")
     elseif cmd == "unlock" then
+        if InCombatLockdown() then
+            GPX:Print("Cannot unlock layout edit in combat.")
+            return
+        end
         config.locked = false
+        config.progressLocked = false
         self:UpdateAll()
-        GPX:Print("Layout unlocked. Drag main/bag/micro/stance/pet bars. Use resize commands for scale.")
+        GPX:Print("Layout unlocked. Drag bars from any chrome around their buttons. Use resize commands for scale.")
     elseif cmd == "reset" then
+        if InCombatLockdown() then
+            GPX:Print("Cannot reset layout position in combat.")
+            return
+        end
         config.point = GPX:DeepCopy(GPX.defaults.ui.visualBar.point)
         config.scale = GPX.defaults.ui.visualBar.scale or 1.0
         self:ApplyStoredPosition()
         self:UpdateAll()
         GPX:Print("Visual bar position reset.")
+    elseif cmd == "stancereset" or cmd == "aurareset" then
+        if InCombatLockdown() then
+            GPX:Print("Cannot reset aura / stance bar position in combat.")
+            return
+        end
+        self:ResetAuxPosition("stance")
+    elseif cmd == "petreset" then
+        if InCombatLockdown() then
+            GPX:Print("Cannot reset pet bar position in combat.")
+            return
+        end
+        self:ResetAuxPosition("pet")
     elseif cmd == "bigger" then
         self:AdjustScale(0.05)
     elseif cmd == "smaller" then
@@ -2737,18 +3356,30 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("MODIFIER_STATE_CHANGED")
 eventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
+eventFrame:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_USABLE")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
+eventFrame:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
+eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_USABLE")
+eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_COOLDOWN")
+eventFrame:RegisterEvent("UPDATE_STEALTH")
+eventFrame:RegisterEvent("UPDATE_OVERRIDE_ACTIONBAR")
+eventFrame:RegisterEvent("UPDATE_POSSESS_BAR")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("SPELLS_CHANGED")
 eventFrame:RegisterEvent("UPDATE_BINDINGS")
 eventFrame:RegisterEvent("PLAYER_XP_UPDATE")
 eventFrame:RegisterEvent("UPDATE_FACTION")
 eventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
+eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 eventFrame:SetScript("OnEvent", function(_, event)
     if GPX.VisualBar then
+        if event == "PLAYER_REGEN_DISABLED" and GPX.UIMode and GPX.UIMode.activeContext == "bar" then
+            GPX.UIMode:Exit()
+        end
         if event == "PLAYER_REGEN_ENABLED" and GPX.VisualBar.pendingAttributeRefresh then
             GPX.VisualBar:UpdateAll()
             return
