@@ -2896,6 +2896,29 @@ function Bar:GetResolvedCooldown(slot)
     return start, duration, enable
 end
 
+function Bar:GetActionChargeState(slot)
+    if not slot then
+        return nil
+    end
+
+    if GetActionCharges then
+        local current, maxCharges, cooldownStart, cooldownDuration = GetActionCharges(slot)
+        if maxCharges and maxCharges > 1 then
+            return current or maxCharges, maxCharges, cooldownStart or 0, cooldownDuration or 0, 1
+        end
+    end
+
+    local actionType, actionID = GetActionInfo(slot)
+    if actionType == "spell" and GetSpellCharges then
+        local current, maxCharges, cooldownStart, cooldownDuration = GetSpellCharges(actionID)
+        if maxCharges and maxCharges > 1 then
+            return current or maxCharges, maxCharges, cooldownStart or 0, cooldownDuration or 0, 1
+        end
+    end
+
+    return nil
+end
+
 function Bar:UpdateButtonVisualState(button)
     if not button then
         return
@@ -2911,7 +2934,11 @@ function Bar:UpdateButtonVisualState(button)
     end
 
     if display and display.slot then
+        local chargeCount, maxCharges, chargeStart, chargeDuration, chargeEnable = self:GetActionChargeState(display.slot)
         local start, duration, enable = self:GetResolvedCooldown(display.slot)
+        if maxCharges and maxCharges > 1 and chargeCount and chargeCount < maxCharges and chargeDuration and chargeDuration > 0 then
+            start, duration, enable = chargeStart, chargeDuration, chargeEnable
+        end
         CooldownFrame_SetTimer(button.cooldown, start or 0, duration or 0, enable or 0)
 
         local usable, oom = IsUsableAction(display.slot)
@@ -2935,8 +2962,14 @@ function Bar:UpdateButtonVisualState(button)
         button.icon:SetVertexColor(red, green, blue)
         button:SetAlpha(finalAlpha)
         if button.countText then
-            if actionCount and actionCount > 1 then
-                button.countText:SetText(actionCount)
+            local countToShow = actionCount
+            local shouldShowCount = actionCount and actionCount > 1
+            if maxCharges and maxCharges > 1 then
+                countToShow = chargeCount or maxCharges
+                shouldShowCount = countToShow ~= nil
+            end
+            if shouldShowCount then
+                button.countText:SetText(countToShow)
                 button.countText:Show()
             else
                 button.countText:SetText("")

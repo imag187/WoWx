@@ -107,16 +107,23 @@ end
 function Button:ShowMenu()
     local bar = GPX.VisualBar
     local layoutLabel = "Layout Edit"
+    local buttonEditLabel = "Button Edit"
     if bar and bar.IsLocked and bar:IsLocked() then
         layoutLabel = "Layout Edit: Off (Enable)"
     else
         layoutLabel = "Layout Edit: On (Disable)"
+    end
+    if bar and bar.IsButtonLockEnabled and bar:IsButtonLockEnabled() then
+        buttonEditLabel = "Button Edit: Off (Enable)"
+    else
+        buttonEditLabel = "Button Edit: On (Disable)"
     end
     local menu = {
         { text = GPX.brand, isTitle = true, notCheckable = true },
         { text = "Open Config", notCheckable = true, func = function() GPX:OpenSettings() end },
         { text = "Run Setup Wizard", notCheckable = true, func = function() GPX:OpenSetupWizard("init") end },
         { text = layoutLabel, notCheckable = true, func = function() if bar then bar:Slash((bar:IsLocked() and "unlock") or "lock") end end },
+        { text = buttonEditLabel, notCheckable = true, func = function() if bar then bar:Slash((bar:IsButtonLockEnabled() and "buttonunlock") or "buttonlock") end end },
         { text = "Toggle XP/Rep Bar", notCheckable = true, func = function() if bar then bar:Slash("progress") end end },
         { text = "Toggle Bag Bar", notCheckable = true, func = function() if bar then bar:Slash("bagbar") end end },
         { text = "Layout Edit uses chrome drag + Edit sizing", notCheckable = true, disabled = true },
