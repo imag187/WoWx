@@ -220,6 +220,7 @@ function UI:CreateFrame()
         { key = "focusBar", label = "Focus Bar", x = 266, y = -122, width = 140, click = function() if GPX.UIMode then GPX.UIMode:Enter("bar", { returnContext = "settings" }) end end },
         { key = "spellbook", label = "Open Spellbook", x = 14, y = -162, width = 116, click = function() if GPX.SpellbookUI then GPX.SpellbookUI:Open(nil, "settings") end end },
         { key = "menuNav", label = "Menu Navigator", x = 140, y = -162, width = 140, click = function() GPX:OpenMenuNav("settings") end },
+        { key = "buttonEdit", label = "Button Edit", x = 290, y = -162, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash((GPX.db.ui.visualBar.buttonLocked ~= false) and "buttonunlock" or "buttonlock") end UI:Refresh() end },
         { key = "close", label = "Close", x = 140, y = -242, width = 116, click = function() frame:Hide() end },
     }
 
@@ -629,19 +630,21 @@ function UI:BuildStatusText()
     local styleId = setup and (setup.inputStyle or setup.deviceId)
     local inputStyle = styleId and GPX:GetInputStyle(styleId).name or "Not calibrated"
     local visualBar = GPX.db and GPX.db.ui and GPX.db.ui.visualBar and GPX.db.ui.visualBar.enabled and "Shown" or "Hidden"
-    local lockState = GPX.db and GPX.db.ui and GPX.db.ui.visualBar and GPX.db.ui.visualBar.locked and "Locked" or "Unlocked"
+    local layoutLockState = GPX.db and GPX.db.ui and GPX.db.ui.visualBar and GPX.db.ui.visualBar.locked and "Locked" or "Unlocked"
+    local buttonLockState = GPX.db and GPX.db.ui and GPX.db.ui.visualBar and GPX.db.ui.visualBar.buttonLocked ~= false and "Locked" or "Unlocked"
     local minimap = GPX.db and GPX.db.ui and GPX.db.ui.minimapButton and GPX.db.ui.minimapButton.enabled and "Shown" or "Hidden"
     local controllerMode = GPX:IsControllerEnabled() and "Enabled" or "Disabled"
     local lastError = GPX.db and GPX.db.lastError and GPX.db.lastError ~= "" and GPX.db.lastError or "None"
 
     return string.format(
-        "Mode: %s\nProfile: %s\nInput Style: %s\nController Mode: %s\nVisual Bar: %s (%s)\nMinimap Button: %s\nLast Error: %s",
+        "Mode: %s\nProfile: %s\nInput Style: %s\nController Mode: %s\nVisual Bar: %s\nLayout Edit: %s\nButton Edit: %s\nMinimap Button: %s\nLast Error: %s",
         mode,
         profileName,
         inputStyle,
         controllerMode,
         visualBar,
-        lockState,
+        layoutLockState,
+        buttonLockState,
         minimap,
         lastError
     )
@@ -656,6 +659,9 @@ function UI:Refresh()
     self.frame.bindingText:SetText(self:BuildBindingSummary())
     if self.frame.buttons and self.frame.buttons.lockBar and GPX.db and GPX.db.ui and GPX.db.ui.visualBar then
         self.frame.buttons.lockBar:SetText((GPX.db.ui.visualBar.locked ~= false) and "Layout Edit: Off" or "Layout Edit: On")
+    end
+    if self.frame.buttons and self.frame.buttons.buttonEdit and GPX.db and GPX.db.ui and GPX.db.ui.visualBar then
+        self.frame.buttons.buttonEdit:SetText((GPX.db.ui.visualBar.buttonLocked ~= false) and "Button Edit: Off" or "Button Edit: On")
     end
     if not self.captureField and self.frame.inputHint then
         if GPX:IsControllerEnabled() then

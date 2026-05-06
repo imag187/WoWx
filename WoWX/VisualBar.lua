@@ -2121,8 +2121,25 @@ function Bar:IsLocked()
     return ensureVisualBarConfig().locked ~= false
 end
 
+function Bar:IsButtonLockEnabled()
+    return ensureVisualBarConfig().buttonLocked ~= false
+end
+
 function Bar:IsLayoutEditLocked()
     return self:IsLocked() or InCombatLockdown()
+end
+
+function Bar:GetButtonEditBlockReason()
+    if InCombatLockdown() then
+        return "combat"
+    end
+    if not self:IsLayoutEditLocked() then
+        return "layout"
+    end
+    if self:IsButtonLockEnabled() then
+        return "buttonlock"
+    end
+    return nil
 end
 
 function Bar:IsEditChromeActive()
@@ -2149,7 +2166,18 @@ function Bar:ApplyChromeBackdrop(frame, alpha, isActive)
 end
 
 function Bar:IsButtonEditLocked()
-    return self:IsLocked() or InCombatLockdown()
+    return self:GetButtonEditBlockReason() ~= nil
+end
+
+function Bar:NotifyButtonEditBlocked(reason, actionText)
+    if reason == "combat" then
+        return
+    end
+    if reason == "layout" then
+        GPX:Print("Layout edit is active. Lock layout edit before changing buttons.")
+        return
+    end
+    GPX:Print("Button lock is enabled. Unlock bar buttons to " .. (actionText or "edit slots") .. ".")
 end
 
 function Bar:IsProgressLocked()
@@ -2360,12 +2388,10 @@ function Bar:PlaceCursorIntoButton(button)
     if not button.display or not button.display.slot or button.display.utilityId then
         return
     end
-    if self:IsButtonEditLocked() then
+    local blockReason = self:GetButtonEditBlockReason()
+    if blockReason then
         if not isCursorCarryingActionPayload() then
-            if InCombatLockdown() then
-                return
-            end
-            GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+            self:NotifyButtonEditBlocked(blockReason, "edit slots")
         end
         return
     end
@@ -2379,12 +2405,10 @@ function Bar:HandleRightClickEdit(button)
     if not button or not button.display or not button.display.slot or button.display.utilityId then
         return
     end
-    if self:IsButtonEditLocked() then
+    local blockReason = self:GetButtonEditBlockReason()
+    if blockReason then
         if not isCursorCarryingActionPayload() then
-            if InCombatLockdown() then
-                return
-            end
-            GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+            self:NotifyButtonEditBlocked(blockReason, "edit slots")
         end
         return
     end
@@ -2401,11 +2425,9 @@ function Bar:PickupFromButton(button)
     if not button.display or not button.display.slot or button.display.utilityId then
         return
     end
-    if self:IsButtonEditLocked() then
-        if InCombatLockdown() then
-            return
-        end
-        GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+    local blockReason = self:GetButtonEditBlockReason()
+    if blockReason then
+        self:NotifyButtonEditBlocked(blockReason, "edit slots")
         return
     end
     PickupAction(button.display.slot)
@@ -2448,12 +2470,10 @@ function Bar:HandlePlacementButtonEdit(button)
     if not button then
         return
     end
-    if self:IsButtonEditLocked() then
+    local blockReason = self:GetButtonEditBlockReason()
+    if blockReason then
         if not isCursorCarryingActionPayload() then
-            if InCombatLockdown() then
-                return
-            end
-            GPX:Print("Button lock is enabled. Unlock bar buttons to edit slots.")
+            self:NotifyButtonEditBlocked(blockReason, "edit slots")
         end
         return
     end
@@ -2594,8 +2614,9 @@ function Bar:AssignFromSpellbook(button)
         return
     end
 
-    if self:IsLocked() then
-        GPX:Print("Button lock is enabled. Unlock bar buttons to assign spells.")
+    local blockReason = self:GetButtonEditBlockReason()
+    if blockReason then
+        self:NotifyButtonEditBlocked(blockReason, "assign spells")
         return
     end
 
@@ -3285,6 +3306,24 @@ function Bar:Slash(msg)
         config.progressLocked = false
         self:UpdateAll()
         GPX:Print("Layout unlocked. Drag bars from any chrome around their buttons. Use resize commands for scale.")
+    elseif cmd == "buttonlock" or cmd == "slotlock" then
+        config.buttonLocked = true
+        self:UpdateAll()
+        GPX:Print("Bar buttons locked.")
+    elseif cmd == "buttonunlock" or cmd == "slotunlock" then
+        if InCombatLockdown() then
+            GPX:Print("Cannot unlock bar buttons in combat.")
+            return
+        end
+        config.buttonLocked = false
+        self:UpdateAll()
+        GPX:Print("Bar buttons unlocked. Lock layout edit to swap or assign spells.")
+    elseif cmd == "buttons" or cmd == "buttonedit" or cmd == "slotedit" then
+        if config.buttonLocked == false then
+            self:Slash("buttonlock")
+        else
+            self:Slash("buttonunlock")
+        end
     elseif cmd == "reset" then
         if InCombatLockdown() then
             GPX:Print("Cannot reset layout position in combat.")

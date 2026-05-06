@@ -99,6 +99,7 @@ GPX.defaults = {
         visualBar = {
             enabled = true,
             locked = true,
+            buttonLocked = true,
             replaceBlizzard = true,
             modifierPages = true,
             keepBags = false,
