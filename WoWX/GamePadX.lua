@@ -169,7 +169,7 @@ GPX.defaults = {
             enabled = false,
         },
         bindingEngine = {
-            transport = "direct", -- direct | click | override
+            transport = "click", -- direct | click | override
             claimModifiers = true,
             claimCombo = true,
             useSetupKeys = true,
@@ -303,6 +303,13 @@ function GPX:InitDB()
     if db._visualBarDefaultsV3 == nil then
         db.ui.visualBar.modifierPages = true
         db._visualBarDefaultsV3 = true
+    end
+
+    -- Migration: move existing installs to WoWX-owned click transport.
+    db.ui.bindingEngine = db.ui.bindingEngine or {}
+    if db._bindingEngineDefaultsV2 == nil then
+        db.ui.bindingEngine.transport = "click"
+        db._bindingEngineDefaultsV2 = true
     end
 
     self.db = db
@@ -579,7 +586,7 @@ end
 function GPX:GetDiagnosticsConfig()
     self.db.diagnostics = self.db.diagnostics or {}
     if self.db.diagnostics.autoCapture == nil then
-        self.db.diagnostics.autoCapture = false
+        self.db.diagnostics.autoCapture = true
     end
     return self.db.diagnostics
 end
@@ -643,16 +650,59 @@ function GPX:CollectDiagnosticsLines()
     if self.VisualBar and self.VisualBar.GetCurrentState then
         add("  ActiveModifierState: " .. tostring(self.VisualBar:GetCurrentState() or ""))
     end
+    add("  ActionPage: page=" .. tostring(GetActionBarPage and GetActionBarPage() or "n/a")
+        .. " bonusOffset=" .. tostring(GetBonusBarOffset and GetBonusBarOffset() or "n/a")
+        .. " hasBonus=" .. tostring(HasBonusActionBar and HasBonusActionBar() or false)
+        .. " hasOverride=" .. tostring(HasOverrideActionBar and HasOverrideActionBar() or false))
+    do
+        local overrideFrames = {
+            "OverrideActionBar",
+            "OverrideActionBarFrame",
+            "OverrideActionBarArtFrame",
+            "OverrideActionBarLeaveFrame",
+            "BonusActionBarFrame",
+            "PossessBarFrame",
+            "ShapeshiftBarFrame",
+        }
+        local frameParts = {}
+        for _, name in ipairs(overrideFrames) do
+            local frame = _G[name]
+            if frame then
+                local shown = frame.IsShown and frame:IsShown() or false
+                frameParts[#frameParts + 1] = name .. "=" .. (shown and "shown" or "hidden")
+            else
+                frameParts[#frameParts + 1] = name .. "=missing"
+            end
+        end
+        add("  OverrideFrames: " .. table.concat(frameParts, " | "))
+
+        local buttonParts = {}
+        for index = 1, 12 do
+            local button = _G["OverrideActionBarButton" .. index]
+            if button then
+                local action = button.action or "nil"
+                local shown = button.IsShown and button:IsShown() or false
+                buttonParts[#buttonParts + 1] = tostring(index) .. "=" .. tostring(action) .. "/" .. (shown and "shown" or "hidden")
+            end
+        end
+        if #buttonParts > 0 then
+            add("  OverrideButtons: " .. table.concat(buttonParts, " | "))
+        end
+    end
     if self.VisualBar and self.VisualBar.frame and self.VisualBar.frame.buttons and self.VisualBar.frame.buttons[2] then
         local button = self.VisualBar.frame.buttons[2]
         local dtype = button.GetAttribute and button:GetAttribute("type") or nil
         local action = button.GetAttribute and button:GetAttribute("action") or nil
+        local dtype1 = button.GetAttribute and button:GetAttribute("type1") or nil
+        local action1 = button.GetAttribute and button:GetAttribute("action1") or nil
+        local macrotext1 = button.GetAttribute and button:GetAttribute("macrotext1") or nil
         local shiftAction = button.GetAttribute and button:GetAttribute("shift-action") or nil
         local altAction = button.GetAttribute and button:GetAttribute("alt-action") or nil
         local ctrlAction = button.GetAttribute and button:GetAttribute("ctrl-action") or nil
         local comboAction = button.GetAttribute and (button:GetAttribute("shift-alt-action") or button:GetAttribute("alt-shift-action")) or nil
         local slot = button.display and button.display.slot or nil
         add("  BarSlot2 attr(type/action): " .. tostring(dtype) .. "/" .. tostring(action) .. "  displaySlot=" .. tostring(slot))
+        add("  BarSlot2 attr(type1/action1/macro1): " .. tostring(dtype1) .. "/" .. tostring(action1) .. "/" .. tostring(macrotext1))
         add("  BarSlot2 mod actions: shift=" .. tostring(shiftAction) .. " alt=" .. tostring(altAction) .. " ctrl=" .. tostring(ctrlAction) .. " shift+alt=" .. tostring(comboAction))
     end
     add("  Keybind 1: " .. tostring(GetBindingAction("1") or ""))
@@ -665,10 +715,13 @@ function GPX:CollectDiagnosticsLines()
     add("  Slot4 keybind: " .. tostring(slot4Key) .. "=" .. tostring(GetBindingAction(slot4Key) or ""))
     add("  Slot4 shift bind: SHIFT-" .. tostring(slot4Key) .. "=" .. tostring(GetBindingAction("SHIFT-" .. slot4Key) or ""))
     local actionButton1 = _G.ActionButton1
-    local actionButton2 = _G.ActionButton2
-    local actionButton3 = _G.ActionButton3
     if actionButton1 then
-        add("  LiveActionButton slots: 1=" .. tostring(actionButton1.action) .. " 2=" .. tostring(actionButton2 and actionButton2.action) .. " 3=" .. tostring(actionButton3 and actionButton3.action))
+        local liveActionParts = {}
+        for index = 1, 12 do
+            local actionButton = _G["ActionButton" .. index]
+            liveActionParts[#liveActionParts + 1] = tostring(index) .. "=" .. tostring(actionButton and actionButton.action or "nil")
+        end
+        add("  LiveActionButton slots: " .. table.concat(liveActionParts, " | "))
     end
 
     local quickKeys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
@@ -700,15 +753,43 @@ function GPX:CollectDiagnosticsLines()
                 local btn = self.VisualBar.frame.buttons[idx]
                 local attrName = modifierAttrMap[prefix]
                 local secureSlot = nil
+                local secureType1 = nil
+                local secureAction1 = nil
+                local secureMacro1 = nil
                 if btn and btn.GetAttribute then
                     if prefix == "SHIFT-ALT-" then
                         secureSlot = btn:GetAttribute("shift-alt-action") or btn:GetAttribute("alt-shift-action")
+                        secureType1 = btn:GetAttribute("shift-alt-type1") or btn:GetAttribute("alt-shift-type1")
+                        secureAction1 = btn:GetAttribute("shift-alt-action1") or btn:GetAttribute("alt-shift-action1")
+                        secureMacro1 = btn:GetAttribute("shift-alt-macrotext1") or btn:GetAttribute("alt-shift-macrotext1")
                     else
                         secureSlot = btn:GetAttribute(attrName)
+                        if prefix == "" then
+                            secureType1 = btn:GetAttribute("type1")
+                            secureAction1 = btn:GetAttribute("action1")
+                            secureMacro1 = btn:GetAttribute("macrotext1")
+                        elseif prefix == "SHIFT-" then
+                            secureType1 = btn:GetAttribute("shift-type1")
+                            secureAction1 = btn:GetAttribute("shift-action1")
+                            secureMacro1 = btn:GetAttribute("shift-macrotext1")
+                        elseif prefix == "ALT-" then
+                            secureType1 = btn:GetAttribute("alt-type1")
+                            secureAction1 = btn:GetAttribute("alt-action1")
+                            secureMacro1 = btn:GetAttribute("alt-macrotext1")
+                        elseif prefix == "CTRL-" then
+                            secureType1 = btn:GetAttribute("ctrl-type1")
+                            secureAction1 = btn:GetAttribute("ctrl-action1")
+                            secureMacro1 = btn:GetAttribute("ctrl-macrotext1")
+                        end
                     end
                 end
                 local label = (prefix == "") and key or (prefix .. key)
-                add("    " .. label .. " => bind='" .. tostring(bindAction) .. "' secureSlot=" .. tostring(secureSlot))
+                local displaySlot = btn and btn.display and btn.display.slot or nil
+                add("    " .. label .. " => bind='" .. tostring(bindAction) .. "' displaySlot=" .. tostring(displaySlot)
+                    .. " secureSlot=" .. tostring(secureSlot)
+                    .. " type1=" .. tostring(secureType1)
+                    .. " action1=" .. tostring(secureAction1)
+                    .. " macro1=" .. tostring(secureMacro1))
             end
         end
     end
@@ -723,9 +804,14 @@ function GPX:CollectDiagnosticsLines()
                 local bAlt = btn.GetAttribute and btn:GetAttribute("alt-action") or nil
                 local bCtrl = btn.GetAttribute and btn:GetAttribute("ctrl-action") or nil
                 local bCombo = btn.GetAttribute and (btn:GetAttribute("shift-alt-action") or btn:GetAttribute("alt-shift-action")) or nil
+                local bType1 = btn.GetAttribute and btn:GetAttribute("type1") or nil
+                local bAction1 = btn.GetAttribute and btn:GetAttribute("action1") or nil
+                local bMacro1 = btn.GetAttribute and btn:GetAttribute("macrotext1") or nil
                 local displaySlot = btn.display and btn.display.slot or nil
                 local displayCmd = btn.display and btn.display.command or nil
                 add("  Btn" .. i .. " attr=" .. tostring(bType) .. "/" .. tostring(bAction)
+                    .. " type1=" .. tostring(bType1) .. "/" .. tostring(bAction1)
+                    .. " macro1=" .. tostring(bMacro1)
                     .. " shift=" .. tostring(bShift)
                     .. " alt=" .. tostring(bAlt)
                     .. " ctrl=" .. tostring(bCtrl)
@@ -944,9 +1030,48 @@ function GPX:IsSpecialActionStateActive()
     return false, nil
 end
 
-function GPX:ShouldSuspendForSpecialActionState()
+function GPX:ShouldSuspendForSpecialActionState(reason)
     local engine = self:GetBindingEngineConfig()
+    if reason == "override" and self:IsStaleOverrideActionState() then
+        return false
+    end
+    if reason == "bonus" then
+        return false
+    end
     return engine.transport == "click" or engine.transport == "override"
+end
+
+function GPX:HasVisibleOverrideUI()
+    local frames = {
+        "OverrideActionBar",
+        "OverrideActionBarFrame",
+        "OverrideActionBarArtFrame",
+        "OverrideActionBarLeaveFrame",
+    }
+
+    for _, name in ipairs(frames) do
+        local frame = _G[name]
+        if frame and frame.IsShown and frame:IsShown() then
+            return true
+        end
+    end
+
+    for index = 1, 12 do
+        local button = _G["OverrideActionBarButton" .. index]
+        if button and button.IsShown and button:IsShown() then
+            return true
+        end
+    end
+
+    return false
+end
+
+function GPX:IsStaleOverrideActionState()
+    if not (HasOverrideActionBar and HasOverrideActionBar()) then
+        return false
+    end
+
+    return not self:HasVisibleOverrideUI()
 end
 
 function GPX:RefreshActionStateSafety(silent)
@@ -955,7 +1080,7 @@ function GPX:RefreshActionStateSafety(silent)
     end
 
     local active, reason = self:IsSpecialActionStateActive()
-    local shouldSuspend = active and self:ShouldSuspendForSpecialActionState()
+    local shouldSuspend = active and self:ShouldSuspendForSpecialActionState(reason)
 
     if shouldSuspend then
         self.actionStateSuspended = true
@@ -1012,8 +1137,12 @@ function GPX:GetBindingEngineConfig()
     self.db.ui.bindingEngine = self.db.ui.bindingEngine or {}
 
     local cfg = self.db.ui.bindingEngine
+    if self.db._bindingEngineDefaultsV2 == nil then
+        cfg.transport = "click"
+        self.db._bindingEngineDefaultsV2 = true
+    end
     if cfg.transport ~= "direct" and cfg.transport ~= "click" and cfg.transport ~= "override" then
-        cfg.transport = "direct"
+        cfg.transport = "click"
     end
     if cfg.claimModifiers == nil then
         cfg.claimModifiers = true
@@ -1142,7 +1271,7 @@ function GPX:ApplyBindings(silent)
     end
 
     local specialActive, reason = self:IsSpecialActionStateActive()
-    if specialActive and self:ShouldSuspendForSpecialActionState() then
+    if specialActive and self:ShouldSuspendForSpecialActionState(reason) then
         self.actionStateSuspended = true
         self.actionStateReason = reason
         if not silent then
@@ -1174,8 +1303,34 @@ function GPX:ApplyBindings(silent)
         end
     end
 
+    local function getDirectClickTarget(command)
+        local index = tonumber(command and command:match("(%d+)$"))
+        if not index then
+            return nil
+        end
+
+        if command:find("^ACTIONBUTTON") then
+            return "ActionButton" .. index
+        end
+        if command:find("^MULTIACTIONBAR1BUTTON") then
+            return "MultiBarBottomLeftButton" .. index
+        end
+        if command:find("^MULTIACTIONBAR2BUTTON") then
+            return "MultiBarBottomRightButton" .. index
+        end
+        if command:find("^MULTIACTIONBAR3BUTTON") then
+            return "MultiBarRightButton" .. index
+        end
+        if command:find("^MULTIACTIONBAR4BUTTON") then
+            return "MultiBarLeftButton" .. index
+        end
+
+        return nil
+    end
+
     local function applyDirectBinding(key, command)
         rememberPrevious(key)
+
         if SetBinding(key, command) then
             self.appliedBindings[key] = { mode = "binding", command = command }
             ok = ok + 1
@@ -1649,13 +1804,13 @@ function GPX:Slash(msg)
         local arg = string.lower((rest or ""):match("^%s*(.-)%s*$"))
         local cfg = self:GetDiagnosticsConfig()
         if arg == "" or arg == "status" then
-            self:Print("Auto diagnostics at login/loading: " .. (cfg.autoCapture and "ON" or "OFF"))
+            self:Print("Auto diagnostics on login/state changes: " .. (cfg.autoCapture and "ON" or "OFF"))
         elseif arg == "on" or arg == "enable" or arg == "1" then
             cfg.autoCapture = true
-            self:Print("Auto diagnostics at login/loading: ON")
+            self:Print("Auto diagnostics on login/state changes: ON")
         elseif arg == "off" or arg == "disable" or arg == "0" then
             cfg.autoCapture = false
-            self:Print("Auto diagnostics at login/loading: OFF")
+            self:Print("Auto diagnostics on login/state changes: OFF")
         else
             self:Print("Usage: /wowx diagauto [on|off|status]")
         end
@@ -1756,7 +1911,7 @@ function GPX:PrintHelp()
     self:Print("  "..c.."/wowx diag stance"..r.."        Print aura/stance frame and button diagnostics")
     self:Print("  "..c.."/wowx diag verbose"..r.."       Save a new timestamped diag + print it now")
     self:Print("  "..c.."/wowx diagshow"..r.."           Print the most recent saved diagnostic run")
-    self:Print("  "..c.."/wowx diagauto [on|off]"..r.."   Toggle auto diagnostics on login/loading")
+    self:Print("  "..c.."/wowx diagauto [on|off]"..r.."   Toggle auto diagnostics on login/state changes")
     self:Print("  "..c.."/wowx bar toggle"..r.."         Show or hide the visual WoWX bar")
     self:Print("  "..c.."/wowx bar bagbar"..r.."         Toggle compact WoWX bag bar")
     self:Print("  "..c.."/wowx bar progress"..r.."       Toggle XP/Rep tracker strip")
@@ -1918,6 +2073,10 @@ mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 mainFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 mainFrame:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
 mainFrame:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
+mainFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+mainFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")
+mainFrame:RegisterEvent("UPDATE_STEALTH")
+mainFrame:RegisterEvent("PLAYER_AURAS_CHANGED")
 mainFrame:RegisterEvent("UPDATE_VEHICLE_ACTIONBAR")
 mainFrame:RegisterEvent("UPDATE_OVERRIDE_ACTIONBAR")
 mainFrame:RegisterEvent("UPDATE_POSSESS_BAR")
@@ -1995,11 +2154,16 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         end
     elseif event == "ACTIONBAR_PAGE_CHANGED"
         or event == "UPDATE_BONUS_ACTIONBAR"
+        or event == "UPDATE_SHAPESHIFT_FORM"
+        or event == "UPDATE_SHAPESHIFT_FORMS"
+        or event == "UPDATE_STEALTH"
+        or event == "PLAYER_AURAS_CHANGED"
         or event == "UPDATE_VEHICLE_ACTIONBAR"
         or event == "UPDATE_OVERRIDE_ACTIONBAR"
         or event == "UPDATE_POSSESS_BAR"
         or event == "PLAYER_CONTROL_GAINED"
         or event == "PLAYER_CONTROL_LOST" then
         GPX:RefreshActionStateSafety(true)
+        GPX:RunAutomaticDiagnosticCapture(string.lower(event))
     end
 end)

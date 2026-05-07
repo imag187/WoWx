@@ -592,6 +592,94 @@ local function getActiveStanceFrames()
     return frames
 end
 
+local function getFrameBounds(frame)
+    if not frame or not frame.IsShown or not frame:IsShown() then
+        return nil
+    end
+
+    local left = frame.GetLeft and frame:GetLeft() or nil
+    local right = frame.GetRight and frame:GetRight() or nil
+    local top = frame.GetTop and frame:GetTop() or nil
+    local bottom = frame.GetBottom and frame:GetBottom() or nil
+    if not left or not right or not top or not bottom then
+        return nil
+    end
+
+    return left, right, top, bottom
+end
+
+local function framesOverlap(firstFrame, secondFrame)
+    local firstLeft, firstRight, firstTop, firstBottom = getFrameBounds(firstFrame)
+    local secondLeft, secondRight, secondTop, secondBottom = getFrameBounds(secondFrame)
+    if not firstLeft or not secondLeft then
+        return false
+    end
+
+    return not (
+        firstRight <= secondLeft
+        or firstLeft >= secondRight
+        or firstTop <= secondBottom
+        or firstBottom >= secondTop
+    )
+end
+
+local function getProxyButtonNameForCommand(command)
+    local index = tonumber(command and command:match("(%d+)$"))
+    if not index then
+        return nil
+    end
+
+    if command:find("^ACTIONBUTTON") then
+        return "ActionButton" .. index
+    end
+    if command:find("^MULTIACTIONBAR1BUTTON") then
+        return "MultiBarBottomLeftButton" .. index
+    end
+    if command:find("^MULTIACTIONBAR2BUTTON") then
+        return "MultiBarBottomRightButton" .. index
+    end
+    if command:find("^MULTIACTIONBAR3BUTTON") then
+        return "MultiBarRightButton" .. index
+    end
+    if command:find("^MULTIACTIONBAR4BUTTON") then
+        return "MultiBarLeftButton" .. index
+    end
+
+    return nil
+end
+
+local function setProxyOrActionAttribute(button, prefix, command, fallbackSlot)
+    local attrPrefix = prefix and (prefix .. "-") or ""
+    local proxyButtonName = getProxyButtonNameForCommand(command)
+    local actionIndex = tonumber(command and command:match("^ACTIONBUTTON(%d+)$"))
+    local useResolvedAction = actionIndex
+        and fallbackSlot
+        and fallbackSlot ~= actionIndex
+        and GPX
+        and GPX.IsStaleOverrideActionState
+        and GPX:IsStaleOverrideActionState()
+
+    button:SetAttribute(attrPrefix .. "type", nil)
+    button:SetAttribute(attrPrefix .. "action", nil)
+
+    if useResolvedAction then
+        button:SetAttribute(attrPrefix .. "type1", "action")
+        button:SetAttribute(attrPrefix .. "action1", fallbackSlot)
+        button:SetAttribute(attrPrefix .. "clickbutton", nil)
+        button:SetAttribute(attrPrefix .. "macrotext1", nil)
+    elseif proxyButtonName then
+        button:SetAttribute(attrPrefix .. "type1", "macro")
+        button:SetAttribute(attrPrefix .. "macrotext1", "/click " .. proxyButtonName)
+        button:SetAttribute(attrPrefix .. "clickbutton", nil)
+        button:SetAttribute(attrPrefix .. "action1", nil)
+    else
+        button:SetAttribute(attrPrefix .. "type1", fallbackSlot and "action" or nil)
+        button:SetAttribute(attrPrefix .. "action1", fallbackSlot)
+        button:SetAttribute(attrPrefix .. "clickbutton", nil)
+        button:SetAttribute(attrPrefix .. "macrotext1", nil)
+    end
+end
+
 function Bar:GetCurrentState()
     local focus = GetCurrentKeyBoardFocus and GetCurrentKeyBoardFocus() or nil
     if focus and focus.IsObjectType and focus:IsObjectType("EditBox") then
@@ -1077,8 +1165,11 @@ function Bar:SetScaleForKind(kind, newScale)
         for _, frame in ipairs(getActiveStanceFrames()) do
             frame:SetScale(finalScale)
         end
-    elseif kind == "pet" and _G.PetActionBarFrame then
-        _G.PetActionBarFrame:SetScale(finalScale)
+    elseif kind == "pet" then
+        local petFrame = self.petHostFrame or _G.PetActionBarFrame
+        if petFrame then
+            petFrame:SetScale(finalScale)
+        end
     elseif kind == "vehicle" and self.vehicleFrame then
         self.vehicleFrame:SetScale(finalScale)
     end
@@ -1153,7 +1244,7 @@ function Bar:UpdateResizeHandles()
     showHandle(self.microMenuFrame)
     showHandle(self.modifierFrame)
     showHandle(self.stanceHostFrame)
-    showHandle(_G.PetActionBarFrame)
+    showHandle(self.petHostFrame or _G.PetActionBarFrame)
     showHandle(self.vehicleFrame)
     showHandle(self.progressFrame)
 end
@@ -1171,6 +1262,40 @@ function Bar:GetDetachedStanceFrame()
     frame:SetMovable(true)
     ensureFrameChrome(frame)
     self.stanceHostFrame = frame
+    return frame
+end
+
+function Bar:AvoidSingleStanceOverlap(stanceFrame, visibleStanceButtons)
+    if not stanceFrame or not self.frame or not self:IsLayoutEditLocked() then
+        return
+    end
+    if not visibleStanceButtons or #visibleStanceButtons ~= 1 then
+        return
+    end
+
+    local stanceBoundsFrame = stanceFrame._wowxShell or stanceFrame
+    local mainBoundsFrame = (self.frame and self.frame._wowxShell) or self.frame
+    if not framesOverlap(stanceBoundsFrame, mainBoundsFrame) then
+        return
+    end
+
+    stanceFrame:ClearAllPoints()
+    stanceFrame:SetPoint("BOTTOMLEFT", self.frame, "TOPLEFT", 0, 14)
+end
+
+function Bar:GetDetachedPetFrame()
+    if self.petHostFrame then
+        return self.petHostFrame
+    end
+
+    local frame = CreateFrame("Frame", "WoWXDetachedPetFrame", UIParent)
+    frame:SetWidth(360)
+    frame:SetHeight(40)
+    frame:SetFrameStrata("MEDIUM")
+    frame:EnableMouse(true)
+    frame:SetMovable(true)
+    ensureFrameChrome(frame)
+    self.petHostFrame = frame
     return frame
 end
 
@@ -1685,6 +1810,7 @@ function Bar:UpdateDetachedClassBars()
             stanceFrame:SetBackdropColor(0.05, 0.07, 0.12, 0.0)
             self:ApplyChromeBackdrop(stanceFrame._wowxShell, 0.12)
         end
+        self:AvoidSingleStanceOverlap(stanceFrame, visibleStanceButtons)
         self:EnsureAuxMovable(stanceFrame, function(selfFrame)
             GPX.VisualBar:SaveAuxFramePosition(selfFrame, "stancePoint", "BOTTOM", "BOTTOM")
             GPX.VisualBar:SyncStanceFramePositions(selfFrame)
@@ -1701,7 +1827,7 @@ function Bar:UpdateDetachedClassBars()
         end
     end
 
-    local petFrame = _G.PetActionBarFrame
+    local petFrame = self:GetDetachedPetFrame()
     if petFrame and show then
         local petButtons = {}
         for index = 1, 12 do
@@ -1714,7 +1840,6 @@ function Bar:UpdateDetachedClassBars()
         if #visiblePetButtons == 0 then
             if not self:IsLayoutEditLocked() then
                 ensureFrameChrome(petFrame)
-                stripFrameTextures(petFrame)
                 local point = self:GetStoredPetPosition()
                 petFrame:SetParent(UIParent)
                 petFrame:ClearAllPoints()
@@ -1756,33 +1881,44 @@ function Bar:UpdateDetachedClassBars()
                 end
             end
         else
-        ensureFrameChrome(petFrame)
-        stripFrameTextures(petFrame)
-        hideAuxPlaceholderButtons(petFrame, "pet")
-        if not inCombat then
-            local point = self:GetStoredPetPosition()
-            petFrame:SetParent(UIParent)
-            petFrame:ClearAllPoints()
-            petFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
-            petFrame:SetScale(select(1, self:GetScaleForKind("pet")))
-            petFrame:SetAlpha(tonumber(petLayout.alpha) or 1.0)
+            ensureFrameChrome(petFrame)
+            hideAuxPlaceholderButtons(petFrame, "pet")
+            if not inCombat then
+                local point = self:GetStoredPetPosition()
+                petFrame:SetParent(UIParent)
+                petFrame:ClearAllPoints()
+                petFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
+                petFrame:SetScale(select(1, self:GetScaleForKind("pet")))
+                petFrame:SetAlpha(tonumber(petLayout.alpha) or 1.0)
+                for _, button in ipairs(visiblePetButtons) do
+                    button:SetParent(petFrame)
+                    button:Show()
+                    button:SetAlpha(1.0)
+                end
+                layoutAuxButtons(petFrame, visiblePetButtons, 8, 6)
+            end
+            petFrame:Show()
+            if petFrame._wowxPlaceholderLabel then
+                petFrame._wowxPlaceholderLabel:Hide()
+            end
+            updateShellAroundButtons(petFrame, visiblePetButtons, 8, 8)
+            if petFrame._wowxShell then
+                petFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
+                petFrame:SetBackdropColor(0.05, 0.07, 0.12, 0.0)
+                self:ApplyChromeBackdrop(petFrame._wowxShell, 0.12)
+            end
+            self:EnsureAuxMovable(petFrame, function(selfFrame)
+                GPX.VisualBar:SaveAuxFramePosition(selfFrame, "petPoint", "BOTTOM", "BOTTOM")
+            end)
+            self:AttachMoveHandle(petFrame, "pet")
+            self:AttachResizeHandle(petFrame, "pet")
+            self:AttachEditButton(petFrame, "pet")
+            self:EnableFrameDrag(petFrame, "pet")
         end
-        petFrame:Show()
-        if petFrame._wowxPlaceholderLabel then
-            petFrame._wowxPlaceholderLabel:Hide()
-        end
-        updateShellAroundButtons(petFrame, visiblePetButtons, 8, 8)
-        if petFrame._wowxShell then
-            petFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
-            self:ApplyChromeBackdrop(petFrame._wowxShell, 0.12)
-        end
-        self:EnsureAuxMovable(petFrame, function(selfFrame)
-            GPX.VisualBar:SaveAuxFramePosition(selfFrame, "petPoint", "BOTTOM", "BOTTOM")
-        end)
-        self:AttachMoveHandle(petFrame, "pet")
-        self:AttachResizeHandle(petFrame, "pet")
-        self:AttachEditButton(petFrame, "pet")
-        self:EnableFrameDrag(petFrame, "pet")
+    elseif self.petHostFrame then
+        self.petHostFrame:Hide()
+        if self.petHostFrame._wowxShell then
+            self.petHostFrame._wowxShell:Hide()
         end
     end
 end
@@ -2291,8 +2427,34 @@ end
 function Bar:ResolveCommand(command)
     local mainIndex = tonumber(command and command:match("^ACTIONBUTTON(%d+)$"))
     if mainIndex then
+        local liveButton = _G["ActionButton" .. mainIndex]
+        local liveAction = liveButton and liveButton.action or nil
+        local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
         local page = getCurrentMainActionPage()
-        return ((page - 1) * 12) + mainIndex
+        local slot = ((page - 1) * 12) + mainIndex
+
+        if bonusOffset > 0 or page > 1 then
+            if HasAction and HasAction(slot) then
+                return slot
+            end
+            if liveAction then
+                return liveAction
+            end
+            return slot
+        end
+
+        if liveAction and liveAction ~= mainIndex then
+            return liveAction
+        end
+
+        if HasAction and HasAction(slot) then
+            return slot
+        end
+
+        if liveButton and liveButton.action then
+            return liveButton.action
+        end
+        return slot
     end
 
     local candidates = self:GetButtonCandidates(command)
@@ -3124,47 +3286,23 @@ function Bar:UpdateButton(index, state)
     end
 
     if not InCombatLockdown() then
+        local baseCommand = self:GetCommandForButton(index, "")
+        local shiftCommand = self:GetCommandForButton(index, "SHIFT")
+        local altCommand = self:GetCommandForButton(index, "ALT")
+        local ctrlCommand = self:GetCommandForButton(index, "CTRL")
+        local comboCommand = self:GetCommandForButton(index, "SHIFT-ALT")
         local baseSlot = self:GetSlotForButtonState(index, "")
         local shiftSlot = self:GetSlotForButtonState(index, "SHIFT")
         local altSlot = self:GetSlotForButtonState(index, "ALT")
         local ctrlSlot = self:GetSlotForButtonState(index, "CTRL")
         local comboSlot = self:GetSlotForButtonState(index, "SHIFT-ALT")
 
-        if baseSlot then
-            button:SetAttribute("type", nil)
-            button:SetAttribute("action", nil)
-            button:SetAttribute("type1", "action")
-            button:SetAttribute("action1", baseSlot)
-        else
-            button:SetAttribute("type", nil)
-            button:SetAttribute("action", nil)
-            button:SetAttribute("type1", nil)
-            button:SetAttribute("action1", nil)
-        end
-
-        button:SetAttribute("shift-type", nil)
-        button:SetAttribute("shift-action", nil)
-        button:SetAttribute("shift-type1", shiftSlot and "action" or nil)
-        button:SetAttribute("shift-action1", shiftSlot)
-
-        button:SetAttribute("alt-type", nil)
-        button:SetAttribute("alt-action", nil)
-        button:SetAttribute("alt-type1", altSlot and "action" or nil)
-        button:SetAttribute("alt-action1", altSlot)
-
-        button:SetAttribute("ctrl-type", nil)
-        button:SetAttribute("ctrl-action", nil)
-        button:SetAttribute("ctrl-type1", ctrlSlot and "action" or nil)
-        button:SetAttribute("ctrl-action1", ctrlSlot)
-
-        button:SetAttribute("shift-alt-type", nil)
-        button:SetAttribute("shift-alt-action", nil)
-        button:SetAttribute("alt-shift-type", nil)
-        button:SetAttribute("alt-shift-action", nil)
-        button:SetAttribute("shift-alt-type1", comboSlot and "action" or nil)
-        button:SetAttribute("shift-alt-action1", comboSlot)
-        button:SetAttribute("alt-shift-type1", comboSlot and "action" or nil)
-        button:SetAttribute("alt-shift-action1", comboSlot)
+        setProxyOrActionAttribute(button, nil, baseCommand, baseSlot)
+        setProxyOrActionAttribute(button, "shift", shiftCommand, shiftSlot)
+        setProxyOrActionAttribute(button, "alt", altCommand, altSlot)
+        setProxyOrActionAttribute(button, "ctrl", ctrlCommand, ctrlSlot)
+        setProxyOrActionAttribute(button, "shift-alt", comboCommand, comboSlot)
+        setProxyOrActionAttribute(button, "alt-shift", comboCommand, comboSlot)
 
         button:SetAttribute("type2", nil)
         button:SetAttribute("action2", nil)
@@ -3178,6 +3316,12 @@ function Bar:UpdateButton(index, state)
         button:SetAttribute("shift-alt-action2", nil)
         button:SetAttribute("alt-shift-type2", nil)
         button:SetAttribute("alt-shift-action2", nil)
+        button:SetAttribute("macrotext2", nil)
+        button:SetAttribute("shift-macrotext2", nil)
+        button:SetAttribute("alt-macrotext2", nil)
+        button:SetAttribute("ctrl-macrotext2", nil)
+        button:SetAttribute("shift-alt-macrotext2", nil)
+        button:SetAttribute("alt-shift-macrotext2", nil)
     else
         self.pendingAttributeRefresh = true
     end
@@ -3433,9 +3577,11 @@ eventFrame:RegisterEvent("ACTIONBAR_UPDATE_USABLE")
 eventFrame:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN")
 eventFrame:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
 eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
+eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")
 eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_USABLE")
 eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_COOLDOWN")
 eventFrame:RegisterEvent("UPDATE_STEALTH")
+eventFrame:RegisterEvent("PLAYER_AURAS_CHANGED")
 eventFrame:RegisterEvent("UPDATE_OVERRIDE_ACTIONBAR")
 eventFrame:RegisterEvent("UPDATE_POSSESS_BAR")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
