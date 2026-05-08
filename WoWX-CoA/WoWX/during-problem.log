@@ -1,0 +1,197 @@
+WoWX Diagnostics
+Run: 2026-05-08 05:28:08  label=window-20260508-052808
+
+Diagnostics:
+  Enabled: true
+  Slash: /wowx registered (legacy aliases active)
+  SetupWizard: frame not created
+  SettingsUI: frame not created
+  MenuNav: frame not created
+  VisualBar: bar shown
+  InCombat: false
+  ModifierPages: ON
+  EngineCfg: transport=click useSetupKeys=true claimModifiers=true claimCombo=true
+  ActiveModifierState: 
+  ActionPage: page=1 bonusOffset=0 hasBonus=false hasOverride=1
+  OverrideFrames: OverrideActionBar=missing | OverrideActionBarFrame=missing | OverrideActionBarArtFrame=missing | OverrideActionBarLeaveFrame=missing | BonusActionBarFrame=shown | PossessBarFrame=hidden | ShapeshiftBarFrame=shown
+  BarSlot2 attr(type/action): nil/nil  displaySlot=2
+  BarSlot2 attr(type1/action1/macro1): macro/nil//click ActionButton2
+  BarSlot2 mod actions: shift=nil alt=nil ctrl=nil shift+alt=nil
+  Keybind 1: CLICK WoWXActionButton1:LeftButton
+  Keybind SHIFT-1: CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON1:LeftButton
+  Keybind ALT-1: CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON1:LeftButton
+  Keybind CTRL-1: CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON1:LeftButton
+  Slot4 keybind: 4=CLICK WoWXActionButton4:LeftButton
+  Slot4 shift bind: SHIFT-4=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON4:LeftButton
+  LiveActionButton slots: 1=1 | 2=2 | 3=3 | 4=4 | 5=5 | 6=6 | 7=7 | 8=8 | 9=9 | 10=10 | 11=11 | 12=12
+  KeyMatrix base: 1=CLICK WoWXActionButton1:LeftButton | 2=CLICK WoWXActionButton2:LeftButton | 3=CLICK WoWXActionButton3:LeftButton | 4=CLICK WoWXActionButton4:LeftButton | 5=CLICK WoWXActionButton5:LeftButton | 6=CLICK WoWXActionButton6:LeftButton | 7=CLICK WoWXActionButton7:LeftButton | 8=CLICK WoWXActionButton8:LeftButton | 9=CLICK WoWXActionButton9:LeftButton | 0=CLICK WoWXActionButton10:LeftButton | -=CLICK WoWXActionButton11:LeftButton | ==CLICK WoWXActionButton12:LeftButton
+  KeyMatrix shift-: 1=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON1:LeftButton | 2=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON2:LeftButton | 3=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON3:LeftButton | 4=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON4:LeftButton | 5=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON5:LeftButton | 6=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON6:LeftButton | 7=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON7:LeftButton | 8=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON8:LeftButton | 9=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON9:LeftButton | 0=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON10:LeftButton | -=CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON11:LeftButton | ==CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON12:LeftButton
+  KeyMatrix alt-: 1=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON1:LeftButton | 2=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON2:LeftButton | 3=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON3:LeftButton | 4=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON4:LeftButton | 5=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON5:LeftButton | 6=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON6:LeftButton | 7=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON7:LeftButton | 8=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON8:LeftButton | 9=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON9:LeftButton | 0=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON10:LeftButton | -=CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON11:LeftButton | ==CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON12:LeftButton
+  KeyMatrix ctrl-: 1=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON1:LeftButton | 2=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON2:LeftButton | 3=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON3:LeftButton | 4=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON4:LeftButton | 5=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON5:LeftButton | 6=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON6:LeftButton | 7=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON7:LeftButton | 8=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON8:LeftButton | 9=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON9:LeftButton | 0=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON10:LeftButton | -=CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON11:LeftButton | ==CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON12:LeftButton
+  KeyMatrix shift-alt-: 1=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON1:LeftButton | 2=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON2:LeftButton | 3=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON3:LeftButton | 4=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON4:LeftButton | 5=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON5:LeftButton | 6=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON6:LeftButton | 7=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON7:LeftButton | 8=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON8:LeftButton | 9=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON9:LeftButton | 0=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON10:LeftButton | -=CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON11:LeftButton | ==CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON12:LeftButton
+  KeySweep 1..=:
+    1 => bind='CLICK WoWXActionButton1:LeftButton' displaySlot=1 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton1
+    2 => bind='CLICK WoWXActionButton2:LeftButton' displaySlot=2 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton2
+    3 => bind='CLICK WoWXActionButton3:LeftButton' displaySlot=3 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton3
+    4 => bind='CLICK WoWXActionButton4:LeftButton' displaySlot=4 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton4
+    5 => bind='CLICK WoWXActionButton5:LeftButton' displaySlot=5 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton5
+    6 => bind='CLICK WoWXActionButton6:LeftButton' displaySlot=6 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton6
+    7 => bind='CLICK WoWXActionButton7:LeftButton' displaySlot=7 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton7
+    8 => bind='CLICK WoWXActionButton8:LeftButton' displaySlot=8 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton8
+    9 => bind='CLICK WoWXActionButton9:LeftButton' displaySlot=9 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton9
+    0 => bind='CLICK WoWXActionButton10:LeftButton' displaySlot=10 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton10
+    - => bind='CLICK WoWXActionButton11:LeftButton' displaySlot=11 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton11
+    = => bind='CLICK WoWXActionButton12:LeftButton' displaySlot=12 secureSlot=nil type1=macro action1=nil macro1=/click ActionButton12
+    SHIFT-1 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON1:LeftButton' displaySlot=1 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton1
+    SHIFT-2 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON2:LeftButton' displaySlot=2 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton2
+    SHIFT-3 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON3:LeftButton' displaySlot=3 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton3
+    SHIFT-4 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON4:LeftButton' displaySlot=4 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton4
+    SHIFT-5 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON5:LeftButton' displaySlot=5 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton5
+    SHIFT-6 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON6:LeftButton' displaySlot=6 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton6
+    SHIFT-7 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON7:LeftButton' displaySlot=7 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton7
+    SHIFT-8 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON8:LeftButton' displaySlot=8 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton8
+    SHIFT-9 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON9:LeftButton' displaySlot=9 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton9
+    SHIFT-0 => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON10:LeftButton' displaySlot=10 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton10
+    SHIFT-- => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON11:LeftButton' displaySlot=11 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton11
+    SHIFT-= => bind='CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON12:LeftButton' displaySlot=12 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomRightButton12
+    ALT-1 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON1:LeftButton' displaySlot=1 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton1
+    ALT-2 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON2:LeftButton' displaySlot=2 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton2
+    ALT-3 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON3:LeftButton' displaySlot=3 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton3
+    ALT-4 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON4:LeftButton' displaySlot=4 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton4
+    ALT-5 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON5:LeftButton' displaySlot=5 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton5
+    ALT-6 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON6:LeftButton' displaySlot=6 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton6
+    ALT-7 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON7:LeftButton' displaySlot=7 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton7
+    ALT-8 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON8:LeftButton' displaySlot=8 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton8
+    ALT-9 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON9:LeftButton' displaySlot=9 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton9
+    ALT-0 => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON10:LeftButton' displaySlot=10 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton10
+    ALT-- => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON11:LeftButton' displaySlot=11 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton11
+    ALT-= => bind='CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON12:LeftButton' displaySlot=12 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarBottomLeftButton12
+    CTRL-1 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON1:LeftButton' displaySlot=1 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton1
+    CTRL-2 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON2:LeftButton' displaySlot=2 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton2
+    CTRL-3 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON3:LeftButton' displaySlot=3 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton3
+    CTRL-4 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON4:LeftButton' displaySlot=4 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton4
+    CTRL-5 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON5:LeftButton' displaySlot=5 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton5
+    CTRL-6 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON6:LeftButton' displaySlot=6 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton6
+    CTRL-7 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON7:LeftButton' displaySlot=7 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton7
+    CTRL-8 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON8:LeftButton' displaySlot=8 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton8
+    CTRL-9 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON9:LeftButton' displaySlot=9 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton9
+    CTRL-0 => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON10:LeftButton' displaySlot=10 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton10
+    CTRL-- => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON11:LeftButton' displaySlot=11 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton11
+    CTRL-= => bind='CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON12:LeftButton' displaySlot=12 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarLeftButton12
+    SHIFT-ALT-1 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON1:LeftButton' displaySlot=1 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton1
+    SHIFT-ALT-2 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON2:LeftButton' displaySlot=2 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton2
+    SHIFT-ALT-3 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON3:LeftButton' displaySlot=3 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton3
+    SHIFT-ALT-4 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON4:LeftButton' displaySlot=4 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton4
+    SHIFT-ALT-5 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON5:LeftButton' displaySlot=5 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton5
+    SHIFT-ALT-6 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON6:LeftButton' displaySlot=6 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton6
+    SHIFT-ALT-7 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON7:LeftButton' displaySlot=7 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton7
+    SHIFT-ALT-8 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON8:LeftButton' displaySlot=8 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton8
+    SHIFT-ALT-9 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON9:LeftButton' displaySlot=9 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton9
+    SHIFT-ALT-0 => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON10:LeftButton' displaySlot=10 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton10
+    SHIFT-ALT-- => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON11:LeftButton' displaySlot=11 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton11
+    SHIFT-ALT-= => bind='CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON12:LeftButton' displaySlot=12 secureSlot=nil type1=macro action1=nil macro1=/click MultiBarRightButton12
+  Btn1 attr=nil/nil type1=macro/nil macro1=/click ActionButton1 shift=nil alt=nil ctrl=nil combo=nil displaySlot=1 displayCmd=ACTIONBUTTON1
+  Btn2 attr=nil/nil type1=macro/nil macro1=/click ActionButton2 shift=nil alt=nil ctrl=nil combo=nil displaySlot=2 displayCmd=ACTIONBUTTON2
+  Btn3 attr=nil/nil type1=macro/nil macro1=/click ActionButton3 shift=nil alt=nil ctrl=nil combo=nil displaySlot=3 displayCmd=ACTIONBUTTON3
+  Btn4 attr=nil/nil type1=macro/nil macro1=/click ActionButton4 shift=nil alt=nil ctrl=nil combo=nil displaySlot=4 displayCmd=ACTIONBUTTON4
+  Btn5 attr=nil/nil type1=macro/nil macro1=/click ActionButton5 shift=nil alt=nil ctrl=nil combo=nil displaySlot=5 displayCmd=ACTIONBUTTON5
+  Btn6 attr=nil/nil type1=macro/nil macro1=/click ActionButton6 shift=nil alt=nil ctrl=nil combo=nil displaySlot=6 displayCmd=ACTIONBUTTON6
+  Btn7 attr=nil/nil type1=macro/nil macro1=/click ActionButton7 shift=nil alt=nil ctrl=nil combo=nil displaySlot=7 displayCmd=ACTIONBUTTON7
+  Btn8 attr=nil/nil type1=macro/nil macro1=/click ActionButton8 shift=nil alt=nil ctrl=nil combo=nil displaySlot=8 displayCmd=ACTIONBUTTON8
+  Btn9 attr=nil/nil type1=macro/nil macro1=/click ActionButton9 shift=nil alt=nil ctrl=nil combo=nil displaySlot=9 displayCmd=ACTIONBUTTON9
+  Btn10 attr=nil/nil type1=macro/nil macro1=/click ActionButton10 shift=nil alt=nil ctrl=nil combo=nil displaySlot=10 displayCmd=ACTIONBUTTON10
+  Btn11 attr=nil/nil type1=macro/nil macro1=/click ActionButton11 shift=nil alt=nil ctrl=nil combo=nil displaySlot=11 displayCmd=ACTIONBUTTON11
+  Btn12 attr=nil/nil type1=macro/nil macro1=/click ActionButton12 shift=nil alt=nil ctrl=nil combo=nil displaySlot=12 displayCmd=ACTIONBUTTON12
+  AppliedBindings count: 74
+    - -> CLICK WoWXActionButton11 [binding]
+    0 -> CLICK WoWXActionButton10 [binding]
+    1 -> CLICK WoWXActionButton1 [binding]
+    2 -> CLICK WoWXActionButton2 [binding]
+    3 -> CLICK WoWXActionButton3 [binding]
+    4 -> CLICK WoWXActionButton4 [binding]
+    5 -> CLICK WoWXActionButton5 [binding]
+    6 -> CLICK WoWXActionButton6 [binding]
+    7 -> CLICK WoWXActionButton7 [binding]
+    8 -> CLICK WoWXActionButton8 [binding]
+    9 -> CLICK WoWXActionButton9 [binding]
+    = -> CLICK WoWXActionButton12 [binding]
+    ALT-- -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON11 [binding]
+    ALT-0 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON10 [binding]
+    ALT-1 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON1 [binding]
+    ALT-2 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON2 [binding]
+    ALT-3 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON3 [binding]
+    ALT-4 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON4 [binding]
+    ALT-5 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON5 [binding]
+    ALT-6 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON6 [binding]
+    ALT-7 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON7 [binding]
+    ALT-8 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON8 [binding]
+    ALT-9 -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON9 [binding]
+    ALT-= -> CLICK WoWXBindButton_MULTIACTIONBAR1BUTTON12 [binding]
+    ALT-SHIFT-- -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON11 [binding]
+    ALT-SHIFT-0 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON10 [binding]
+    ALT-SHIFT-1 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON1 [binding]
+    ALT-SHIFT-2 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON2 [binding]
+    ALT-SHIFT-3 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON3 [binding]
+    ALT-SHIFT-4 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON4 [binding]
+    ALT-SHIFT-5 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON5 [binding]
+    ALT-SHIFT-6 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON6 [binding]
+    ALT-SHIFT-7 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON7 [binding]
+    ALT-SHIFT-8 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON8 [binding]
+    ALT-SHIFT-9 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON9 [binding]
+    ALT-SHIFT-= -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON12 [binding]
+    CTRL-- -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON11 [binding]
+    CTRL-0 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON10 [binding]
+    CTRL-1 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON1 [binding]
+    CTRL-2 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON2 [binding]
+    CTRL-3 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON3 [binding]
+    CTRL-4 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON4 [binding]
+    CTRL-5 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON5 [binding]
+    CTRL-6 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON6 [binding]
+    CTRL-7 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON7 [binding]
+    CTRL-8 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON8 [binding]
+    CTRL-9 -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON9 [binding]
+    CTRL-= -> CLICK WoWXBindButton_MULTIACTIONBAR4BUTTON12 [binding]
+    SHIFT-- -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON11 [binding]
+    SHIFT-0 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON10 [binding]
+    SHIFT-1 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON1 [binding]
+    SHIFT-2 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON2 [binding]
+    SHIFT-3 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON3 [binding]
+    SHIFT-4 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON4 [binding]
+    SHIFT-5 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON5 [binding]
+    SHIFT-6 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON6 [binding]
+    SHIFT-7 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON7 [binding]
+    SHIFT-8 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON8 [binding]
+    SHIFT-9 -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON9 [binding]
+    SHIFT-= -> CLICK WoWXBindButton_MULTIACTIONBAR2BUTTON12 [binding]
+    SHIFT-ALT-- -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON11 [binding]
+    SHIFT-ALT-0 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON10 [binding]
+    SHIFT-ALT-1 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON1 [binding]
+    SHIFT-ALT-2 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON2 [binding]
+    SHIFT-ALT-3 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON3 [binding]
+    SHIFT-ALT-4 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON4 [binding]
+    SHIFT-ALT-5 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON5 [binding]
+    SHIFT-ALT-6 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON6 [binding]
+    SHIFT-ALT-7 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON7 [binding]
+    SHIFT-ALT-8 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON8 [binding]
+    SHIFT-ALT-9 -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON9 [binding]
+    SHIFT-ALT-= -> CLICK WoWXBindButton_MULTIACTIONBAR3BUTTON12 [binding]
+    SHIFT-DOWN -> (cleared NEXTACTIONPAGE) [binding]
+    SHIFT-MOUSEWHEELDOWN -> (cleared NEXTACTIONPAGE) [binding]
+StanceDiag:
+  PlayerClass: Runemaster (SPIRITMAGE)
+  ShapeshiftForms: count=3 current=2
+  Frame StanceBarFrame: missing
+  Frame ShapeshiftBarFrame: shown=1 alpha=1 parent=MainMenuBar
+  Frame PossessBarFrame: shown=false alpha=1 parent=MainMenuBar
+  Button1: shown=1 alpha=1 parent=WoWXDetachedStanceFrame formName=Runic Tattoos: Earth active=nil castable=1 icon=interface/icons/Tattoo_Earth_Attunement
+  Button2: shown=1 alpha=1 parent=WoWXDetachedStanceFrame formName=Runic Tattoos: Water active=1 castable=1 icon=Interface\Icons\Spell_Nature_WispSplode
+  Button3: shown=1 alpha=1 parent=WoWXDetachedStanceFrame formName=Runic Tattoos: Frost active=nil castable=1 icon=Interface\Icons\Tattoo_Frost_Attunement
+  Button4: shown=false alpha=1 parent=ShapeshiftBarFrame formName= active=nil castable=nil icon=nil
+  Button5: shown=false alpha=1 parent=ShapeshiftBarFrame formName= active=nil castable=nil icon=nil
+  Button6: shown=false alpha=1 parent=ShapeshiftBarFrame formName= active=nil castable=nil icon=nil
+  Button7: shown=false alpha=1 parent=ShapeshiftBarFrame formName= active=nil castable=nil icon=nil
+  Button8: shown=false alpha=1 parent=ShapeshiftBarFrame formName= active=nil castable=nil icon=nil
+  Button9: shown=false alpha=1 parent=ShapeshiftBarFrame formName= active=nil castable=nil icon=nil
+  Button10: shown=false alpha=1 parent=ShapeshiftBarFrame formName= active=nil castable=nil icon=nil
+  Button11: shown=false alpha=1 parent=ShapeshiftBarFrame formName= active=nil castable=nil icon=nil
+  Button12: shown=false alpha=1 parent=ShapeshiftBarFrame formName= active=nil castable=nil icon=nil

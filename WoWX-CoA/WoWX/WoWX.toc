@@ -1,0 +1,18 @@
+## Interface: 30300
+## Title: WoWX
+## Notes: Modernized WotLK couch-play addon for controller, keyboard, and accessibility-focused input. Designed for Linux + AntiMicroX. No cloud sync.
+## Author: WoWX
+## Version: 1.0.0
+## SavedVariablesPerCharacter: WoWXDB, GamePadXDB
+
+GamePadX.lua
+UIMode.lua
+SetupWizard.lua
+VisualBar.lua
+SettingsUI.lua
+MenuNav.lua
+MinimapButton.lua
+SpellbookUI.lua
+SpellRing.lua
+DispelPrompt.lua
+UnitFrameCues.lua
