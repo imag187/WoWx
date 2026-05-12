@@ -1783,6 +1783,11 @@ function GPX:ApplyBindings(silent)
         end
         if command:find("^MULTIACTIONBAR4BUTTON") then
             return "MultiBarLeftButton" .. index
+
+                if command:find("^MULTICASTBUTTON") then
+                    return "MultiCastButton" .. index
+                end
+            { modifiers = { modifiers[1], modifiers[3] }, bar = "MULTICASTBUTTON" },
         end
 
         return nil
