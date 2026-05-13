@@ -494,7 +494,6 @@ function GPX:BuildBindingsFromSetup(setup)
         { modifiers = { modifiers[2] }, bar = "MULTIACTIONBAR1BUTTON" },
         { modifiers = { modifiers[3] }, bar = "MULTIACTIONBAR4BUTTON" },
         { modifiers = { modifiers[1], modifiers[2] }, bar = "MULTIACTIONBAR3BUTTON" },
-        { modifiers = { modifiers[1], modifiers[3] }, bar = "MULTICASTBUTTON" },
     }
 
     if firstActionSlot > 1 and jumpKey and jumpKey ~= "" then
@@ -1784,10 +1783,6 @@ function GPX:ApplyBindings(silent)
         end
         if command:find("^MULTIACTIONBAR4BUTTON") then
             return "MultiBarLeftButton" .. index
-        end
-
-        if command:find("^MULTICASTBUTTON") then
-            return "MultiCastButton" .. index
         end
 
         return nil
