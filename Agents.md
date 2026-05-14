@@ -1,10 +1,36 @@
-﻿# WoWX Debug Handoff
+# WoWX Debug Handoff
 
 ## Purpose
 
 This file is a continuity handoff for future work on WoWX, especially for the Runemaster / Runeshroud paging issue on Ascension PTR.
 
 Primary goal: avoid retracing dead ends and preserve the actual discoveries from the debugging session.
+
+## Read This First
+
+- Always read this file before making substantive WoWX changes.
+- Update this file whenever a debugging avenue, client quirk, runtime dependency, or workflow constraint becomes important enough that losing it would waste the next session.
+- Treat repo code, live addon folder contents, machine-specific client settings, and per-character SavedVariables as separate layers. Do not assume a repo diff alone explains behavior.
+- When a behavior works on one machine and regresses after pulling changes on another, first compare:
+  - the actual addon folder being loaded
+  - the current repo diff / commit state
+  - the relevant character SavedVariables
+  - the relevant client settings / dropdowns / conflicting addons
+- If a feature worked in-game before more experimentation, preserve that state immediately with a commit, diff, or explicit note here before continuing.
+
+## Current Development Reality
+
+- The user's real workflow is split across at least two machines:
+  - office machine: keyboard / mouse development and validation
+  - couch machine: controller validation in real play
+- Typical failure mode:
+  - work is stable upstairs
+  - repo changes are pulled to couch machine
+  - couch-specific fixes are made late at night until play works again
+  - those changes are pulled back upstairs the next day
+  - regressions appear on the original machine
+- Therefore future agents must not dismiss regressions on the original machine as mere "machine drift". If the inception machine regressed after addon edits, that regression is real until disproven.
+- Diagnostics and handoff notes are not optional overhead in this workflow; they are part of the actual engineering surface.
 
 ## Repo / Runtime Paths
 
@@ -25,6 +51,18 @@ Important operational note:
 - `g:\Ascension Launcher\resources\ascension_ptr\Interface\AddOns\WoWX` is now the effective official CoA-focused fork.
 - Future debugging notes should assume this directory is the working branch unless explicitly stated otherwise.
 - Diagnostics gathered from this fork may not match older `epoch_live` behavior.
+
+## Branch Propagation Policy
+
+- Some changes are branch-local fixes, but architecture decisions are not automatically CoA-only just because they were first explored here.
+- The emerging module / ownership split for WoWX should be treated as a base design decision that will likely need to be reflected in both:
+  - `main`
+  - the CoA branch / fork
+- CoA-specific behavior such as multicast-bar support should remain preserved on the CoA branch unless and until there is a deliberate reason to upstream it.
+- Future agents should explicitly classify changes before implementation:
+  - base design / architecture change -> likely propagate to both branches
+  - Ascension / CoA specific feature or compatibility layer -> keep CoA-specific unless proven generally useful
+- Do not let branch-local experimentation accidentally redefine the long-term architecture without noting whether the change is intended for `main`, CoA, or both.
 
 ## User Goal
 
@@ -361,3 +399,57 @@ The session spent many hours chasing action-state behavior, but the decisive blo
 Updated practical bottom line: for Runemaster, the working solution came from click transport plus conservative combat-safe UI behavior, while treating `bonusOffset` as the real page signal and treating persistent `override=1` as a misleading Ascension-specific special-state artifact.
 
 Latest practical bottom line: on the CoA fork, the current known-good Runemaster path is click transport plus combat-safe UI behavior plus conditional `bonusbar` macro routing for base `ACTIONBUTTONn` buttons; do not drive the bar from the always-noisy override flag.
+
+## Architecture Direction
+
+- The user has repeatedly raised that WoWX may be outgrowing a single large addon file / single-surface coordination model.
+- Future work should stay open to splitting subsystems into cleaner modules or even separate addons where that improves ownership, debugging, and controller-specific iteration.
+- The relevant design goal is not abstraction for its own sake; it is making each system easier to reason about, validate, and evolve without destabilizing unrelated systems.
+- Candidate separation points include UI navigation surfaces, spellbook / questbook style controller-friendly panels, controller-only helper layers, and bridge-style support addons that WoWX consumes rather than inlining everything.
+- ConsolePort-style precedent matters here: if a surface can become controller-friendly as a discrete component and then plug in naturally, that may be preferable to forcing all behavior through one monolithic control path.
+- Treat this as a direction for future cleanup and architecture work, not as a license to do a broad rewrite during a narrow bugfix session.
+
+## Likely Sustainable Split
+
+- The user specifically wants serious consideration of `WoWX_Gamepad` as its own addon with its own `.toc`, rather than continuing to thread controller and keyboard behavior through the same runtime with more `if controllerEnabled then ...` branching.
+- This is a reasonable direction. "Simplicity" should be judged at the end-user level, not by minimizing the number of source files or addons for developers.
+- A plausible future shape is:
+  - `WoWX` core addon: shared data model, diagnostics, slash commands, binding engine contracts, visual bar ownership, and generic keyboard-safe behavior
+  - `WoWX_Gamepad`: controller-only movement helpers, controller setup/calibration, controller-specific bindings, controller UI overlays, and other logic that should be absent when standard input is desired
+  - optional further modules for controller-friendly surfaces such as spellbook / quest / menu wrappers if they grow independently
+- The same principle applies beyond controller movement: spellbook UI, quest UI, menu wrappers, and other controller-friendly surfaces should not be crammed into action-bar runtime ownership just because they can be launched from the bar.
+- Prefer surface-oriented ownership where possible: a spellbook module owns spellbook behavior, a quest/navigation module owns quest GUI behavior, and the action bar owns action-bar behavior.
+- Integration between these pieces should happen through narrow bridge functions or shared services, not by letting one runtime file become the de facto owner of unrelated game systems.
+- One explicit goal of such a split would be that users can disable controller-specific pieces at the login screen or keep them dormant, guaranteeing that controller code cannot interfere with standard keyboard/mouse inputs.
+- Future agents should treat this not as overengineering but as a legitimate containment strategy for regression control.
+- The caution is secure ownership: if a split is attempted, keep the secure action/button ownership boundaries clear so combat-safe behavior does not become harder to reason about than it is now.
+
+## Groundwork Plan
+
+- Do not begin with a broad rewrite.
+- Start by defining ownership boundaries while preserving behavior.
+- First classify current WoWX responsibilities into four buckets:
+  - definitely core
+  - definitely controller-only
+  - definitely surface-specific
+  - mixed / entangled and needs untangling first
+- Treat `WoWX` core as the likely long-term owner of:
+  - shared state and saved-variable contracts
+  - diagnostics and slash-command entry points
+  - binding-engine contracts
+  - secure action-bar / button ownership
+- Treat controller-specific movement, controller setup/calibration, controller-only bindings, and controller overlays as prime candidates for `WoWX_Gamepad`.
+- Treat spellbook, menu navigation, quest-like UI, prompts, and frame cues as surface modules that should own their own behavior rather than being absorbed into action-bar runtime.
+- Prefer narrow bridge/services between modules over direct cross-module ownership.
+- Delay any secure-action split until the non-secure ownership boundaries are clean.
+
+### Recommended First Task For Future Agents
+
+- Produce a concrete ownership map of the current WoWX files.
+- For each file or major section, identify:
+  - current responsibility
+  - desired long-term owner
+  - whether it belongs in core, `WoWX_Gamepad`, or another future module
+  - whether it is safe to extract now or blocked by secure/runtime coupling
+- Extraction should follow ownership boundaries, not file size or aesthetics.
+- The goal is staged migration, not a one-shot rewrite.
