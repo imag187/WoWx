@@ -1,8 +1,5 @@
 ﻿# WoWX
 
-> Scope note: this `CoA` branch is the source-of-truth for the Ascension PTR addon in `ascension_ptr`.
-> Base/non-CoA documentation belongs on the `main` branch.
-
 WoWX is a WotLK 3.3.5a addon aimed at couch play, reduced-button control surfaces, and accessibility-focused input. It treats controller mappings as ordinary WoW key presses so Linux tools like AntiMicroX or Steam Input can stay outside the addon.
 
 ## Accessibility Policy
