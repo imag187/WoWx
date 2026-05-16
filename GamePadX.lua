@@ -707,6 +707,9 @@ function GPX:ApplySetup(setup)
     if self.VisualBar then
         self.VisualBar:UpdateAll()
     end
+    if self.ActionButtons then
+        self.ActionButtons:UpdateAll()
+    end
     if self.SettingsUI then
         self.SettingsUI:Refresh()
     end
@@ -812,6 +815,9 @@ function GPX:ApplySetupFromProfile(profile, opts)
     end
     if self.VisualBar then
         self.VisualBar:UpdateAll()
+    end
+    if self.ActionButtons then
+        self.ActionButtons:UpdateAll()
     end
     if self.SettingsUI then
         self.SettingsUI:Refresh()
@@ -1454,6 +1460,17 @@ local blizzardCombatUiCommands = {
     "TOGGLEBATTLEFIELD",
 }
 
+local blizzardDirectKeysToClear = {
+    -- Direct bindings that can still drive Blizzard paging/scrolling even when
+    -- command-level page suppression is in place.
+    "SHIFT-MOUSEWHEELUP",
+    "SHIFT-MOUSEWHEELDOWN",
+    "SHIFT-UP",
+    "SHIFT-DOWN",
+    "SHIFT-1",
+    "SHIFT-2",
+}
+
 function GPX:IsSpecialActionStateActive()
     if CanExitVehicle and CanExitVehicle() then
         return true, "vehicle"
@@ -1582,6 +1599,37 @@ function GPX:GetOverrideOwner()
         self.overrideOwner:Show()
     end
     return self.overrideOwner
+end
+
+function GPX:EnsureMenuLauncherButtons()
+    if self.menuLauncherButton and self.menuKeyButton then
+        return
+    end
+
+    if not self.menuLauncherButton then
+        local launcher = CreateFrame("Button", "WoWXMenuLauncherButton", UIParent)
+        launcher:Hide()
+        launcher:SetScript("OnClick", function()
+            if InCombatLockdown() then
+                return
+            end
+            if GPX.MenuNav and GPX.MenuNav.Open then
+                GPX.MenuNav:Open("settings")
+            elseif ToggleGameMenu then
+                ToggleGameMenu()
+            end
+        end)
+        self.menuLauncherButton = launcher
+    end
+
+    if not self.menuKeyButton then
+        local keyButton = CreateFrame("Button", "WoWXMenuKeyButton", UIParent, "SecureActionButtonTemplate")
+        keyButton:RegisterForClicks("LeftButtonUp")
+        keyButton:SetAttribute("type1", "macro")
+        keyButton:SetAttribute("macrotext1", "/click [nocombat] WoWXMenuLauncherButton")
+        keyButton:Hide()
+        self.menuKeyButton = keyButton
+    end
 end
 
 function GPX:GetBindingEngineConfig()
@@ -1715,6 +1763,9 @@ function GPX:ApplyBindings(silent)
         if self.VisualBar then
             self.VisualBar:UpdateAll()
         end
+        if self.ActionButtons then
+            self.ActionButtons:UpdateAll()
+        end
         if self.SettingsUI then
             self.SettingsUI:Refresh()
         end
@@ -1737,6 +1788,9 @@ function GPX:ApplyBindings(silent)
         end
         if self.VisualBar then
             self.VisualBar:UpdateAll()
+        end
+        if self.ActionButtons then
+            self.ActionButtons:UpdateAll()
         end
         return
     end
@@ -1824,6 +1878,17 @@ function GPX:ApplyBindings(silent)
                     if SetBinding(key, nil) then
                         self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")" }
                     end
+                end
+            end
+        end
+    end
+
+    local function suppressBlizzardDirectKeys()
+        for _, key in ipairs(blizzardDirectKeysToClear) do
+            if key and key ~= "" then
+                rememberPrevious(key)
+                if SetBinding(key, nil) then
+                    self.appliedBindings[key] = { mode = "binding", command = "(cleared direct key " .. key .. ")" }
                 end
             end
         end
@@ -1974,18 +2039,33 @@ function GPX:ApplyBindings(silent)
     suppressBlizzardCombatUiBinds()
 
     if engine.bindMenu and self:IsControllerEnabled() and setup and setup.menuKey and setup.menuKey ~= "" then
+        self:EnsureMenuLauncherButtons()
         if engine.transport == "override" then
-            if SetOverrideBinding(owner, true, setup.menuKey, "TOGGLEGAMEMENU") then
-                self.appliedBindings[setup.menuKey] = { mode = "override", command = "TOGGLEGAMEMENU" }
+            if SetOverrideBindingClick(owner, true, setup.menuKey, "WoWXMenuKeyButton", "LeftButton") then
+                self.appliedBindings[setup.menuKey] = { mode = "override", command = "CLICK WoWXMenuKeyButton" }
                 ok = ok + 1
             elseif engine.overrideFallback then
-                applyDirectBinding(setup.menuKey, "TOGGLEGAMEMENU")
+                rememberPrevious(setup.menuKey)
+                if SetBindingClick(setup.menuKey, "WoWXMenuKeyButton", "LeftButton") then
+                    self.appliedBindings[setup.menuKey] = { mode = "binding", command = "CLICK WoWXMenuKeyButton" }
+                    ok = ok + 1
+                else
+                    self:Print("|cffff4444Bind failed:|r " .. setup.menuKey .. " → WoWXMenuKeyButton")
+                    fail = fail + 1
+                end
             else
-                self:Print("|cffff4444Override bind failed:|r " .. setup.menuKey .. " ΓåÆ TOGGLEGAMEMENU")
+                self:Print("|cffff4444Override bind failed:|r " .. setup.menuKey .. " → WoWXMenuKeyButton")
                 fail = fail + 1
             end
         else
-            applyDirectBinding(setup.menuKey, "TOGGLEGAMEMENU")
+            rememberPrevious(setup.menuKey)
+            if SetBindingClick(setup.menuKey, "WoWXMenuKeyButton", "LeftButton") then
+                self.appliedBindings[setup.menuKey] = { mode = "binding", command = "CLICK WoWXMenuKeyButton" }
+                ok = ok + 1
+            else
+                self:Print("|cffff4444Bind failed:|r " .. setup.menuKey .. " → WoWXMenuKeyButton")
+                fail = fail + 1
+            end
         end
     end
 
@@ -2016,6 +2096,10 @@ function GPX:ApplyBindings(silent)
     end
     if not silent then
         self:Print(msg)
+    end
+
+    if self.ActionButtons then
+        self.ActionButtons:UpdateAll()
     end
 
     self.isApplyingBindings = false
@@ -2053,6 +2137,9 @@ function GPX:ClearBindings(silent)
     if self.VisualBar then
         self.VisualBar:UpdateAll()
     end
+    if self.ActionButtons then
+        self.ActionButtons:UpdateAll()
+    end
 end
 
 -- ============================================================
@@ -2067,6 +2154,10 @@ function GPX:RegisterSlash()
             GPX:Slash(msg)
         end)
         if not ok then
+
+    suppressBlizzardPageSwitchBinds()
+    suppressBlizzardCombatUiBinds()
+    suppressBlizzardDirectKeys()
             GPX:Print("Slash command failed: " .. tostring(err))
         end
 
@@ -2161,8 +2252,18 @@ function GPX:Slash(msg)
         if self.VisualBar then
             self.VisualBar:UpdateAll()
         end
+        if self.ActionButtons then
+            self.ActionButtons:UpdateAll()
+        end
         if self.SettingsUI and self.SettingsUI.frame and self.SettingsUI.frame:IsShown() then
             self.SettingsUI:Refresh()
+        end
+
+    elseif cmd == "bags" then
+        if self.ActionButtons and self.ActionButtons.Slash then
+            self.ActionButtons:Slash(rest)
+        else
+            self:Print("Action buttons module not loaded.")
         end
 
     elseif cmd == "util" then
@@ -2413,6 +2514,7 @@ function GPX:PrintHelp()
     self:Print("  "..c.."/wowx place"..r.."              Toggle all-pages placement panel")
     self:Print("  "..c.."/wowx manual"..r.."             Show categorical placement workflow")
     self:Print("  "..c.."/wowx controller [on|off]"..r.." Toggle controller verification mode")
+    self:Print("  "..c.."/wowx bags [on|off|toggle|status|reset]"..r.." Toggle WoWX bags action button")
     self:Print("  "..c.."/wowx engine ..."..r.."         Binding engine mode/options")
     self:Print("  "..c.."/wowx page ..."..r.."           Keyboard bar switch mode (hold/shift/alt/ctrl/combo)")
     self:Print("  "..c.."/wowx selfcast [on|off]"..r.."  Toggle or set auto self-cast")
@@ -2638,6 +2740,9 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             end
             if GPX.VisualBar then
                 GPX.VisualBar:UpdateAll()
+            end
+            if GPX.ActionButtons then
+                GPX.ActionButtons:UpdateAll()
             end
             if GPX.SettingsUI then
                 GPX.SettingsUI:Refresh()

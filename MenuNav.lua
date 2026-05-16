@@ -194,6 +194,10 @@ function Menu:Refresh()
 end
 
 function Menu:Open(returnContext)
+    if InCombatLockdown() then
+        GPX:Print("Cannot open WoWX menu during combat.")
+        return
+    end
     self:CreateFrame()
     self.returnContext = returnContext
     self:Refresh()

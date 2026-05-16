@@ -648,7 +648,30 @@ local function getBindingProxyFrameName(command)
     return command and ("WoWXBindButton_" .. command) or nil
 end
 
-local function getConditionalProxyMacro(command, proxyButtonName)
+-- Static slot offsets for known multibar commands.
+-- These are compile-time fallbacks used when the native bar button's .action
+-- attribute is nil (e.g. hidden bars, first-init before UpdateBindingProxyButtons).
+-- MULTIACTIONBAR1=BottomLeft(49-60), MULTIACTIONBAR2=BottomRight(61-72),
+-- MULTIACTIONBAR3=Right(73-84), MULTIACTIONBAR4=Left(85-96).
+local multibarStaticOffset = {
+    ["MULTIACTIONBAR1BUTTON"] = 48,
+    ["MULTIACTIONBAR2BUTTON"] = 60,
+    ["MULTIACTIONBAR3BUTTON"] = 72,
+    ["MULTIACTIONBAR4BUTTON"] = 84,
+}
+
+local function getStaticSlotForCommand(command)
+    local index = tonumber(command and command:match("(%d+)$"))
+    if not index then return nil end
+    for prefix, offset in pairs(multibarStaticOffset) do
+        if command:find("^" .. prefix) then
+            return offset + index
+        end
+    end
+    return nil
+end
+
+local function getConditionalProxyMacro(command)
     if not command then
         return nil
     end
@@ -665,17 +688,19 @@ local function getConditionalProxyMacro(command, proxyButtonName)
             .. "; ActionButton" .. actionIndex
     end
 
-    if proxyButtonName then
-        return "/click " .. proxyButtonName
-    end
-
+    -- Do NOT route multibar or other commands through native Blizzard bar buttons.
+    -- UpdateBlizzardBars() reparents those frames to hiddenParent, so
+    -- "/click MultiBarXXXButtonN" silently fails (hidden frame, no click received).
+    -- Direct action slot execution (via fallbackSlot) is used instead.
     return nil
 end
 
 local function setProxyOrActionAttribute(button, prefix, command, fallbackSlot)
     local attrPrefix = prefix and (prefix .. "-") or ""
-    local proxyButtonName = getProxyButtonNameForCommand(command)
-    local proxyMacro = getConditionalProxyMacro(command, proxyButtonName)
+    local proxyMacro = getConditionalProxyMacro(command)
+    -- Prefer the live-resolved slot from the caller; if the native button had no
+    -- .action attribute yet (hidden or first-init), use the static offset table.
+    local resolvedSlot = fallbackSlot or getStaticSlotForCommand(command)
 
     button:SetAttribute(attrPrefix .. "type", nil)
     button:SetAttribute(attrPrefix .. "action", nil)
@@ -685,9 +710,14 @@ local function setProxyOrActionAttribute(button, prefix, command, fallbackSlot)
         button:SetAttribute(attrPrefix .. "macrotext1", proxyMacro)
         button:SetAttribute(attrPrefix .. "clickbutton", nil)
         button:SetAttribute(attrPrefix .. "action1", nil)
+    elseif resolvedSlot then
+        button:SetAttribute(attrPrefix .. "type1", "action")
+        button:SetAttribute(attrPrefix .. "action1", resolvedSlot)
+        button:SetAttribute(attrPrefix .. "clickbutton", nil)
+        button:SetAttribute(attrPrefix .. "macrotext1", nil)
     else
-        button:SetAttribute(attrPrefix .. "type1", fallbackSlot and "action" or nil)
-        button:SetAttribute(attrPrefix .. "action1", fallbackSlot)
+        button:SetAttribute(attrPrefix .. "type1", nil)
+        button:SetAttribute(attrPrefix .. "action1", nil)
         button:SetAttribute(attrPrefix .. "clickbutton", nil)
         button:SetAttribute(attrPrefix .. "macrotext1", nil)
     end
@@ -711,6 +741,12 @@ function Bar:EnsureBindingProxyButtons()
                 local button = CreateFrame("CheckButton", buttonName, hiddenParent, "SecureActionButtonTemplate")
                 button:RegisterForClicks("LeftButtonUp")
                 button:Hide()
+                -- Initialize immediately with at least the static slot so the button
+                -- is never in an unset state before UpdateBindingProxyButtons runs.
+                -- A live-resolved slot will overwrite this when combat is not active.
+                setProxyOrActionAttribute(button, nil, command, nil)
+                button:SetAttribute("type2", nil)
+                button:SetAttribute("action2", nil)
                 self.bindingButtons[command] = button
             end
         end
@@ -2242,7 +2278,8 @@ function Bar:UpdateBagBar()
 
     local config = ensureVisualBarConfig()
     local layout = self:GetLayoutConfig("bag")
-    local show = config.showBagBar ~= false
+    local controllerEnabled = GPX.IsControllerEnabled and GPX:IsControllerEnabled()
+    local show = (config.showBagBar ~= false) and not controllerEnabled
     self.frame.bagBar:SetShown(show)
     if not show then
         return
