@@ -9,6 +9,25 @@ local BAR_BUTTON_COUNT = 12
 local PET_ACTION_BUTTON_COUNT = 10
 local defaultKeyHints = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
 
+local PS5Icons = {
+    ["1"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_LEFT",
+    ["2"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_UP",
+    ["3"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_RIGHT",
+    ["4"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_X_LEFT",
+    ["5"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_X_RIGHT",
+    ["6"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_LEFT",
+    ["7"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_UP",
+    ["8"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_RIGHT",
+    ["9"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_DOWN",
+    ["0"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_DOWN",
+}
+
+local modifierIconPaths = {
+    ["SHIFT"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TR1",
+    ["ALT"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TL1",
+    ["CTRL"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_L3",
+}
+
 local modifierStates = {
     [""] = { title = "Base", bar = nil },
     ["SHIFT"] = { title = "Modifier 1", bar = "MULTIACTIONBAR2BUTTON" },
@@ -250,16 +269,87 @@ local function ensureSlotWrapper(frame)
         return
     end
 
+    local function createStroke(parent, inset, thickness, layer)
+        local stroke = {}
+        stroke.top = parent:CreateTexture(nil, layer)
+        stroke.bottom = parent:CreateTexture(nil, layer)
+        stroke.left = parent:CreateTexture(nil, layer)
+        stroke.right = parent:CreateTexture(nil, layer)
+
+        for _, seg in pairs(stroke) do
+            seg:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
+        end
+
+        stroke.top:SetPoint("TOPLEFT", parent, "TOPLEFT", -inset, inset)
+        stroke.top:SetPoint("TOPRIGHT", parent, "TOPRIGHT", inset, inset)
+        stroke.top:SetHeight(thickness)
+
+        stroke.bottom:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", -inset, -inset)
+        stroke.bottom:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", inset, -inset)
+        stroke.bottom:SetHeight(thickness)
+
+        stroke.left:SetPoint("TOPLEFT", parent, "TOPLEFT", -inset, inset)
+        stroke.left:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", -inset, -inset)
+        stroke.left:SetWidth(thickness)
+
+        stroke.right:SetPoint("TOPRIGHT", parent, "TOPRIGHT", inset, inset)
+        stroke.right:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", inset, -inset)
+        stroke.right:SetWidth(thickness)
+
+        function stroke:Hide()
+            self.top:Hide(); self.bottom:Hide(); self.left:Hide(); self.right:Hide()
+        end
+
+        function stroke:Show()
+            self.top:Show(); self.bottom:Show(); self.left:Show(); self.right:Show()
+        end
+
+        function stroke:SetVertexColor(r, g, b, a)
+            self.top:SetVertexColor(r, g, b, a)
+            self.bottom:SetVertexColor(r, g, b, a)
+            self.left:SetVertexColor(r, g, b, a)
+            self.right:SetVertexColor(r, g, b, a)
+        end
+
+        function stroke:SetAlpha(a)
+            self.top:SetAlpha(a)
+            self.bottom:SetAlpha(a)
+            self.left:SetAlpha(a)
+            self.right:SetAlpha(a)
+        end
+
+        function stroke:ClearAllPoints()
+            self.top:ClearAllPoints()
+            self.bottom:ClearAllPoints()
+            self.left:ClearAllPoints()
+            self.right:ClearAllPoints()
+        end
+
+        return stroke
+    end
+
+    local function setStrokeColor(stroke, r, g, b, a)
+        if not stroke then return end
+        stroke.top:SetVertexColor(r, g, b, a)
+        stroke.bottom:SetVertexColor(r, g, b, a)
+        stroke.left:SetVertexColor(r, g, b, a)
+        stroke.right:SetVertexColor(r, g, b, a)
+    end
+
     local panel = frame:CreateTexture(nil, "BACKGROUND")
     panel:SetTexture("Interface\\Tooltips\\UI-Tooltip-Background")
-    panel:SetVertexColor(0.07, 0.09, 0.12, 0.96)
+    panel:SetVertexColor(0.07, 0.09, 0.12, 0.22)
 
-    local border = frame:CreateTexture(nil, "OVERLAY")
-    border:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-    border:SetVertexColor(0.92, 0.93, 0.9, 0.92)
+    local border = createStroke(frame, 0, 2, "OVERLAY")
+    setStrokeColor(border, 0.22, 0.66, 0.98, 0.95)
+
+    local tint = createStroke(frame, 0, 2, "OVERLAY")
+    setStrokeColor(tint, 0.0, 0.0, 0.0, 0.0)
 
     frame.slotPanel = panel
     frame.slotBorder = border
+    frame.slotTint = tint
+    frame._wowxSlotSetStrokeColor = setStrokeColor
     frame._wowxSlotWrapper = true
 end
 
@@ -270,8 +360,33 @@ local function layoutSlotWrapper(frame, leftInset, topInset, rightInset, bottomI
     frame.slotPanel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -rightInset, bottomInset)
 
     frame.slotBorder:ClearAllPoints()
-    frame.slotBorder:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", -6, 6)
-    frame.slotBorder:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 6, -6)
+    frame.slotBorder.top:ClearAllPoints()
+    frame.slotBorder.top:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+    frame.slotBorder.top:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+    frame.slotBorder.bottom:ClearAllPoints()
+    frame.slotBorder.bottom:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+    frame.slotBorder.bottom:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+    frame.slotBorder.left:ClearAllPoints()
+    frame.slotBorder.left:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+    frame.slotBorder.left:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+    frame.slotBorder.right:ClearAllPoints()
+    frame.slotBorder.right:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+    frame.slotBorder.right:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+
+    if frame.slotTint then
+        frame.slotTint.top:ClearAllPoints()
+        frame.slotTint.top:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+        frame.slotTint.top:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+        frame.slotTint.bottom:ClearAllPoints()
+        frame.slotTint.bottom:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+        frame.slotTint.bottom:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+        frame.slotTint.left:ClearAllPoints()
+        frame.slotTint.left:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+        frame.slotTint.left:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+        frame.slotTint.right:ClearAllPoints()
+        frame.slotTint.right:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+        frame.slotTint.right:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+    end
 end
 
 local function layoutSquareSlotWrapper(frame, leftInset, topInset, rightInset, bottomInset)
@@ -291,8 +406,33 @@ local function layoutSquareSlotWrapper(frame, leftInset, topInset, rightInset, b
     frame.slotPanel:SetHeight(size)
 
     frame.slotBorder:ClearAllPoints()
-    frame.slotBorder:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", -6, 6)
-    frame.slotBorder:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 6, -6)
+    frame.slotBorder.top:ClearAllPoints()
+    frame.slotBorder.top:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+    frame.slotBorder.top:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+    frame.slotBorder.bottom:ClearAllPoints()
+    frame.slotBorder.bottom:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+    frame.slotBorder.bottom:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+    frame.slotBorder.left:ClearAllPoints()
+    frame.slotBorder.left:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+    frame.slotBorder.left:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+    frame.slotBorder.right:ClearAllPoints()
+    frame.slotBorder.right:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+    frame.slotBorder.right:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+
+    if frame.slotTint then
+        frame.slotTint.top:ClearAllPoints()
+        frame.slotTint.top:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+        frame.slotTint.top:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+        frame.slotTint.bottom:ClearAllPoints()
+        frame.slotTint.bottom:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+        frame.slotTint.bottom:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+        frame.slotTint.left:ClearAllPoints()
+        frame.slotTint.left:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+        frame.slotTint.left:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+        frame.slotTint.right:ClearAllPoints()
+        frame.slotTint.right:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+        frame.slotTint.right:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+    end
 end
 
 local function layoutIconPriorityWrapper(frame, icon, iconSize, bottomReserve)
@@ -315,8 +455,33 @@ local function layoutIconPriorityWrapper(frame, icon, iconSize, bottomReserve)
     frame.slotPanel:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 3, -3)
 
     frame.slotBorder:ClearAllPoints()
-    frame.slotBorder:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", -6, 6)
-    frame.slotBorder:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 6, -6)
+    frame.slotBorder.top:ClearAllPoints()
+    frame.slotBorder.top:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+    frame.slotBorder.top:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+    frame.slotBorder.bottom:ClearAllPoints()
+    frame.slotBorder.bottom:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+    frame.slotBorder.bottom:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+    frame.slotBorder.left:ClearAllPoints()
+    frame.slotBorder.left:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+    frame.slotBorder.left:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+    frame.slotBorder.right:ClearAllPoints()
+    frame.slotBorder.right:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+    frame.slotBorder.right:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+
+    if frame.slotTint then
+        frame.slotTint.top:ClearAllPoints()
+        frame.slotTint.top:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+        frame.slotTint.top:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+        frame.slotTint.bottom:ClearAllPoints()
+        frame.slotTint.bottom:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+        frame.slotTint.bottom:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+        frame.slotTint.left:ClearAllPoints()
+        frame.slotTint.left:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+        frame.slotTint.left:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+        frame.slotTint.right:ClearAllPoints()
+        frame.slotTint.right:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+        frame.slotTint.right:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+    end
 end
 
 local function stripFrameTextures(frame)
@@ -619,102 +784,25 @@ local function framesOverlap(firstFrame, secondFrame)
     )
 end
 
-local function getProxyButtonNameForCommand(command)
-    local index = tonumber(command and command:match("(%d+)$"))
-    if not index then
-        return nil
-    end
-
-    if command:find("^ACTIONBUTTON") then
-        return "ActionButton" .. index
-    end
-    if command:find("^MULTIACTIONBAR1BUTTON") then
-        return "MultiBarBottomLeftButton" .. index
-    end
-    if command:find("^MULTIACTIONBAR2BUTTON") then
-        return "MultiBarBottomRightButton" .. index
-    end
-    if command:find("^MULTIACTIONBAR3BUTTON") then
-        return "MultiBarRightButton" .. index
-    end
-    if command:find("^MULTIACTIONBAR4BUTTON") then
-        return "MultiBarLeftButton" .. index
-    end
-
-    return nil
-end
-
-local function getBindingProxyFrameName(command)
-    return command and ("WoWXBindButton_" .. command) or nil
-end
-
-local function getConditionalProxyMacro(command, proxyButtonName)
-    if not command then
-        return nil
-    end
-
-    local actionIndex = tonumber(command:match("^ACTIONBUTTON(%d+)$"))
-    if actionIndex then
-        -- Keep ACTIONBUTTON execution aligned with aura/bonus bars without
-        -- requiring combat-time secure attribute rewrites.
-        return "/click [bonusbar:5] BonusActionButton" .. actionIndex
-            .. "; [bonusbar:4] BonusActionButton" .. actionIndex
-            .. "; [bonusbar:3] BonusActionButton" .. actionIndex
-            .. "; [bonusbar:2] BonusActionButton" .. actionIndex
-            .. "; [bonusbar:1] BonusActionButton" .. actionIndex
-            .. "; ActionButton" .. actionIndex
-    end
-
-    if proxyButtonName then
-        return "/click " .. proxyButtonName
-    end
-
-    return nil
-end
-
-local function setProxyOrActionAttribute(button, prefix, command, fallbackSlot)
-    local attrPrefix = prefix and (prefix .. "-") or ""
-    local proxyButtonName = getProxyButtonNameForCommand(command)
-    local proxyMacro = getConditionalProxyMacro(command, proxyButtonName)
-
-    button:SetAttribute(attrPrefix .. "type", nil)
-    button:SetAttribute(attrPrefix .. "action", nil)
-
-    if proxyMacro then
-        button:SetAttribute(attrPrefix .. "type1", "macro")
-        button:SetAttribute(attrPrefix .. "macrotext1", proxyMacro)
-        button:SetAttribute(attrPrefix .. "clickbutton", nil)
-        button:SetAttribute(attrPrefix .. "action1", nil)
-    else
-        button:SetAttribute(attrPrefix .. "type1", fallbackSlot and "action" or nil)
-        button:SetAttribute(attrPrefix .. "action1", fallbackSlot)
-        button:SetAttribute(attrPrefix .. "clickbutton", nil)
-        button:SetAttribute(attrPrefix .. "macrotext1", nil)
-    end
-end
+-- Transport functions removed. All secure attribute writes go through GPX.ClickTransport.
+-- See ClickTransport.lua. Do not add transport logic here.
 
 function Bar:GetBindingProxyButtonName(command)
-    return getBindingProxyFrameName(command)
+    return GPX.ClickTransport and GPX.ClickTransport:ProxyButtonName(command) or nil
 end
 
 function Bar:EnsureBindingProxyButtons()
-    if self.bindingButtons then
-        return
-    end
-
-    self.bindingButtons = {}
+    if not GPX.ClickTransport then return end
     for _, row in ipairs(placementRows) do
         for index = 1, BAR_BUTTON_COUNT do
             local command = self:GetCommandForButton(index, row.state)
-            if command and not self.bindingButtons[command] then
-                local buttonName = getBindingProxyFrameName(command)
-                local button = CreateFrame("CheckButton", buttonName, hiddenParent, "SecureActionButtonTemplate")
-                button:RegisterForClicks("LeftButtonUp")
-                button:Hide()
-                self.bindingButtons[command] = button
+            if command then
+                GPX.ClickTransport:EnsureProxyButton(command)
             end
         end
     end
+    -- Keep a reference so GamePadX can still iterate .bindingButtons if needed.
+    self.bindingButtons = GPX.ClickTransport.proxyButtons
 end
 
 function Bar:UpdateBindingProxyButtons()
@@ -723,14 +811,10 @@ function Bar:UpdateBindingProxyButtons()
         self.pendingAttributeRefresh = true
         return
     end
-
-    for command, button in pairs(self.bindingButtons) do
-        local slot = self:ResolveCommand(command)
-        setProxyOrActionAttribute(button, nil, command, slot)
-        button:SetAttribute("type2", nil)
-        button:SetAttribute("action2", nil)
-        button:SetAttribute("clickbutton", button:GetAttribute("clickbutton"))
-    end
+    if not GPX.ClickTransport then return end
+    GPX.ClickTransport:UpdateAllProxyButtons(function(command)
+        return self:ResolveCommand(command)
+    end)
 end
 
 function Bar:GetCurrentState()
@@ -806,11 +890,17 @@ end
 
 function Bar:GetVisibleButtonCount()
     local layout = self:GetLayoutConfig("main")
-    local visibleCount = clamp(math.floor((tonumber(layout.buttonCount) or BAR_BUTTON_COUNT) + 0.5), 1, BAR_BUTTON_COUNT)
-    if GPX:IsControllerEnabled() then
-        local setup = self:GetSetup()
-        visibleCount = math.min(visibleCount, GPX:GetConfiguredActionButtonCount(setup))
+    
+    -- If controller mode is disabled, always show all 12 buttons
+    if not GPX:IsControllerEnabled() then
+        return BAR_BUTTON_COUNT
     end
+    
+    -- Controller mode: respect configured button count
+    local visibleCount = clamp(math.floor((tonumber(layout.buttonCount) or BAR_BUTTON_COUNT) + 0.5), 1, BAR_BUTTON_COUNT)
+    local setup = self:GetSetup()
+    visibleCount = math.min(visibleCount, GPX:GetConfiguredActionButtonCount(setup, self:GetProfile()))
+    
     return visibleCount
 end
 
@@ -818,7 +908,7 @@ function Bar:GetMainLayoutMetrics()
     local layout = self:GetLayoutConfig("main")
     return {
         layout = layout,
-        visibleCount = clamp(math.floor((tonumber(layout.buttonCount) or BAR_BUTTON_COUNT) + 0.5), 1, BAR_BUTTON_COUNT),
+        visibleCount = self:GetVisibleButtonCount(),
         buttonWidth = math.floor(tonumber(layout.buttonWidth) or layoutDefaults.main.buttonWidth),
         buttonHeight = math.floor(tonumber(layout.buttonHeight) or layoutDefaults.main.buttonHeight),
         spacing = math.floor(tonumber(layout.buttonSpacing) or layoutDefaults.main.buttonSpacing),
@@ -852,8 +942,7 @@ function Bar:UpdateBlizzardBars()
     self.originalParents = self.originalParents or {}
     local hideBars = self:ShouldReplaceBlizzardBars()
     local config = ensureVisualBarConfig()
-    local controllerEnabled = GPX:IsControllerEnabled()
-    local keepMicro = not controllerEnabled
+    local keepMicro = config.keepMicroMenu ~= false
     local keepBags = false
     local keepStance = true
     local keepPet = true
@@ -1675,7 +1764,35 @@ function Bar:CreateModifierFrame()
         local label = chip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         label:SetPoint("CENTER", chip, "CENTER", 0, 0)
         label:SetText(text)
+
+        local icon = chip:CreateTexture(nil, "OVERLAY")
+        icon:SetWidth(18)
+        icon:SetHeight(18)
+        icon:SetPoint("CENTER", chip, "CENTER", 0, 0)
+        icon:Hide()
+
+        local comboLeftIcon = chip:CreateTexture(nil, "OVERLAY")
+        comboLeftIcon:SetWidth(16)
+        comboLeftIcon:SetHeight(16)
+        comboLeftIcon:SetPoint("RIGHT", chip, "CENTER", -8, 0)
+        comboLeftIcon:Hide()
+
+        local comboPlus = chip:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        comboPlus:SetPoint("CENTER", chip, "CENTER", 0, 0)
+        comboPlus:SetText("+")
+        comboPlus:Hide()
+
+        local comboRightIcon = chip:CreateTexture(nil, "OVERLAY")
+        comboRightIcon:SetWidth(16)
+        comboRightIcon:SetHeight(16)
+        comboRightIcon:SetPoint("LEFT", chip, "CENTER", 8, 0)
+        comboRightIcon:Hide()
+
         chip.label = label
+        chip.icon = icon
+        chip.comboLeftIcon = comboLeftIcon
+        chip.comboPlus = comboPlus
+        chip.comboRightIcon = comboRightIcon
         frame.chips[index] = chip
         xOffset = xOffset + chip:GetWidth() + 8
     end
@@ -1722,6 +1839,46 @@ function Bar:UpdateModifierIndicator(state)
         if index > 1 then
             totalWidth = totalWidth + 8
         end
+
+        if GPX:IsControllerEnabled() and key == "SHIFT+ALT" and chip.comboLeftIcon and chip.comboPlus and chip.comboRightIcon then
+            chip.comboLeftIcon:SetTexture(modifierIconPaths["SHIFT"])
+            chip.comboRightIcon:SetTexture(modifierIconPaths["ALT"])
+            chip.comboLeftIcon:Show()
+            chip.comboPlus:Show()
+            chip.comboRightIcon:Show()
+            if chip.icon then
+                chip.icon:Hide()
+            end
+            chip.label:Hide()
+        elseif GPX:IsControllerEnabled() and chip.icon and modifierIconPaths[key] then
+            chip.icon:SetTexture(modifierIconPaths[key])
+            chip.icon:Show()
+            if chip.comboLeftIcon then
+                chip.comboLeftIcon:Hide()
+            end
+            if chip.comboPlus then
+                chip.comboPlus:Hide()
+            end
+            if chip.comboRightIcon then
+                chip.comboRightIcon:Hide()
+            end
+            chip.label:Hide()
+        else
+            if chip.icon then
+                chip.icon:Hide()
+            end
+            if chip.comboLeftIcon then
+                chip.comboLeftIcon:Hide()
+            end
+            if chip.comboPlus then
+                chip.comboPlus:Hide()
+            end
+            if chip.comboRightIcon then
+                chip.comboRightIcon:Hide()
+            end
+            chip.label:Show()
+        end
+
         if active[key] then
             chip:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.95)
             chip:SetBackdropColor(0.18, 0.14, 0.05, 0.95)
@@ -1745,7 +1902,8 @@ function Bar:UpdateMicroMenu()
         return
     end
     local layout = self:GetLayoutConfig("micro")
-    local show = self:ShouldReplaceBlizzardBars() and (not GPX:IsControllerEnabled())
+    local config = ensureVisualBarConfig()
+    local show = self:ShouldReplaceBlizzardBars() and config.keepMicroMenu ~= false
     if not show then
         self.microMenuFrame:Hide()
         return
@@ -2107,7 +2265,10 @@ function Bar:ToggleKeepBags()
 end
 
 function Bar:ToggleKeepMicroMenu()
-    GPX:Print("Micro menu visibility is automatic: shown in keyboard mode, hidden in controller mode.")
+    local config = ensureVisualBarConfig()
+    config.keepMicroMenu = not (config.keepMicroMenu ~= false)
+    self:UpdateAll()
+    GPX:Print("Micro menu: " .. ((config.keepMicroMenu ~= false) and "shown" or "hidden"))
 end
 
 function Bar:ToggleKeepStanceBar()
@@ -2240,59 +2401,9 @@ function Bar:UpdateBagBar()
         return
     end
 
-    local config = ensureVisualBarConfig()
-    local layout = self:GetLayoutConfig("bag")
-    local show = config.showBagBar ~= false
-    self.frame.bagBar:SetShown(show)
-    if not show then
-        return
-    end
-
-    local buttonSize = math.floor(tonumber(layout.buttonSize) or layoutDefaults.bag.buttonSize)
-    local spacing = math.floor(tonumber(layout.buttonSpacing) or layoutDefaults.bag.buttonSpacing)
-    local padding = math.floor(tonumber(layout.padding) or layoutDefaults.bag.padding)
-    local chromeAlpha = tonumber(layout.chromeAlpha) or layoutDefaults.bag.chromeAlpha or 0.32
-    local width = (padding * 2) + (buttonSize * 5) + (spacing * 4)
-    local height = buttonSize + (padding * 2)
-
-    self.frame.bagBar:SetWidth(width)
-    self.frame.bagBar:SetHeight(height)
-    self.frame.bagBar:SetAlpha(tonumber(layout.alpha) or layoutDefaults.bag.alpha)
-    self:ApplyChromeBackdrop(self.frame.bagBar, chromeAlpha * 0.8)
-    self.frame.bagBar:SetScale(select(1, self:GetScaleForKind("bag")))
-    self:ApplyStoredBagPosition()
-
-    local buttonBorderR, buttonBorderG, buttonBorderB = 0.22, 0.66, 0.98
-    if self:IsEditChromeActive() then
-        buttonBorderR, buttonBorderG, buttonBorderB = 0.96, 0.8, 0.22
-    end
-
-    local bagButtons = {}
-
-    for bagID = 0, 4 do
-        local button = self.frame.bagButtons[bagID]
-        local invSlot = bagID == 0 and 16 or ((ContainerIDToInventoryID and ContainerIDToInventoryID(bagID)) or (19 + bagID))
-        local texture = GetInventoryItemTexture("player", invSlot)
-        button:ClearAllPoints()
-        button:SetWidth(buttonSize)
-        button:SetHeight(buttonSize)
-        button:SetPoint("LEFT", self.frame.bagBar, "LEFT", padding + ((4 - bagID) * (buttonSize + spacing)), 0)
-        layoutSlotWrapper(button, 1, 1, 1, 1)
-        button.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_Bag_08")
-        button.icon:ClearAllPoints()
-        button.icon:SetPoint("TOPLEFT", button.slotPanel, "TOPLEFT", 2, -2)
-        button.icon:SetPoint("BOTTOMRIGHT", button.slotPanel, "BOTTOMRIGHT", -2, 2)
-        button.slotBorder:SetVertexColor(buttonBorderR, buttonBorderG, buttonBorderB, 0.95)
-        button:SetBackdropColor(0.05, 0.07, 0.12, 0.08)
-        button:SetBackdropBorderColor(buttonBorderR, buttonBorderG, buttonBorderB, 0.28)
-        bagButtons[#bagButtons + 1] = button
-    end
-
-    updateShellAroundButtons(self.frame.bagBar, bagButtons, 4, 4)
-    if self.frame.bagBar._wowxShell then
-        self.frame.bagBar._wowxShell:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
-        self.frame.bagBar._wowxShell:SetBackdropBorderColor(0.0, 0.0, 0.0, 0.0)
-    end
+    -- Consolidation policy: the standalone WoWX bags utility button is the
+    -- single bag surface; keep the legacy compact bag bar hidden.
+    self.frame.bagBar:Hide()
 end
 
 function Bar:GetStoredPosition()
@@ -2420,12 +2531,15 @@ end
 
 function Bar:GetPhysicalKeyForButton(index)
     local setup = self:GetSetup()
-    if not setup then
-        return defaultKeyHints[index]
+    if GPX:IsControllerEnabled() then
+        if not setup then
+            return GPX:GetLegacyControllerActionKey(self:GetProfile(), index) or defaultKeyHints[index]
+        end
+        return GPX:GetSetupActionKey(setup, index) or defaultKeyHints[index]
     end
 
-    if GPX:IsControllerEnabled() then
-        return GPX:GetSetupActionKey(setup, index) or defaultKeyHints[index]
+    if not setup then
+        return defaultKeyHints[index]
     end
 
     if index == 1 then
@@ -2435,14 +2549,15 @@ function Bar:GetPhysicalKeyForButton(index)
 end
 
 function Bar:GetCommandForButton(index, state)
+    if GPX.ClickTransport and GPX.ClickTransport.CommandForCell then
+        return GPX.ClickTransport:CommandForCell(state, index, self:UseModifierPages())
+    end
+
     local page = modifierStates[state]
     if state == "" or not self:UseModifierPages() then
         return "ACTIONBUTTON" .. index
     end
-    if page and page.bar then
-        return page.bar .. index
-    end
-    return nil
+    return page and page.bar and (page.bar .. index) or nil
 end
 
 function Bar:GetSlotForButtonState(index, state)
@@ -2530,6 +2645,13 @@ function Bar:ResolveCommand(command)
     end
 
     local candidates = self:GetButtonCandidates(command)
+    -- Deterministic command->slot mapping is the source of truth for modifier
+    -- pages so already-placed actions are honored across reloads/machines.
+    local staticSlot = GPX.ClickTransport and GPX.ClickTransport:StaticSlotForCommand(command) or nil
+    if staticSlot then
+        return staticSlot
+    end
+
     if not candidates then
         return nil
     end
@@ -2565,7 +2687,7 @@ function Bar:GetDisplayForButton(index, state)
     local slotLabel = "Action " .. index
     if GPX:IsControllerEnabled() then
         local setup = self:GetSetup()
-        local labels = GPX:GetCombatDisplayLabels(setup and setup.deviceId)
+        local labels = GPX:GetCombatDisplayLabels(GPX:GetEffectiveControllerStyleId(setup, self:GetProfile()))
         if labels[index] then
             slotLabel = labels[index]
         end
@@ -2833,8 +2955,8 @@ function Bar:UpdatePlacementFrame()
                 btn.icon:SetTexture(icon)
                 btn.icon:SetVertexColor(1.0, 1.0, 1.0)
             else
-                btn.icon:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-                btn.icon:SetVertexColor(0.35, 0.4, 0.46)
+                btn.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+                btn.icon:SetVertexColor(0.32, 0.44, 0.62)
             end
 
             if slot then
@@ -3000,6 +3122,13 @@ function Bar:CreateFrame()
         local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
         cooldown:SetAllPoints(icon)
 
+        local controllerIcon = button:CreateTexture(nil, "OVERLAY")
+        controllerIcon:SetWidth(20)
+        controllerIcon:SetHeight(20)
+        controllerIcon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -6, 8)
+        controllerIcon:SetTexCoord(0, 1, 0, 1)
+        controllerIcon:Hide()
+
         button.icon = icon
         button.glyph = glyph
         button.name = name
@@ -3007,6 +3136,7 @@ function Bar:CreateFrame()
         button.countText = countText
         button.shine = shine
         button.cooldown = cooldown
+        button.controllerIcon = controllerIcon
         button:SetAttribute("type", nil)
         button:SetAttribute("action", nil)
         button:SetAttribute("type2", nil)
@@ -3289,7 +3419,7 @@ function Bar:UpdateButton(index, state)
     local buttonHeight = metrics.buttonHeight
     local spacing = metrics.spacing
     local padding = metrics.padding
-    local showSecondaryKeyText = GPX:IsControllerEnabled()
+    local showSecondaryKeyText = false
     local bottomReserve = showSecondaryKeyText and 24 or 2
     local iconSize = math.max(20, math.min(buttonWidth - 4, buttonHeight - bottomReserve - 4))
     local buttonTopOffset = self.frame and self.frame._wowxButtonTopOffset or 44
@@ -3307,6 +3437,18 @@ function Bar:UpdateButton(index, state)
         button.keyText:SetText("")
         button.keyText:Hide()
     end
+
+    if button.controllerIcon then
+        local iconPath = GPX:IsControllerEnabled() and physicalKey and PS5Icons[physicalKey]
+        if iconPath then
+            button.controllerIcon:SetTexture(iconPath)
+            button.controllerIcon:Show()
+            button.glyph:SetText("")
+        else
+            button.controllerIcon:Hide()
+        end
+    end
+
     button.display = display
     button.physicalKey = physicalKey
     button._wowxBaseAlpha = metrics.alpha
@@ -3382,31 +3524,12 @@ function Bar:UpdateButton(index, state)
         local ctrlSlot = self:GetSlotForButtonState(index, "CTRL")
         local comboSlot = self:GetSlotForButtonState(index, "SHIFT-ALT")
 
-        setProxyOrActionAttribute(button, nil, baseCommand, baseSlot)
-        setProxyOrActionAttribute(button, "shift", shiftCommand, shiftSlot)
-        setProxyOrActionAttribute(button, "alt", altCommand, altSlot)
-        setProxyOrActionAttribute(button, "ctrl", ctrlCommand, ctrlSlot)
-        setProxyOrActionAttribute(button, "shift-alt", comboCommand, comboSlot)
-        setProxyOrActionAttribute(button, "alt-shift", comboCommand, comboSlot)
-
-        button:SetAttribute("type2", nil)
-        button:SetAttribute("action2", nil)
-        button:SetAttribute("shift-type2", nil)
-        button:SetAttribute("shift-action2", nil)
-        button:SetAttribute("alt-type2", nil)
-        button:SetAttribute("alt-action2", nil)
-        button:SetAttribute("ctrl-type2", nil)
-        button:SetAttribute("ctrl-action2", nil)
-        button:SetAttribute("shift-alt-type2", nil)
-        button:SetAttribute("shift-alt-action2", nil)
-        button:SetAttribute("alt-shift-type2", nil)
-        button:SetAttribute("alt-shift-action2", nil)
-        button:SetAttribute("macrotext2", nil)
-        button:SetAttribute("shift-macrotext2", nil)
-        button:SetAttribute("alt-macrotext2", nil)
-        button:SetAttribute("ctrl-macrotext2", nil)
-        button:SetAttribute("shift-alt-macrotext2", nil)
-        button:SetAttribute("alt-shift-macrotext2", nil)
+        if GPX.ClickTransport then
+            GPX.ClickTransport:ApplyButtonModifiers(button,
+                { base = baseSlot, shift = shiftSlot, alt = altSlot, ctrl = ctrlSlot, combo = comboSlot },
+                { base = baseCommand, shift = shiftCommand, alt = altCommand, ctrl = ctrlCommand, combo = comboCommand }
+            )
+        end
     else
         self.pendingAttributeRefresh = true
     end

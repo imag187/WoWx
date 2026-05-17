@@ -6,9 +6,11 @@
 ## SavedVariablesPerCharacter: WoWXDB, GamePadXDB
 
 GamePadX.lua
+ClickTransport.lua
 UIMode.lua
 SetupWizard.lua
 VisualBar.lua
+ActionButtons.lua
 SettingsUI.lua
 MenuNav.lua
 MinimapButton.lua

@@ -35,6 +35,7 @@ WoWX only exposes clearer, lower-friction input and UI interaction over standard
 - `/wowx bar reset` resets the bar position
 - `/wowx enable` enables bindings for this session
 - `/wowx disable` disables bindings for this session
+- `/wowx out window` opens the selectable WoWX output mirror
 
 ## Input Model
 
@@ -97,6 +98,7 @@ The UI-mode banner at the top of the screen shows the active window and the live
 - If spell assignment fails, verify you are not in combat.
 - If modifier pages look wrong, confirm your modifier buttons are mapped to real WoW modifiers: `SHIFT`, `ALT`, or `CTRL`.
 - If UI mode seems stuck, close the active WoWX window with the cancel key or `ESCAPE`.
+- For copyable non-devconsole logs, use `/wowx out window`, then `Select All` and `Ctrl+C`.
 
 ## Known Current Limits
 

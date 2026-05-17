@@ -6,6 +6,65 @@ This file is a continuity handoff for future work on WoWX, especially for the Ru
 
 Primary goal: avoid retracing dead ends and preserve the actual discoveries from the debugging session.
 
+## 2026-05-17 Bag Module and Per-Character Profiles
+
+### Issues Resolved
+
+1. **Bag module taint on UseContainerItem()**
+   - Problem: Right-clicking items in WoWX bags caused taint error
+   - Solution: Use Blizzard's `ContainerFrameItemButtonTemplate` (same as Bagnon)
+   - This XML template has built-in secure handling for item operations
+   - Result: No taint on right-click, drag, or split operations
+
+2. **Merchant/vendor not opening WoWX bags**
+   - Problem: Talking to NPCs opened Blizzard bags instead of WoWX combined bag window
+   - Solution: Added `MERCHANT_SHOW` event handler to auto-open WoWX bags
+   - Also added `MERCHANT_CLOSED` event to auto-close bags when merchant closes (matching Blizzard UX)
+   - Implemented hooks on `ToggleBackpack()`, `OpenAllBags()`, and `CloseAllBags()` to redirect to WoWX bags when enabled
+   - Result: WoWX bags now open automatically when talking to merchants/vendors
+
+3. **Per-character button count bleeding across characters**
+   - Problem: Enabling controller mode on one character (8-button layout) affected other characters even when controller mode was disabled for them
+   - Root cause: `layout.buttonCount` persisted in SavedVariables and was used regardless of controller mode state
+   - Solution: Modified `Bar:GetVisibleButtonCount()` to always return 12 buttons when controller mode is disabled, only respecting `layout.buttonCount` when controller is enabled
+   - Result: Keyboard-mode characters now always show 12 buttons, controller-mode characters respect configured button count
+
+### Key Code Changes
+
+**ActionButtons.lua:**
+- Item buttons use Blizzard's `ContainerFrameItemButtonTemplate` (same approach as Bagnon)
+- Template provides built-in secure item handling without taint
+- Buttons use dummy parent frames with bag ID, button itself has slot ID
+- Removed per-bag spacer rows - bags flow continuously in 8-column grid
+- Added `InstallBlizzardBagHooks()` to redirect bag opening functions
+- Added `MERCHANT_SHOW` and `MERCHANT_CLOSED` event handlers
+- Auto-open/close behavior when talking to vendors
+
+**VisualBar.lua:**
+- `GetVisibleButtonCount()` now returns 12 for keyboard mode unconditionally
+- Controller mode still respects configured button count
+
+### Current State
+
+- Click transport remains the stable execution path
+- Bag module now properly replaces Blizzard bags without taint
+- Per-character profiles work correctly for controller vs keyboard mode
+- SavedVariables are properly scoped per-character via `SavedVariablesPerCharacter`
+
+### Important Notes for Future Work
+
+- ContainerFrameItemButtonTemplate is the key to taint-free bag operations
+- Template expects parent frame ID = bag, button ID = slot
+- Dummy parent frames are created per button to satisfy this requirement
+- The `_openedByMerchant` flag tracks whether bags were auto-opened to enable smart auto-close behavior
+- Bag grid flows continuously without per-bag spacer rows (8-column layout)
+- Hooks on ToggleBackpack/OpenAllBags/CloseAllBags redirect to WoWX bags when enabled
+- Consider extracting bag module to separate addon (WoWX_Bags) for independent enable/disable
+
+### Lesson Learned: Use Blizzard XML Templates
+
+When implementing features that interact with protected/secure functions, always check how established addons like Bagnon solve the problem. They often use Blizzard-provided XML templates that have the necessary secure handling baked in. Don't reinvent the wheel when Blizzard already provides the solution.
+
 ## Read This First
 
 - Always read this file before making substantive WoWX changes.
@@ -31,6 +90,8 @@ Primary goal: avoid retracing dead ends and preserve the actual discoveries from
   - regressions appear on the original machine
 - Therefore future agents must not dismiss regressions on the original machine as mere "machine drift". If the inception machine regressed after addon edits, that regression is real until disproven.
 - Diagnostics and handoff notes are not optional overhead in this workflow; they are part of the actual engineering surface.
+
+You may be reading this and thinking that click transport can't possibly be efficient, and are looking to use direct. The trouble with that on this fork is that we are bar-centric and not individual-button-centric like ConsolePort, so there are protected functions that will not only lag spike the game but also can throw fatal errors and disconnect the client entirely. DO NOT ATTEMPT TO USE IT. We have tried. Other agents have tried. Only consider direct if it is the very last or very first step in a proven chain, and only if click transport is still the system used to resolve which actual action is casting at any given time. That is hypothetical unless proven viable.
 
 ## Repo / Runtime Paths
 
@@ -100,6 +161,7 @@ Repeated diagnostics from `WoWX.lua` SavedVariables showed these recurring facts
   - `OverrideActionBarLeaveFrame=missing`
 - `BonusActionBarFrame` was often shown.
 - `ShapeshiftBarFrame` was shown.
+- Blizzard defaults such as shifted mouse wheel, shifted up/down arrows, and shifted 1/2 can continue to page or scroll the underlying UI unless they are explicitly cleared in both keyboard and controller mode.
 - On Runemaster / Runeshroud states, WoWX could resolve base buttons to bonus-page slots like:
   - `73`, `74`, `75`, `76`, `80`, `83`, `84`
 - Meanwhile Blizzard live `ActionButton1..12.action` could still remain `1..12`.
@@ -281,6 +343,27 @@ Avoid retracing these unless there is a new reason:
 - assuming `HasOverrideActionBar()` means visible usable override UI
 - assuming a successful mouse fix means keyboard is on WoWX-owned transport too
 
+## Non-Negotiable Agent Rules (CoA Fork)
+
+These are hard constraints for future agent work on this fork:
+
+- DO NOT switch or migrate runtime execution back to direct transport for action execution paths.
+- DO NOT replace WoWX click/proxy-owned execution with raw `SetBinding(..., "MULTIACTIONBAR...")` for modifier pages.
+- DO NOT treat a visual-only improvement as proof that execution routing is correct.
+- DO NOT ship changes that make bars/pages look correct while non-main-bar casts fail.
+
+Why this is mandatory:
+
+- This exact regression already happened: visuals/controller/movement looked better, but spells/slots/pages/modifiers stopped executing beyond main bar.
+- Keyboard and mouse/controller execution must stay on WoWX-owned click/proxy routes for this fork.
+- If click/proxy paths are changed, require explicit proof (diag + live class tests) that both keyboard and click casting work on modifier pages in and out of combat.
+
+Required verification before accepting any transport/binding refactor:
+
+- Confirm `EngineCfg: transport=click` in diagnostics.
+- Confirm modifier-page keys (SHIFT/ALT/CTRL/combo) execute correct non-main-bar actions by both key and click.
+- Confirm no stale combat latching where bar state at combat entry locks later clicks/casts.
+
 ## Current Known-Good Practical State
 
 At the end of the session, the user reported success only after the PTR SavedVariables were directly changed to click transport.
@@ -324,6 +407,11 @@ Current engine-level findings from `/devconsole` and Event Trace:
 - The visual/action bug could still appear after the visible bar recovered, which supports the conclusion that Ascension can keep stale hidden special-action state beyond the visible transition.
 - The latest successful execution fix did not come from trusting `ActionButtonN.action`; it came from making the secure macro itself branch on `bonusbar` state.
 - When reviewing logs, a run is only on the newest path if diagnostics show a `BuildTag` line and `macro1` contains the conditional `BonusActionButtonN` chain.
+- `PLAYER_STARTED_MOVING` / `PLAYER_STOPPED_MOVING` are not reliable on 3.3.5a for this setup; movement-based controller mouse look should be driven by `GetUnitSpeed("player")` polling instead.
+- The controller mouse-look debounce that behaved best was effectively instant / ~100ms, not a long delay.
+- Some spells can show a charge counter even when they do not actually have charges; treat that as a visual false positive unless diagnostics prove otherwise.
+- Controller mapping can be sourced from AntiMicroX on Windows or a PS5 controller profile; the important thing is keeping the WoWX routing and transport layer stable.
+- The current practical split that worked best was: mouse/kb and controller mapping stay visually clean, while actual non-main-bar execution continues to be owned by WoWX click/proxy routing.
 
 Current debugging ergonomics:
 
@@ -453,3 +541,112 @@ Latest practical bottom line: on the CoA fork, the current known-good Runemaster
   - whether it is safe to extract now or blocked by secure/runtime coupling
 - Extraction should follow ownership boundaries, not file size or aesthetics.
 - The goal is staged migration, not a one-shot rewrite.
+
+## 2026-05-16 Recovery Snapshot (Post-Regression Repair)
+
+- Transport is confirmed healthy again on PTR in live diagnostics:
+  - `EngineCfg: transport=click`
+  - `ClickTransport: loaded`
+  - `ClickTransport proxies: 60`
+- Base and modifier key matrix now routes through proxy buttons:
+  - `CLICK WoWXBindButton_ACTIONBUTTONN:LeftButton`
+  - `CLICK WoWXBindButton_MULTIACTIONBARxBUTTONN:LeftButton`
+- `SHIFT-1` / `SHIFT-2` regression was fixed by binding-order correction:
+  - clear Blizzard page/direct keys first
+  - then apply WoWX bindings
+- Visual click transport no longer depends on live `.action` drift for modifier bars.
+  Canonical command->slot ownership is now enforced.
+
+### Canonical Slot Contract (Current Rule)
+
+- `ACTIONBUTTONN`: base action button behavior with conditional bonusbar macro.
+- `MULTIACTIONBAR2BUTTONN` (SHIFT page): slots `49-60`.
+- `MULTIACTIONBAR1BUTTONN` (ALT page): slots `61-72`.
+- `MULTIACTIONBAR4BUTTONN` (CTRL page): slots `37-48`.
+- `MULTIACTIONBAR3BUTTONN` (SHIFT-ALT page): slots `25-36`.
+
+Interpretation rule:
+- whatever action is on that command's canonical slot is what fires.
+- no re-drag should be required after reload if slot contents are already present.
+
+## Quick Navigation Index (Use This First)
+
+Use heading search in this file to jump quickly:
+
+1. `2026-05-16 Recovery Snapshot (Post-Regression Repair)`
+2. `Canonical Slot Contract (Current Rule)`
+3. `Current TOC Load Order (PTR Fork)`
+4. `File Ownership Map (PTR Fork)`
+5. `Controller Bring-Up Safety Sequence`
+6. `Minimal Verification Checklist`
+7. `Known Bad Paths / Dead Ends`
+
+## Current TOC Load Order (PTR Fork)
+
+Load order currently expected in `WoWX.toc`:
+
+1. `GamePadX.lua`
+2. `ClickTransport.lua`
+3. `UIMode.lua`
+4. `SetupWizard.lua`
+5. `VisualBar.lua`
+6. `ActionButtons.lua`
+7. `SettingsUI.lua`
+8. `MenuNav.lua`
+9. `MinimapButton.lua`
+10. `SpellbookUI.lua`
+11. `SpellRing.lua`
+12. `DispelPrompt.lua`
+13. `UnitFrameCues.lua`
+
+Why this matters:
+- `ClickTransport.lua` must load before `VisualBar.lua` uses `GPX.ClickTransport`.
+
+## File Ownership Map (PTR Fork)
+
+- `GamePadX.lua`
+  - slash command router
+  - binding engine application/clear lifecycle
+  - diagnostics capture/output windows
+  - engine config and migration behavior
+- `ClickTransport.lua`
+  - single owner of secure attribute writes for click transport
+  - proxy button creation and update
+  - canonical static slot fallback map
+  - must not absorb visual/layout logic
+- `VisualBar.lua`
+  - visual/action bar frame creation
+  - display and tooltip state
+  - placement interactions (`PlaceAction`, `PickupAction`)
+  - delegates secure writes to `GPX.ClickTransport`
+- `ActionButtons.lua`
+  - WoWX bag utility button and combined bag window
+  - bag/item slot chrome and grid behavior
+- `UIMode.lua`
+  - focus/navigation context and controller-oriented selection flow
+- `SetupWizard.lua`
+  - first-run / re-calibration flow and input setup capture
+- `SettingsUI.lua`
+  - user-facing config surface
+- `MenuNav.lua`
+  - in-game menu navigation helpers
+- `SpellbookUI.lua`
+  - spellbook surface integration
+- `SpellRing.lua`
+  - ring binding/application surface
+- `MinimapButton.lua`, `DispelPrompt.lua`, `UnitFrameCues.lua`
+  - auxiliary UX modules; should not own core binding transport
+
+## Controller Bring-Up Safety Sequence
+
+Before controller-specific troubleshooting on another machine:
+
+1. full client restart
+2. `/wowx reload`
+3. `/wowx diag verbose`
+4. verify transport/proxy lines (`transport=click`, `ClickTransport loaded`, proxy count)
+5. verify base/mod key matrix lines route to `WoWXBindButton_*`
+6. only then run controller init/setup
+7. re-test one base, one modifier, one click path
+
+If this order fails, do not change transport mode first; inspect load order, SavedVariables transport pinning, and diag lines.
