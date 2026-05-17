@@ -61,7 +61,7 @@ GPX.inputStyles = {
         slotLabels = { "A", "B", "X", "Y", "D-Up", "D-Right", "D-Down", "D-Left", "LB", "RB", "L3", "R3" },
         combatSlotLabels = { "X", "Y", "B", "Back", "Start", "D-Left", "D-Up", "D-Down" },
         combatDisplayLabels = { "X", "Y", "B", "<|", "|>", "<-", "/|\\", "\\|/" },
-        modifierLabels = { "L1 / LB", "R1 / RB", "R3 / Click" },
+        modifierLabels = { "L1 / LB", "R1 / RB", "L3 / Click" },
         confirmLabel = "A",
     },
     playstation = {
@@ -70,7 +70,7 @@ GPX.inputStyles = {
         slotLabels = { "Cross", "Circle", "Square", "Triangle", "D-Up", "D-Right", "D-Down", "D-Left", "L1", "R1", "L3", "R3" },
         combatSlotLabels = { "Square", "Triangle", "Circle", "Share", "Options", "D-Left", "D-Up", "D-Down" },
         combatDisplayLabels = { "Square", "Triangle", "Circle", "<|", "|>", "<-", "/|\\", "\\|/" },
-        modifierLabels = { "L1", "R1", "R3" },
+        modifierLabels = { "L1", "R1", "L3" },
         confirmLabel = "Cross",
     },
     switch = {
@@ -79,7 +79,7 @@ GPX.inputStyles = {
         slotLabels = { "B", "A", "Y", "X", "D-Up", "D-Right", "D-Down", "D-Left", "L", "R", "L3", "R3" },
         combatSlotLabels = { "Y", "X", "A", "Minus", "Plus", "D-Left", "D-Up", "D-Down" },
         combatDisplayLabels = { "Y", "X", "A", "<|", "|>", "<-", "/|\\", "\\|/" },
-        modifierLabels = { "L", "R", "R-Stick" },
+        modifierLabels = { "L", "R", "L-Stick" },
         confirmLabel = "B",
     },
     generic = {
@@ -116,7 +116,7 @@ GPX.defaults = {
             replaceBlizzard = true,
             modifierPages = true,
             keepBags = false,
-            keepMicroMenu = false,
+            keepMicroMenu = true,
             keepStanceBar = true,
             keepPetBar = true,
             showBagBar = true,
@@ -125,7 +125,7 @@ GPX.defaults = {
             scale = 1.0,
             layout = {
                 main = {
-                    buttonCount = 12,
+                    buttonCount = 8,
                     buttonWidth = 56,
                     buttonHeight = 90,
                     buttonSpacing = 6,
@@ -182,7 +182,7 @@ GPX.defaults = {
             enabled = false,
             autoMouseLookOnMove = true,
             centerCursorOnMove = true,
-            mouseLookDelayMs = 1000,
+            mouseLookDelayMs = 0,
         },
         bindingEngine = {
             transport = "click", -- direct | click | override
@@ -300,10 +300,51 @@ function GPX:InitDB()
         db._variantDefaultsApplied = tostring(title)
     end
 
-    -- First install bootstrap: default to enabled unless the user has already been bootstrapped.
+    -- First install bootstrap marker.
     if db._bootstrapped == nil then
-        db.enabled = true
         db._bootstrapped = true
+    end
+
+    -- Per-character opt-in gate:
+    -- New/unconfigured characters should not auto-enable just because another
+    -- character was enabled. Preserve enabled state only when this character
+    -- already has a calibrated setup.
+    if db.characterOptIn == nil then
+        local profileName = db.profile or "default"
+        local profile = db.profiles and (db.profiles[profileName] or db.profiles["default"]) or nil
+        local setup = profile and profile.setup or nil
+        local hasCalibratedSetup = false
+
+        if setup and setup.jumpKey and setup.jumpKey ~= "" and setup.modifiers and #setup.modifiers >= 3 then
+            local firstActionSlot = tonumber(setup.firstActionSlot) or 1
+            if firstActionSlot < 1 then firstActionSlot = 1 end
+            if firstActionSlot > 12 then firstActionSlot = 12 end
+
+            local buttonCount = tonumber(setup.buttonCount) or 12
+            if buttonCount < 1 then buttonCount = 1 end
+            if buttonCount > 12 then buttonCount = 12 end
+
+            local lastActionSlot = firstActionSlot + buttonCount - 1
+            if lastActionSlot > 12 then
+                lastActionSlot = 12
+            end
+
+            hasCalibratedSetup = true
+            for slotIndex = firstActionSlot, lastActionSlot do
+                local keyIndex = slotIndex - firstActionSlot + 1
+                local key = setup.actionKeys and setup.actionKeys[keyIndex] or nil
+                if not key or key == "" then
+                    hasCalibratedSetup = false
+                    break
+                end
+            end
+        end
+
+        db.characterOptIn = (db.enabled == true) and hasCalibratedSetup
+    end
+
+    if db.characterOptIn ~= true then
+        db.enabled = false
     end
 
     -- Migration: default to WoWX-only HUD by hiding Blizzard micro menu and bag bar unless user re-enables.
@@ -311,8 +352,13 @@ function GPX:InitDB()
     db.ui.visualBar = db.ui.visualBar or {}
     if db._visualBarDefaultsV2 == nil then
         db.ui.visualBar.keepBags = false
-        db.ui.visualBar.keepMicroMenu = false
+        db.ui.visualBar.keepMicroMenu = true
         db._visualBarDefaultsV2 = true
+    end
+
+    if db._visualBarDefaultsV4 == nil then
+        db.ui.visualBar.keepMicroMenu = true
+        db._visualBarDefaultsV4 = true
     end
 
     -- Migration: default modifier behavior to page switching.
@@ -379,14 +425,29 @@ function GPX:GetCombatDisplayLabels(styleId)
     return style.combatDisplayLabels or style.combatSlotLabels or style.slotLabels or {}
 end
 
+function GPX:GetEffectiveControllerStyleId(setup, profile)
+    profile = profile or self:GetProfile()
+
+    return (setup and setup.deviceId)
+        or (profile and profile.inputStyle)
+        or (profile and profile.setup and profile.setup.deviceId)
+        or "generic"
+end
+
 function GPX:GetConfirmLabel(styleId)
     local style = self:GetInputStyle(styleId)
     return style.confirmLabel or "Jump / Confirm"
 end
 
-function GPX:GetConfiguredActionButtonCount(setup)
+function GPX:GetConfiguredActionButtonCount(setup, profile)
     local configured = tonumber(setup and setup.actionButtonCount)
-    local labels = self:GetCombatSlotLabels(setup and setup.deviceId)
+    local styleId = setup and setup.deviceId
+
+    if self:IsControllerEnabled() then
+        styleId = self:GetEffectiveControllerStyleId(setup, profile)
+    end
+
+    local labels = self:GetCombatSlotLabels(styleId)
 
     if self:IsControllerEnabled() and #labels > 0 then
         if configured and configured > 0 then
@@ -400,6 +461,64 @@ function GPX:GetConfiguredActionButtonCount(setup)
     end
 
     return 12
+end
+
+function GPX:FindBindingKeyForCommand(bindings, command)
+    if not bindings or not command or command == "" then
+        return nil
+    end
+
+    for key, boundCommand in pairs(bindings) do
+        if boundCommand == command then
+            return key
+        end
+    end
+
+    return nil
+end
+
+function GPX:FindPreferredBindingKeyForCommand(bindings, command, preferredKeys)
+    if not bindings or not command or command == "" then
+        return nil
+    end
+
+    for _, key in ipairs(preferredKeys or {}) do
+        if key and bindings[key] == command then
+            return key
+        end
+    end
+
+    return self:FindBindingKeyForCommand(bindings, command)
+end
+
+function GPX:GetControllerFallbackActionKeys(slotCount)
+    local keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
+    local count = math.max(1, math.min(tonumber(slotCount) or #keys, #keys))
+    local out = {}
+
+    for index = 1, count do
+        out[index] = keys[index]
+    end
+
+    return out
+end
+
+function GPX:GetLegacyControllerActionKey(profile, slotIndex)
+    profile = profile or self:GetProfile()
+    local preferred = self:GetControllerFallbackActionKeys(self:GetConfiguredActionButtonCount(nil, profile))
+    local numericKey = preferred[tonumber(slotIndex) or 0]
+    local fallbackFKey = "F" .. tostring(slotIndex)
+
+    return self:FindPreferredBindingKeyForCommand(
+        profile and profile.bindings,
+        "ACTIONBUTTON" .. tostring(slotIndex),
+        { numericKey, fallbackFKey }
+    )
+end
+
+function GPX:GetLegacyControllerUtilityKey(profile, command)
+    profile = profile or self:GetProfile()
+    return self:FindBindingKeyForCommand(profile and profile.bindings, command)
 end
 
 function GPX:GetActionKeyBaseSlot(setup)
@@ -568,7 +687,7 @@ function GPX:GetControllerConfig()
         cfg.centerCursorOnMove = true
     end
     if tonumber(cfg.mouseLookDelayMs) == nil then
-        cfg.mouseLookDelayMs = 1000
+        cfg.mouseLookDelayMs = 0
     end
 
     return cfg
@@ -690,6 +809,34 @@ function GPX:SetControllerMovementState(isMoving)
     self:StopControllerMouseLook()
 end
 
+do
+    local pollFrame = CreateFrame("Frame")
+    local wasMoving = false
+    local pollTimer = 0
+    local pollInterval = 0.1
+    local speedThreshold = 0.5
+
+    pollFrame:SetScript("OnUpdate", function(_, elapsed)
+        pollTimer = pollTimer + elapsed
+        if pollTimer < pollInterval then
+            return
+        end
+
+        pollTimer = 0
+        local speed = GetUnitSpeed and GetUnitSpeed("player") or 0
+        local isMoving = speed > speedThreshold
+
+        if isMoving ~= wasMoving then
+            wasMoving = isMoving
+            GPX:SetControllerMovementState(isMoving)
+        elseif isMoving and GPX:ShouldUseControllerMouseLook()
+            and not GPX.controllerMouseLookActive
+            and not GPX.controllerMovePending then
+            GPX:StartControllerMouseLook()
+        end
+    end)
+end
+
 function GPX:ApplySetup(setup)
     local profile = self:GetProfile()
     if not profile then
@@ -787,14 +934,14 @@ function GPX:GetOrCreateSetup(profile)
         lookKey = nil,
         actionKeys = {},
         actionKeyBaseSlot = 2,
-        actionButtonCount = 12,
+        actionButtonCount = 8,
     }
     profile.setup.movement = profile.setup.movement or {}
     profile.setup.modifiers = profile.setup.modifiers or {}
     profile.setup.actionKeys = profile.setup.actionKeys or {}
     profile.setup.deviceId = profile.setup.deviceId or profile.inputStyle or "keyboard"
     profile.setup.actionKeyBaseSlot = tonumber(profile.setup.actionKeyBaseSlot) or 2
-    profile.setup.actionButtonCount = tonumber(profile.setup.actionButtonCount) or 12
+    profile.setup.actionButtonCount = tonumber(profile.setup.actionButtonCount) or 8
     return profile.setup
 end
 
@@ -827,9 +974,7 @@ end
 
 function GPX:PrintDiagnostics()
     local lines = self:CollectDiagnosticsLines()
-    for _, line in ipairs(lines) do
-        self:Print(line)
-    end
+    self:SetOutputWindowLines(lines, "Diagnostics Snapshot", true)
 end
 
 function GPX:GetDiagnosticsConfig()
@@ -878,7 +1023,7 @@ function GPX:CollectDiagnosticsLines()
     end
 
     add("Diagnostics:")
-    add("  BuildTag: 2026-05-08-conditional-bonusbar-route-v1")
+    add("  BuildTag: 2026-05-16-click-proxy-rescue-v2")
     add("  Enabled: " .. tostring(self.db and self.db.enabled))
     add("  Slash: /wowx registered (legacy aliases active)")
     add("  SetupWizard: " .. frameState(self.SetupWizard, "wizard"))
@@ -896,6 +1041,16 @@ function GPX:CollectDiagnosticsLines()
             .. " useSetupKeys=" .. tostring(ecfg.useSetupKeys)
             .. " claimModifiers=" .. tostring(ecfg.claimModifiers)
             .. " claimCombo=" .. tostring(ecfg.claimCombo))
+    end
+    add("  AutoSelfCast: " .. tostring(GetCVar and GetCVar("autoSelfCast") or "n/a")
+        .. "  SelfCastMod=" .. tostring(IsModifiedClick and IsModifiedClick("SELFCAST") or "n/a"))
+    add("  ClickTransport: " .. tostring(self.ClickTransport and "loaded" or "missing"))
+    if self.ClickTransport then
+        local pcount = 0
+        for _ in pairs(self.ClickTransport.proxyButtons or {}) do
+            pcount = pcount + 1
+        end
+        add("  ClickTransport proxies: " .. tostring(pcount))
     end
     if self.VisualBar and self.VisualBar.GetCurrentState then
         add("  ActiveModifierState: " .. tostring(self.VisualBar:GetCurrentState() or ""))
@@ -1218,10 +1373,8 @@ function GPX:PrintLastDiagnosticRun()
         return
     end
 
-    self:Print("Diag run: " .. tostring(run.at) .. "  label=" .. tostring(run.label))
-    for _, line in ipairs(run.lines) do
-        self:Print(line)
-    end
+    local title = "Diag run: " .. tostring(run.at) .. "  label=" .. tostring(run.label)
+    self:SetOutputWindowLines(run.lines, title, true)
 end
 
 function GPX:BuildDiagText(lines, runTitle)
@@ -1424,6 +1577,245 @@ function GPX:ToggleDiagWindow()
     end
 end
 
+function GPX:BuildOutputText(lines)
+    local out = {}
+    out[#out + 1] = self.brand .. " Output"
+    out[#out + 1] = ""
+    for _, line in ipairs(lines or {}) do
+        out[#out + 1] = tostring(line)
+    end
+    return table.concat(out, "\n")
+end
+
+function GPX:SetOutputWindowLines(lines, title, autoSelect)
+    local merged = {}
+    if title and title ~= "" then
+        merged[#merged + 1] = tostring(title)
+        merged[#merged + 1] = ""
+    end
+    for _, line in ipairs(lines or {}) do
+        merged[#merged + 1] = tostring(line)
+    end
+
+    self.outputLog = merged
+    local frame = self:ShowOutputWindow()
+    if frame and frame._wowxOutputRender then
+        frame._wowxOutputRender()
+    end
+
+    if autoSelect and frame and frame._wowxOutputEdit then
+        local edit = frame._wowxOutputEdit
+        local text = edit:GetText() or ""
+        edit:SetFocus()
+        edit:HighlightText(0, string.len(text))
+        if frame._wowxOutputStatus then
+            frame._wowxOutputStatus:SetText("Text selected. Press Ctrl+C.")
+        end
+    end
+end
+
+function GPX:BeginOutputRenderBatch()
+    self._outputRenderBatchDepth = (self._outputRenderBatchDepth or 0) + 1
+end
+
+function GPX:EndOutputRenderBatch()
+    local depth = (self._outputRenderBatchDepth or 0) - 1
+    if depth < 0 then
+        depth = 0
+    end
+    self._outputRenderBatchDepth = depth
+
+    if depth == 0 and self._outputRenderPending then
+        self._outputRenderPending = nil
+        local frame = self.outputWindow
+        if frame and frame:IsShown() and frame._wowxOutputRender then
+            frame._wowxOutputRender()
+        end
+    end
+end
+
+function GPX:AppendOutputLine(line)
+    self.outputLog = self.outputLog or {}
+    self.outputLogMax = tonumber(self.outputLogMax) or 500
+
+    table.insert(self.outputLog, tostring(line or ""))
+    while #self.outputLog > self.outputLogMax do
+        table.remove(self.outputLog, 1)
+    end
+
+    if (self._outputRenderBatchDepth or 0) > 0 then
+        self._outputRenderPending = true
+    else
+        local frame = self.outputWindow
+        if frame and frame:IsShown() and frame._wowxOutputRender then
+            frame._wowxOutputRender()
+        end
+    end
+end
+
+function GPX:EnsureOutputWindow()
+    if self.outputWindow then
+        return self.outputWindow
+    end
+
+    local frame = CreateFrame("Frame", "WoWXOutputWindow", UIParent)
+    frame:SetWidth(900)
+    frame:SetHeight(460)
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, -30)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", function(self)
+        self:StartMoving()
+    end)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+    end)
+    frame:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 24,
+        insets = { left = 8, right = 8, top = 8, bottom = 8 },
+    })
+    frame:SetBackdropColor(0, 0, 0, 0.95)
+    frame:Hide()
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
+    title:SetText(self.brand .. " Output Window")
+
+    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4)
+    subtitle:SetText("Selectable WoWX output mirror. Use Select All, then Ctrl+C.")
+
+    local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+
+    local clearButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    clearButton:SetWidth(100)
+    clearButton:SetHeight(22)
+    clearButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -44)
+    clearButton:SetText("Clear")
+
+    local copyButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    copyButton:SetWidth(100)
+    copyButton:SetHeight(22)
+    copyButton:SetPoint("LEFT", clearButton, "RIGHT", 8, 0)
+    copyButton:SetText("Select All")
+
+    local statusText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    statusText:SetPoint("LEFT", copyButton, "RIGHT", 12, 0)
+    statusText:SetText("")
+    statusText:SetTextColor(0.8, 0.9, 1.0)
+
+    local contentBorder = CreateFrame("Frame", nil, frame)
+    contentBorder:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -72)
+    contentBorder:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+    contentBorder:SetBackdrop({
+        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    contentBorder:SetBackdropColor(0.02, 0.03, 0.05, 0.95)
+    contentBorder:SetBackdropBorderColor(0.2, 0.34, 0.52, 0.85)
+
+    local scroll = CreateFrame("ScrollFrame", "WoWXOutputScrollFrame", contentBorder, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", contentBorder, "TOPLEFT", 8, -8)
+    scroll:SetPoint("BOTTOMRIGHT", contentBorder, "BOTTOMRIGHT", -28, 8)
+
+    local edit = CreateFrame("EditBox", "WoWXOutputTextBox", scroll)
+    edit:SetMultiLine(true)
+    edit:SetAutoFocus(false)
+    edit:EnableMouse(true)
+    edit:SetFontObject(ChatFontNormal)
+    edit:SetWidth(840)
+    edit:SetTextInsets(4, 4, 4, 4)
+    edit:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+
+    local function getOutputEditHeight(box)
+        if box and box.GetStringHeight then
+            local ok, measured = pcall(box.GetStringHeight, box)
+            if ok and measured and measured > 0 then
+                return measured + 24
+            end
+        end
+
+        local text = (box and box.GetText and box:GetText()) or ""
+        local lineCount = 1
+        for _ in string.gmatch(text, "\n") do
+            lineCount = lineCount + 1
+        end
+
+        local _, fontHeight = (box and box.GetFont and box:GetFont())
+        local rowHeight = tonumber(fontHeight) or 12
+        local fallback = (lineCount * rowHeight) + 24
+        if fallback < 1 then
+            fallback = 1
+        end
+        return fallback
+    end
+
+    edit:SetScript("OnTextChanged", function(self)
+        self:SetHeight(getOutputEditHeight(self))
+    end)
+    scroll:SetScrollChild(edit)
+
+    local function renderOutput()
+        local lines = GPX.outputLog or {}
+        edit:SetText(GPX:BuildOutputText(lines))
+        edit:SetCursorPosition(string.len(edit:GetText() or ""))
+        scroll:SetVerticalScroll(edit:GetHeight())
+        statusText:SetText("Lines: " .. tostring(#lines))
+    end
+
+    clearButton:SetScript("OnClick", function()
+        GPX.outputLog = {}
+        renderOutput()
+        statusText:SetText("Cleared output.")
+    end)
+
+    copyButton:SetScript("OnClick", function()
+        edit:SetFocus()
+        local text = edit:GetText() or ""
+        edit:HighlightText(0, string.len(text))
+        statusText:SetText("Text selected. Press Ctrl+C.")
+    end)
+
+    frame._wowxOutputRender = renderOutput
+    frame._wowxOutputEdit = edit
+    frame._wowxOutputStatus = statusText
+
+    self.outputWindow = frame
+    return frame
+end
+
+function GPX:ShowOutputWindow()
+    local frame = self:EnsureOutputWindow()
+    frame:Show()
+    if frame._wowxOutputRender then
+        frame._wowxOutputRender()
+    end
+    frame:Raise()
+    return frame
+end
+
+function GPX:ToggleOutputWindow()
+    local frame = self:EnsureOutputWindow()
+    if frame:IsShown() then
+        frame:Hide()
+    else
+        self:ShowOutputWindow()
+    end
+end
+
 -- ============================================================
 -- BINDING ENGINE
 -- WoWX uses session override-click bindings to its secure bar buttons.
@@ -1469,6 +1861,21 @@ local blizzardDirectKeysToClear = {
     "SHIFT-DOWN",
     "SHIFT-1",
     "SHIFT-2",
+    -- Suppress stock Ctrl+Q/E audio toggles while controller modifiers are active.
+    "CTRL-Q",
+    "CTRL-E",
+    -- Suppress default bag toggles so WoWX owns bag UX.
+    "B",
+    "SHIFT-B",
+}
+
+local blizzardBagCommandsToClear = {
+    "TOGGLEBACKPACK",
+    "OPENALLBAGS",
+    "TOGGLEBAG1",
+    "TOGGLEBAG2",
+    "TOGGLEBAG3",
+    "TOGGLEBAG4",
 }
 
 function GPX:IsSpecialActionStateActive()
@@ -1754,22 +2161,33 @@ function GPX:ApplyBindings(silent)
     end
 
     local profile = self:GetProfile()
-    local needsCalibration = useSetupKeys
-    if needsCalibration and not self:HasCalibratedSetup(profile) then
-        if next(self.appliedBindings) then
-            self:ClearBindings()
+    local hasLegacyProfileBindings = profile and profile.bindings and next(profile.bindings)
+    local needsCalibration = useSetupKeys and not hasLegacyProfileBindings
+    local useLegacyProfileBindings = false
+    if useSetupKeys and hasLegacyProfileBindings then
+        useLegacyProfileBindings = true
+    elseif needsCalibration and not self:HasCalibratedSetup(profile) then
+        if hasLegacyProfileBindings then
+            useLegacyProfileBindings = true
+            if not silent then
+                self:Print("Calibration missing; using legacy profile bindings.")
+            end
+        else
+            if next(self.appliedBindings) then
+                self:ClearBindings()
+            end
+            self:Print("WoWX is enabled, but no calibration is active yet. Run /wowx init to capture your layout.")
+            if self.VisualBar then
+                self.VisualBar:UpdateAll()
+            end
+            if self.ActionButtons then
+                self.ActionButtons:UpdateAll()
+            end
+            if self.SettingsUI then
+                self.SettingsUI:Refresh()
+            end
+            return
         end
-        self:Print("WoWX is enabled, but no calibration is active yet. Run /wowx init to capture your layout.")
-        if self.VisualBar then
-            self.VisualBar:UpdateAll()
-        end
-        if self.ActionButtons then
-            self.ActionButtons:UpdateAll()
-        end
-        if self.SettingsUI then
-            self.SettingsUI:Refresh()
-        end
-        return
     end
 
     if InCombatLockdown() then
@@ -1796,6 +2214,7 @@ function GPX:ApplyBindings(silent)
     end
 
     self.isApplyingBindings = true
+    self:BeginOutputRenderBatch()
 
     if self.VisualBar and self.VisualBar.CreateFrame then
         self.VisualBar:CreateFrame()
@@ -1810,6 +2229,8 @@ function GPX:ApplyBindings(silent)
     local useModifierPages = self.db and self.db.ui and self.db.ui.visualBar and self.db.ui.visualBar.modifierPages == true
     local numberRowKeys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
     local stickyPage = (not useSetupKeys) and (engine.stickyPage or "") or ""
+    local activeMenuKey = setup and setup.menuKey or nil
+    local activeLookKey = setup and setup.lookKey or nil
 
     local function rememberPrevious(key)
         if self.previousBindings[key] == nil then
@@ -1845,6 +2266,13 @@ function GPX:ApplyBindings(silent)
     local function applyDirectBinding(key, command)
         rememberPrevious(key)
 
+        local currentAction = tostring(GetBindingAction(key) or "")
+        if currentAction == tostring(command or "") then
+            self.appliedBindings[key] = { mode = "binding", command = command }
+            ok = ok + 1
+            return true
+        end
+
         if SetBinding(key, command) then
             self.appliedBindings[key] = { mode = "binding", command = command }
             ok = ok + 1
@@ -1860,9 +2288,14 @@ function GPX:ApplyBindings(silent)
             local keys = { GetBindingKey(command) }
             for _, key in ipairs(keys) do
                 if key and key ~= "" then
+                    local currentAction = tostring(GetBindingAction(key) or "")
+                    if currentAction == "" then
+                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")", cleared = true }
+                    else
                     rememberPrevious(key)
                     if SetBinding(key, nil) then
-                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")" }
+                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")", cleared = true }
+                    end
                     end
                 end
             end
@@ -1874,9 +2307,14 @@ function GPX:ApplyBindings(silent)
             local keys = { GetBindingKey(command) }
             for _, key in ipairs(keys) do
                 if key and key ~= "" then
+                    local currentAction = tostring(GetBindingAction(key) or "")
+                    if currentAction == "" then
+                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")", cleared = true }
+                    else
                     rememberPrevious(key)
                     if SetBinding(key, nil) then
-                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")" }
+                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")", cleared = true }
+                    end
                     end
                 end
             end
@@ -1886,11 +2324,56 @@ function GPX:ApplyBindings(silent)
     local function suppressBlizzardDirectKeys()
         for _, key in ipairs(blizzardDirectKeysToClear) do
             if key and key ~= "" then
+                local currentAction = tostring(GetBindingAction(key) or "")
+                if currentAction == "" then
+                    self.appliedBindings[key] = { mode = "binding", command = "(cleared direct key " .. key .. ")", cleared = true }
+                else
                 rememberPrevious(key)
                 if SetBinding(key, nil) then
-                    self.appliedBindings[key] = { mode = "binding", command = "(cleared direct key " .. key .. ")" }
+                    self.appliedBindings[key] = { mode = "binding", command = "(cleared direct key " .. key .. ")", cleared = true }
+                end
                 end
             end
+        end
+    end
+
+    local function suppressBlizzardBagBinds()
+        for _, command in ipairs(blizzardBagCommandsToClear) do
+            local keys = { GetBindingKey(command) }
+            for _, key in ipairs(keys) do
+                if key and key ~= "" then
+                    local currentAction = tostring(GetBindingAction(key) or "")
+                    if currentAction == "" then
+                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")", cleared = true }
+                    else
+                    rememberPrevious(key)
+                    if SetBinding(key, nil) then
+                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")", cleared = true }
+                    end
+                    end
+                end
+            end
+        end
+    end
+
+    local function bindWoWXBagHotkeys()
+        if not self.ActionButtons or not self.ActionButtons.bagButton then
+            return
+        end
+
+        local cfg = self.db and self.db.ui and self.db.ui.actionButtons or nil
+        if not cfg or cfg.enabled == false or cfg.showBags == false then
+            return
+        end
+
+        rememberPrevious("B")
+        if SetBindingClick("B", "WoWXUtilityBagButton", "LeftButton") then
+            self.appliedBindings["B"] = { mode = "binding", command = "CLICK WoWXUtilityBagButton LeftButton" }
+        end
+
+        rememberPrevious("SHIFT-B")
+        if SetBindingClick("SHIFT-B", "WoWXUtilityBagButton", "RightButton") then
+            self.appliedBindings["SHIFT-B"] = { mode = "binding", command = "CLICK WoWXUtilityBagButton RightButton" }
         end
     end
 
@@ -1899,7 +2382,8 @@ function GPX:ApplyBindings(silent)
             return false
         end
 
-        if self.appliedBindings[key] then
+        local existing = self.appliedBindings[key]
+        if existing and not (type(existing) == "table" and existing.cleared) then
             return true
         end
 
@@ -1907,10 +2391,17 @@ function GPX:ApplyBindings(silent)
             return applyDirectBinding(key, command)
         end
 
+        if not GPX.ClickTransport then
+            self:Print("|cffff4444Click transport missing:|r cannot bind " .. tostring(key) .. " -> " .. tostring(command))
+            fail = fail + 1
+            return false
+        end
+
         local buttonName = nil
         local isBaseCommand = type(command) == "string" and command:find("^ACTIONBUTTON%d+$")
-        if not isBaseCommand and self.VisualBar and self.VisualBar.GetBindingProxyButtonName then
-            buttonName = self.VisualBar:GetBindingProxyButtonName(command)
+        if not isBaseCommand then
+            GPX.ClickTransport:EnsureProxyButton(command)
+            buttonName = GPX.ClickTransport:ProxyButtonName(command)
         end
         if not buttonName or buttonName == "" then
             buttonName = "WoWXActionButton" .. tostring(slotIndex or "")
@@ -1935,6 +2426,15 @@ function GPX:ApplyBindings(silent)
         end
 
         rememberPrevious(key)
+
+        local desiredClick = "CLICK " .. buttonName .. ":LeftButton"
+        local currentAction = tostring(GetBindingAction(key) or "")
+        if engine.transport ~= "override" and currentAction == desiredClick then
+            self.appliedBindings[key] = { mode = "binding", command = desiredClick }
+            ok = ok + 1
+            return true
+        end
+
         if SetBindingClick(key, buttonName, "LeftButton") then
             self.appliedBindings[key] = { mode = "binding", command = "CLICK " .. buttonName }
             ok = ok + 1
@@ -1950,8 +2450,15 @@ function GPX:ApplyBindings(silent)
             return
         end
 
-        local baseCommand = "ACTIONBUTTON" .. slotIndex
         local modifiers = { "SHIFT", "ALT", "CTRL" }
+        local function commandForCell(state)
+            if GPX.ClickTransport and GPX.ClickTransport.CommandForCell then
+                return GPX.ClickTransport:CommandForCell(state, slotIndex, useModifierPages)
+            end
+            return "ACTIONBUTTON" .. slotIndex
+        end
+
+        local baseCommand = commandForCell("")
         local bindings = {
             { key = key, command = baseCommand, slotIndex = slotIndex },
         }
@@ -1959,33 +2466,33 @@ function GPX:ApplyBindings(silent)
         if engine.claimModifiers and modifiers[1] and modifiers[1] ~= "" then
             bindings[#bindings + 1] = {
                 key = self:BuildModifiedKey({ modifiers[1] }, key),
-                command = useModifierPages and ("MULTIACTIONBAR2BUTTON" .. slotIndex) or baseCommand,
+                command = commandForCell("SHIFT"),
                 slotIndex = slotIndex,
             }
         end
         if engine.claimModifiers and modifiers[2] and modifiers[2] ~= "" then
             bindings[#bindings + 1] = {
                 key = self:BuildModifiedKey({ modifiers[2] }, key),
-                command = useModifierPages and ("MULTIACTIONBAR1BUTTON" .. slotIndex) or baseCommand,
+                command = commandForCell("ALT"),
                 slotIndex = slotIndex,
             }
         end
         if engine.claimModifiers and modifiers[3] and modifiers[3] ~= "" then
             bindings[#bindings + 1] = {
                 key = self:BuildModifiedKey({ modifiers[3] }, key),
-                command = useModifierPages and ("MULTIACTIONBAR4BUTTON" .. slotIndex) or baseCommand,
+                command = commandForCell("CTRL"),
                 slotIndex = slotIndex,
             }
         end
         if engine.claimModifiers and engine.claimCombo and modifiers[1] and modifiers[1] ~= "" and modifiers[2] and modifiers[2] ~= "" then
             bindings[#bindings + 1] = {
                 key = self:BuildModifiedKey({ modifiers[1], modifiers[2] }, key),
-                command = useModifierPages and ("MULTIACTIONBAR3BUTTON" .. slotIndex) or baseCommand,
+                command = commandForCell("SHIFT-ALT"),
                 slotIndex = slotIndex,
             }
             bindings[#bindings + 1] = {
                 key = self:BuildModifiedKey({ modifiers[2], modifiers[1] }, key),
-                command = useModifierPages and ("MULTIACTIONBAR3BUTTON" .. slotIndex) or baseCommand,
+                command = commandForCell("SHIFT-ALT"),
                 slotIndex = slotIndex,
             }
         end
@@ -2000,19 +2507,49 @@ function GPX:ApplyBindings(silent)
     end
 
     local function commandForStickyPage(slotIndex, page)
-        if page == "SHIFT" then
-            return "MULTIACTIONBAR2BUTTON" .. slotIndex
-        elseif page == "ALT" then
-            return "MULTIACTIONBAR1BUTTON" .. slotIndex
-        elseif page == "CTRL" then
-            return "MULTIACTIONBAR4BUTTON" .. slotIndex
-        elseif page == "SHIFT-ALT" then
-            return "MULTIACTIONBAR3BUTTON" .. slotIndex
+        if GPX.ClickTransport and GPX.ClickTransport.CommandForCell then
+            return GPX.ClickTransport:CommandForCell(page, slotIndex, true)
         end
-        return "ACTIONBUTTON" .. slotIndex
+        return page == "SHIFT" and ("MULTIACTIONBAR2BUTTON" .. slotIndex)
+            or page == "ALT" and ("MULTIACTIONBAR1BUTTON" .. slotIndex)
+            or page == "CTRL" and ("MULTIACTIONBAR4BUTTON" .. slotIndex)
+            or page == "SHIFT-ALT" and ("MULTIACTIONBAR3BUTTON" .. slotIndex)
+            or ("ACTIONBUTTON" .. slotIndex)
     end
 
-    if useSetupKeys then
+    suppressBlizzardPageSwitchBinds()
+    suppressBlizzardCombatUiBinds()
+    suppressBlizzardBagBinds()
+    suppressBlizzardDirectKeys()
+
+    local function applyLegacyProfileBindings()
+        if not profile or not profile.bindings then
+            return
+        end
+
+        if self:IsControllerEnabled() then
+            local lastActionSlot = self:GetConfiguredActionButtonCount(setup, profile)
+            for slotIndex = 1, lastActionSlot do
+                bindToButton(self:GetLegacyControllerActionKey(profile, slotIndex), slotIndex)
+            end
+
+            activeMenuKey = activeMenuKey or self:GetLegacyControllerUtilityKey(profile, "TOGGLEGAMEMENU")
+            activeLookKey = activeLookKey or self:GetLegacyControllerUtilityKey(profile, "CAMERAORSELECTORMOVE")
+            return
+        end
+
+        for key, command in pairs(profile.bindings) do
+            if type(command) == "string" and (command:find("^ACTIONBUTTON%d+$") or command:find("^MULTIACTIONBAR[1-4]BUTTON%d+$")) then
+                applySingleBinding(key, command, tonumber(command:match("(%d+)$")))
+            else
+                applyDirectBinding(key, command)
+            end
+        end
+    end
+
+    if useLegacyProfileBindings then
+        applyLegacyProfileBindings()
+    elseif useSetupKeys then
         local firstActionSlot = self:GetActionKeyBaseSlot(setup)
         local lastActionSlot = self:GetConfiguredActionButtonCount(setup)
 
@@ -2035,53 +2572,52 @@ function GPX:ApplyBindings(silent)
         end
     end
 
-    suppressBlizzardPageSwitchBinds()
-    suppressBlizzardCombatUiBinds()
+    bindWoWXBagHotkeys()
 
-    if engine.bindMenu and self:IsControllerEnabled() and setup and setup.menuKey and setup.menuKey ~= "" then
+    if engine.bindMenu and self:IsControllerEnabled() and activeMenuKey and activeMenuKey ~= "" then
         self:EnsureMenuLauncherButtons()
         if engine.transport == "override" then
-            if SetOverrideBindingClick(owner, true, setup.menuKey, "WoWXMenuKeyButton", "LeftButton") then
-                self.appliedBindings[setup.menuKey] = { mode = "override", command = "CLICK WoWXMenuKeyButton" }
+            if SetOverrideBindingClick(owner, true, activeMenuKey, "WoWXMenuKeyButton", "LeftButton") then
+                self.appliedBindings[activeMenuKey] = { mode = "override", command = "CLICK WoWXMenuKeyButton" }
                 ok = ok + 1
             elseif engine.overrideFallback then
-                rememberPrevious(setup.menuKey)
-                if SetBindingClick(setup.menuKey, "WoWXMenuKeyButton", "LeftButton") then
-                    self.appliedBindings[setup.menuKey] = { mode = "binding", command = "CLICK WoWXMenuKeyButton" }
+                rememberPrevious(activeMenuKey)
+                if SetBindingClick(activeMenuKey, "WoWXMenuKeyButton", "LeftButton") then
+                    self.appliedBindings[activeMenuKey] = { mode = "binding", command = "CLICK WoWXMenuKeyButton" }
                     ok = ok + 1
                 else
-                    self:Print("|cffff4444Bind failed:|r " .. setup.menuKey .. " → WoWXMenuKeyButton")
+                    self:Print("|cffff4444Bind failed:|r " .. activeMenuKey .. " → WoWXMenuKeyButton")
                     fail = fail + 1
                 end
             else
-                self:Print("|cffff4444Override bind failed:|r " .. setup.menuKey .. " → WoWXMenuKeyButton")
+                self:Print("|cffff4444Override bind failed:|r " .. activeMenuKey .. " → WoWXMenuKeyButton")
                 fail = fail + 1
             end
         else
-            rememberPrevious(setup.menuKey)
-            if SetBindingClick(setup.menuKey, "WoWXMenuKeyButton", "LeftButton") then
-                self.appliedBindings[setup.menuKey] = { mode = "binding", command = "CLICK WoWXMenuKeyButton" }
+            rememberPrevious(activeMenuKey)
+            if SetBindingClick(activeMenuKey, "WoWXMenuKeyButton", "LeftButton") then
+                self.appliedBindings[activeMenuKey] = { mode = "binding", command = "CLICK WoWXMenuKeyButton" }
                 ok = ok + 1
             else
-                self:Print("|cffff4444Bind failed:|r " .. setup.menuKey .. " → WoWXMenuKeyButton")
+                self:Print("|cffff4444Bind failed:|r " .. activeMenuKey .. " → WoWXMenuKeyButton")
                 fail = fail + 1
             end
         end
     end
 
-    if self:IsControllerEnabled() and setup and setup.lookKey and setup.lookKey ~= "" then
+    if self:IsControllerEnabled() and activeLookKey and activeLookKey ~= "" then
         if engine.transport == "override" then
-            if SetOverrideBinding(owner, true, setup.lookKey, "CAMERAORSELECTORMOVE") then
-                self.appliedBindings[setup.lookKey] = { mode = "override", command = "CAMERAORSELECTORMOVE" }
+            if SetOverrideBinding(owner, true, activeLookKey, "CAMERAORSELECTORMOVE") then
+                self.appliedBindings[activeLookKey] = { mode = "override", command = "CAMERAORSELECTORMOVE" }
                 ok = ok + 1
             elseif engine.overrideFallback then
-                applyDirectBinding(setup.lookKey, "CAMERAORSELECTORMOVE")
+                applyDirectBinding(activeLookKey, "CAMERAORSELECTORMOVE")
             else
-                self:Print("|cffff4444Override bind failed:|r " .. setup.lookKey .. " ΓåÆ CAMERAORSELECTORMOVE")
+                self:Print("|cffff4444Override bind failed:|r " .. activeLookKey .. " ΓåÆ CAMERAORSELECTORMOVE")
                 fail = fail + 1
             end
         else
-            applyDirectBinding(setup.lookKey, "CAMERAORSELECTORMOVE")
+            applyDirectBinding(activeLookKey, "CAMERAORSELECTORMOVE")
         end
     end
 
@@ -2102,6 +2638,7 @@ function GPX:ApplyBindings(silent)
         self.ActionButtons:UpdateAll()
     end
 
+    self:EndOutputRenderBatch()
     self.isApplyingBindings = false
 end
 
@@ -2154,10 +2691,6 @@ function GPX:RegisterSlash()
             GPX:Slash(msg)
         end)
         if not ok then
-
-    suppressBlizzardPageSwitchBinds()
-    suppressBlizzardCombatUiBinds()
-    suppressBlizzardDirectKeys()
             GPX:Print("Slash command failed: " .. tostring(err))
         end
 
@@ -2172,25 +2705,36 @@ function GPX:Slash(msg)
     cmd = (cmd or ""):lower()
 
     if cmd == "enable" then
+        self.db.characterOptIn = true
         self.db.enabled = true
         self:ApplyBindings()
 
     elseif cmd == "disable" then
+        self.db.characterOptIn = false
         self.db.enabled = false
         self:ClearBindings()
 
     elseif cmd == "toggle" then
         if self.db.enabled then
+            self.db.characterOptIn = false
             self.db.enabled = false
             self:ClearBindings()
         else
+            self.db.characterOptIn = true
             self.db.enabled = true
             self:ApplyBindings()
         end
 
     elseif cmd == "reload" then
-        self:ClearBindings()
-        self:ApplyBindings()
+        self:ClearBindings(true)
+        self:ApplyBindings(true)
+        if self.VisualBar then
+            self.VisualBar:UpdateAll()
+        end
+        if self.ActionButtons then
+            self.ActionButtons:UpdateAll()
+        end
+        self:Print("WoWX reload complete.")
 
     elseif cmd == "status" then
         self:PrintStatus()
@@ -2392,12 +2936,10 @@ function GPX:Slash(msg)
         if arg == "" or arg == "now" then
             self:PrintDiagnostics()
         elseif arg == "window" or arg == "win" or arg == "ui" then
-            self:ShowDiagWindow()
+            self:ShowOutputWindow()
         elseif arg == "stance" or arg == "aura" or arg == "forms" then
             local lines = self:CollectStanceDiagnosticsLines()
-            for _, line in ipairs(lines) do
-                self:Print(line)
-            end
+            self:SetOutputWindowLines(lines, "Stance Diagnostics", true)
         elseif arg == "verbose" or arg == "save" or arg == "run" then
             self:RunDiagnosticSpeedRun("verbose")
             self:PrintLastDiagnosticRun()
@@ -2409,7 +2951,7 @@ function GPX:Slash(msg)
         self:PrintLastDiagnosticRun()
 
     elseif cmd == "diagwin" or cmd == "diagwindow" then
-        self:ToggleDiagWindow()
+        self:ToggleOutputWindow()
 
     elseif cmd == "diagauto" then
         local arg = string.lower((rest or ""):match("^%s*(.-)%s*$"))
@@ -2424,6 +2966,33 @@ function GPX:Slash(msg)
             self:Print("Auto diagnostics on login/state changes: OFF")
         else
             self:Print("Usage: /wowx diagauto [on|off|status]")
+        end
+
+    elseif cmd == "out" or cmd == "output" or cmd == "console" then
+        local arg = string.lower((rest or ""):match("^%s*(.-)%s*$"))
+        if arg == "" or arg == "window" or arg == "show" then
+            self:ShowOutputWindow()
+        elseif arg == "toggle" then
+            self:ToggleOutputWindow()
+        elseif arg == "clear" then
+            self.outputLog = {}
+            if self.outputWindow and self.outputWindow._wowxOutputRender then
+                self.outputWindow._wowxOutputRender()
+            end
+            self:Print("Output window cleared.")
+        elseif arg == "copy" or arg == "select" or arg == "selectall" then
+            local frame = self:ShowOutputWindow()
+            if frame and frame._wowxOutputEdit then
+                local edit = frame._wowxOutputEdit
+                local text = edit:GetText() or ""
+                edit:SetFocus()
+                edit:HighlightText(0, string.len(text))
+                if frame._wowxOutputStatus then
+                    frame._wowxOutputStatus:SetText("Text selected. Press Ctrl+C.")
+                end
+            end
+        else
+            self:Print("Usage: /wowx out [window|toggle|clear|copy]")
         end
 
     elseif cmd == "bar" then
@@ -2519,15 +3088,15 @@ function GPX:PrintHelp()
     self:Print("  "..c.."/wowx page ..."..r.."           Keyboard bar switch mode (hold/shift/alt/ctrl/combo)")
     self:Print("  "..c.."/wowx selfcast [on|off]"..r.."  Toggle or set auto self-cast")
     self:Print("  "..c.."/wowx bindsync ..."..r.."       Save WoWX binding changes (on/off/account/character/now)")
-    self:Print("  "..c.."/wowx diag"..r.."               Quick on-the-spot diagnostics in chat")
-    self:Print("  "..c.."/wowx diag stance"..r.."        Print aura/stance frame and button diagnostics")
-    self:Print("  "..c.."/wowx diag verbose"..r.."       Save a new timestamped diag + print it now")
-    self:Print("  "..c.."/wowx diag window"..r.."        Open scrollable in-game diagnostics window")
-    self:Print("  "..c.."/wowx diagshow"..r.."           Print the most recent saved diagnostic run")
-    self:Print("  "..c.."/wowx diagwin"..r.."            Toggle diagnostics window")
+    self:Print("  "..c.."/wowx diag"..r.."               Capture diagnostics into selectable output window")
+    self:Print("  "..c.."/wowx diag stance"..r.."        Capture aura/stance frame diagnostics into output window")
+    self:Print("  "..c.."/wowx diag verbose"..r.."       Save a timestamped diag + load it into output window")
+    self:Print("  "..c.."/wowx diag window"..r.."        Open selectable output window")
+    self:Print("  "..c.."/wowx diagshow"..r.."           Load most recent saved diagnostic run into output window")
+    self:Print("  "..c.."/wowx diagwin"..r.."            Toggle selectable output window")
     self:Print("  "..c.."/wowx diagauto [on|off]"..r.."   Toggle auto diagnostics on login/state changes")
+    self:Print("  "..c.."/wowx out [window|toggle|clear|copy]"..r.." Open/copy selectable output mirror")
     self:Print("  "..c.."/wowx bar toggle"..r.."         Show or hide the visual WoWX bar")
-    self:Print("  "..c.."/wowx bar bagbar"..r.."         Toggle compact WoWX bag bar")
     self:Print("  "..c.."/wowx bar progress"..r.."       Toggle XP/Rep tracker strip")
     self:Print("  "..c.."/wowx bar progresslock"..r.."   Lock/unlock XP/Rep bar placement")
     self:Print("  "..c.."/wowx bar keepmenu"..r.."       Keep/hide Blizzard micro menu")
@@ -2574,6 +3143,7 @@ function GPX:PrintStatus()
 
     local state = self.db.enabled and "|cff00ff00ENABLED|r" or "|cffff4444DISABLED|r"
     self:Print("Status: " .. state)
+    self:Print("  Character opt-in: " .. ((self.db.characterOptIn == true) and "yes" or "no"))
     if self.db.machineNote and self.db.machineNote ~= "" then
         self:Print("  Machine: " .. self.db.machineNote)
     end
@@ -2667,6 +3237,7 @@ end
 -- ============================================================
 function GPX:Print(msg)
     DEFAULT_CHAT_FRAME:AddMessage("|cff6699ff" .. self.brand .. ":|r " .. tostring(msg))
+    self:AppendOutputLine(tostring(msg))
 end
 
 function GPX:LogError(msg)
@@ -2698,8 +3269,6 @@ mainFrame:RegisterEvent("UNIT_ENTERED_VEHICLE")
 mainFrame:RegisterEvent("UNIT_EXITED_VEHICLE")
 mainFrame:RegisterEvent("PLAYER_CONTROL_GAINED")
 mainFrame:RegisterEvent("PLAYER_CONTROL_LOST")
-mainFrame:RegisterEvent("PLAYER_STARTED_MOVING")
-mainFrame:RegisterEvent("PLAYER_STOPPED_MOVING")
 
 local function isThisAddon(addonName)
     if not addonName then
@@ -2767,10 +3336,6 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             GPX:ApplyBindings(true)
         end
         GPX:RefreshActionStateSafety(true)
-    elseif event == "PLAYER_STARTED_MOVING" then
-        GPX:SetControllerMovementState(true)
-    elseif event == "PLAYER_STOPPED_MOVING" then
-        GPX:SetControllerMovementState(false)
     elseif event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
         local unit = ...
         if unit == "player" then
