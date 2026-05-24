@@ -36,6 +36,8 @@ local modifierStates = {
     ["SHIFT-ALT"] = { title = "Combo", bar = "MULTIACTIONBAR3BUTTON" },
 }
 
+local cachedDisplayStates = { "", "SHIFT", "ALT", "CTRL", "SHIFT-ALT" }
+
 local placementRows = {
     { state = "", label = "Base" },
     { state = "SHIFT", label = "Shift" },
@@ -2548,6 +2550,27 @@ function Bar:GetPhysicalKeyForButton(index)
     return GPX:GetSetupActionKey(setup, index) or defaultKeyHints[index]
 end
 
+function Bar:GetControllerVisualForSlot(index)
+    if not GPX:IsControllerEnabled() then
+        return nil, nil
+    end
+
+    local setup = self:GetSetup()
+    local profile = self:GetProfile()
+    local styleId = GPX:GetEffectiveControllerStyleId(setup, profile)
+    local labels = GPX:GetCombatSlotLabels(styleId)
+    if not labels or #labels == 0 then
+        return nil, nil
+    end
+
+    local slotLabel = labels[tonumber(index) or 0]
+    if not slotLabel or slotLabel == "" then
+        return nil, nil
+    end
+
+    return slotLabel, GPX:GetButtonTexture(styleId, slotLabel)
+end
+
 function Bar:GetCommandForButton(index, state)
     if GPX.ClickTransport and GPX.ClickTransport.CommandForCell then
         return GPX.ClickTransport:CommandForCell(state, index, self:UseModifierPages())
@@ -2682,12 +2705,49 @@ function Bar:GetActionName(slot)
     return nil
 end
 
-function Bar:GetDisplayForButton(index, state)
+function Bar:IsNativeUtilitySlot(slot)
+    local actionSlot = tonumber(slot)
+    if not actionSlot or actionSlot < 1 then
+        return false
+    end
+    if GPX and GPX.SpellbookUI and GPX.SpellbookUI.IsNativeUtilityMacroAtSlot then
+        return GPX.SpellbookUI:IsNativeUtilityMacroAtSlot(actionSlot) == true
+    end
+    return false
+end
+
+function Bar:InvalidateDisplayLayerCache()
+    self._displayLayerCache = nil
+end
+
+function Bar:BuildDisplayLayerCache()
+    local cache = {}
+    for _, state in ipairs(cachedDisplayStates) do
+        cache[state] = {}
+        for index = 1, BAR_BUTTON_COUNT do
+            cache[state][index] = self:GetDisplayForButton(index, state, true)
+        end
+    end
+    self._displayLayerCache = cache
+end
+
+function Bar:GetDisplayForButton(index, state, bypassCache)
+    state = state or ""
+
+    if not bypassCache then
+        local cache = self._displayLayerCache
+        local stateCache = cache and cache[state]
+        if stateCache and stateCache[index] then
+            return stateCache[index]
+        end
+    end
+
     local style = self:GetStyle()
+    local setup = self:GetSetup()
+    local styleId = GPX:GetEffectiveControllerStyleId(setup, self:GetProfile())
     local slotLabel = "Action " .. index
     if GPX:IsControllerEnabled() then
-        local setup = self:GetSetup()
-        local labels = GPX:GetCombatDisplayLabels(GPX:GetEffectiveControllerStyleId(setup, self:GetProfile()))
+        local labels = GPX:GetCombatSlotLabels(styleId)
         if labels[index] then
             slotLabel = labels[index]
         end
@@ -2698,17 +2758,26 @@ function Bar:GetDisplayForButton(index, state)
     local command = self:GetCommandForButton(index, state)
 
     if not command then
-        return {
+        local out = {
             icon = nil,
             title = slotLabel,
             subtitle = state == "" and "Empty" or "No page",
             hint = "No mapped page",
         }
+        if not bypassCache then
+            self._displayLayerCache = self._displayLayerCache or {}
+            self._displayLayerCache[state] = self._displayLayerCache[state] or {}
+            self._displayLayerCache[state][index] = out
+        end
+        return out
     end
 
     local slot = self:ResolveCommand(command)
     local texture = slot and GetActionTexture(slot) or nil
-    return {
+    if (not texture) and slot and GPX and GPX.SpellbookUI and GPX.SpellbookUI.GetUtilityIconForActionSlot then
+        texture = GPX.SpellbookUI:GetUtilityIconForActionSlot(slot)
+    end
+    local out = {
         icon = texture,
         title = slotLabel,
         subtitle = "",
@@ -2716,6 +2785,12 @@ function Bar:GetDisplayForButton(index, state)
         command = command,
         hint = command,
     }
+    if not bypassCache then
+        self._displayLayerCache = self._displayLayerCache or {}
+        self._displayLayerCache[state] = self._displayLayerCache[state] or {}
+        self._displayLayerCache[state][index] = out
+    end
+    return out
 end
 
 function Bar:UpdateButtonTooltip(button)
@@ -2724,8 +2799,11 @@ function Bar:UpdateButtonTooltip(button)
     end
 
     GameTooltip:SetOwner(button, "ANCHOR_TOP")
-    if button.display.slot then
+    if button.display.slot and not self:IsNativeUtilitySlot(button.display.slot) then
         GameTooltip:SetAction(button.display.slot)
+    elseif button.display.slot then
+        GameTooltip:AddLine(button.display.title or "WoWX", 1.0, 0.96, 0.7)
+        GameTooltip:AddLine("Native utility placeholder", 0.82, 0.9, 1.0)
     else
         GameTooltip:AddLine(button.display.title or "WoWX", 1.0, 0.96, 0.7)
         GameTooltip:AddLine(button.display.subtitle or "", 0.85, 0.9, 1.0)
@@ -2740,8 +2818,10 @@ function Bar:UpdateButtonTooltip(button)
         GameTooltip:AddDoubleLine("Page", button.display.hint, 0.7, 0.82, 0.95, 0.82, 0.9, 0.98)
     end
 
-    if button.display and button.display.slot then
+    if button.display and button.display.slot and not self:IsNativeUtilitySlot(button.display.slot) then
         GameTooltip:AddLine("Drag spells, items, or macros here to place them on this WoWX page.", 0.75, 0.82, 0.9, true)
+    elseif button.display and button.display.slot then
+        GameTooltip:AddLine("This slot is reserved for a native keybind utility. Replace it with a spell to restore normal click casting.", 0.75, 0.82, 0.9, true)
     end
     GameTooltip:Show()
 end
@@ -3305,7 +3385,31 @@ function Bar:UpdateButtonVisualState(button)
         borderR, borderG, borderB, borderA = 0.22, 0.66, 0.98, 0.9
     end
 
+    local isNativeUtility = display and display.slot and self:IsNativeUtilitySlot(display.slot)
+
     if display and display.slot then
+        if isNativeUtility then
+            CooldownFrame_SetTimer(button.cooldown, 0, 0, 0)
+            button.icon:SetVertexColor(0.95, 0.95, 0.95)
+            button:SetAlpha(alpha)
+            if button.countText then
+                button.countText:SetText("")
+                button.countText:Hide()
+            end
+            if button.shine then
+                button.shine:Hide()
+            end
+            if button.slotPanel then
+                button.slotPanel:Hide()
+            end
+            if button.slotBorder then
+                button.slotBorder:Hide()
+            end
+            button:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
+            button:SetBackdropBorderColor(borderR, borderG, borderB, 0.0)
+            return
+        end
+
         local chargeCount, maxCharges, chargeStart, chargeDuration, chargeEnable = self:GetActionChargeState(display.slot)
         local start, duration, enable = self:GetResolvedCooldown(display.slot)
         if maxCharges and maxCharges > 1 and chargeCount and chargeCount < maxCharges and chargeDuration and chargeDuration > 0 then
@@ -3351,7 +3455,12 @@ function Bar:UpdateButtonVisualState(button)
             end
         end
         if button.shine then
-            if equippedAction then
+            local isQueued = IsCurrentAction and IsCurrentAction(display.slot)
+            if isQueued then
+                button.shine:SetVertexColor(1.0, 0.82, 0.0, 0.9)
+                button.shine:Show()
+            elseif equippedAction then
+                button.shine:SetVertexColor(0.2, 1.0, 0.42, 0.85)
                 button.shine:Show()
             else
                 button.shine:Hide()
@@ -3427,7 +3536,8 @@ function Bar:UpdateButton(index, state)
     local hasAction = display and display.slot
     local iconInset = hasAction and 2 or 4
 
-    local keyLabel = (GPX:IsControllerEnabled() and display and display.title) or physicalKey or defaultKeyHints[index] or tostring(index)
+    local keyLabel = physicalKey or defaultKeyHints[index] or tostring(index)
+    local controllerLabel, controllerTexture = self:GetControllerVisualForSlot(index)
     button.glyph:SetText(keyLabel)
     button.name:SetText("")
     if showSecondaryKeyText then
@@ -3439,11 +3549,10 @@ function Bar:UpdateButton(index, state)
     end
 
     if button.controllerIcon then
-        local iconPath = GPX:IsControllerEnabled() and physicalKey and PS5Icons[physicalKey]
+        local iconPath = GPX:IsControllerEnabled() and controllerTexture
         if iconPath then
             button.controllerIcon:SetTexture(iconPath)
             button.controllerIcon:Show()
-            button.glyph:SetText("")
         else
             button.controllerIcon:Hide()
         end
@@ -3559,6 +3668,7 @@ function Bar:UpdateAll()
     self:UpdateBindingProxyButtons()
 
     if not GPX.db or not GPX.db.enabled or not GPX.db.ui or not GPX.db.ui.visualBar or not GPX.db.ui.visualBar.enabled then
+        self:InvalidateDisplayLayerCache()
         if not inCombat then
             self.frame:Hide()
             if self.frame and self.frame._wowxShell then
@@ -3579,6 +3689,7 @@ function Bar:UpdateAll()
 
     local metrics = self:GetMainLayoutMetrics()
     self._mainLayoutMetrics = metrics
+    self:BuildDisplayLayerCache()
     local visibleCount = metrics.visibleCount
     local buttonWidth = metrics.buttonWidth
     local buttonHeight = metrics.buttonHeight
@@ -3614,13 +3725,13 @@ function Bar:UpdateAll()
     self.frame.title:SetText("Action Bar")
     self.frame.pageText:SetText(pageLabel)
     if GPX.actionStateSuspended and GPX.actionStateReason then
-        self.frame.title:SetText("Action Bar ΓÇö Native " .. GPX.actionStateReason)
+        self.frame.title:SetText("Action Bar - Native " .. GPX.actionStateReason)
         self.frame:SetBackdropBorderColor(0.95, 0.36, 0.18, 0.98)
         self.frame:SetBackdropColor(0.1, 0.05, 0.04, math.max(chromeAlpha, 0.18))
         showHeader = true
     end
     if GPX.UIMode and GPX.UIMode.activeContext == "bar" then
-        self.frame.title:SetText("Action Bar ΓÇö UI Mode")
+        self.frame.title:SetText("Action Bar - UI Mode")
         self.frame:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.98)
     else
         if not (GPX.actionStateSuspended and GPX.actionStateReason) then

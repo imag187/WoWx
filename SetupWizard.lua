@@ -437,12 +437,15 @@ end
 function Wizard:BuildSteps()
     local controllerEnabled = GPX:IsControllerEnabled()
     local style = GPX:GetInputStyle(self.state.deviceId)
-    local actionCount = controllerEnabled and 8 or 12
+    local actionCount = controllerEnabled and 9 or 12
     local firstActionSlot = controllerEnabled and 1 or 2
     local combatLabels = GPX:GetCombatSlotLabels(self.state.deviceId)
 
     self.state.actionKeyBaseSlot = firstActionSlot
     self.state.actionButtonCount = actionCount
+    if controllerEnabled then
+        self.state.jumpKey = "0"
+    end
 
     self.steps = {
         {
@@ -463,12 +466,15 @@ function Wizard:BuildSteps()
             title = style.modifierLabels[3],
             text = "Press your third modifier button. This becomes the third modifier page.",
         },
-        {
+    }
+
+    if not controllerEnabled then
+        self.steps[#self.steps + 1] = {
             kind = "jump",
             title = GPX:GetConfirmLabel(self.state.deviceId),
-            text = controllerEnabled and "Press your jump / confirm button. WoWX keeps this off the combat bar so it can stay jump and UI confirm." or "Press the main jump button. Bare press stays Jump, and with a modifier it becomes the first action slot on that modifier page.",
-        },
-    }
+            text = "Press the main jump button. Bare press stays Jump, and with a modifier it becomes the first action slot on that modifier page.",
+        }
+    end
 
     for slotIndex = firstActionSlot, actionCount do
         self.steps[#self.steps + 1] = {
@@ -538,8 +544,10 @@ function Wizard:IsDuplicate(key, currentStep)
         seen[self.state.menuKey] = true
     end
 
-    for index, value in ipairs(actionKeys) do
-        if not (currentStep.kind == "action" and currentStep.index == index) then
+    local actionCount = tonumber(self.state.actionButtonCount) or 12
+    for index = 1, actionCount do
+        local value = actionKeys[index]
+        if value and not (currentStep.kind == "action" and currentStep.index == index) then
             seen[value] = true
         end
     end
@@ -803,7 +811,7 @@ function Wizard:Open(mode)
         jumpKey = nil,
         menuKey = nil,
         actionKeyBaseSlot = controllerEnabled and 1 or 2,
-        actionButtonCount = controllerEnabled and 8 or 12,
+        actionButtonCount = controllerEnabled and 9 or 12,
     }
     self.steps = nil
     self.stepIndex = 0
@@ -820,7 +828,10 @@ function Wizard:Open(mode)
         self.state.actionKeys = self.state.actionKeys or {}
         self.state.menuKey = self.state.menuKey or nil
         self.state.actionKeyBaseSlot = tonumber(self.state.actionKeyBaseSlot) or (controllerEnabled and 1 or 2)
-        self.state.actionButtonCount = tonumber(self.state.actionButtonCount) or (controllerEnabled and 8 or 12)
+        self.state.actionButtonCount = tonumber(self.state.actionButtonCount) or (controllerEnabled and 9 or 12)
+        if controllerEnabled and self.state.actionButtonCount < 9 then
+            self.state.actionButtonCount = 9
+        end
     end
 
     self.frame.subtitle:SetText("A visual calibration pass for couch play and accessibility. Pick a device family, then press the real keys you mapped through AntiMicroX, Steam Input, or your keyboard.")

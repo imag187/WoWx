@@ -1,6 +1,6 @@
 ﻿-- ============================================================
 -- GamePadX.lua  (WoWX core, WotLK 3.3.5a)
--- Modernized couch-play bindings and UI helpers ΓÇö no account sync
+-- Modernized couch-play bindings and UI helpers - no account sync
 -- ============================================================
 --
 -- QUICK START:
@@ -19,7 +19,7 @@
 --      On your keyboard machines: leave it disabled (or don't install it).
 --
 --   3. The addon binds your controller keys to WoW action bar commands.
---      Spells stay wherever you put them on your bars ΓÇö the addon just
+--      Spells stay wherever you put them on your bars - the addon just
 --      tells WoW "when F1 is pressed, fire ActionButton1."
 --
 --   4. Bindings are ONLY applied in memory (SaveBindings() is never called).
@@ -28,10 +28,10 @@
 --      Your keyboard machine's WTF is untouched.
 --
 -- BAR LAYOUT (what each modifier page maps to):
---   Normal       -> Main action bar      (ACTIONBUTTON1ΓÇô12)
---   + Shift held -> Bottom Left bar      (MULTIACTIONBAR2BUTTON1ΓÇô12)
---   + Alt held   -> Bottom Right bar     (MULTIACTIONBAR1BUTTON1ΓÇô12)
---   + Ctrl held  -> Right bar 1          (MULTIACTIONBAR4BUTTON1ΓÇô12)
+--   Normal       -> Main action bar      (ACTIONBUTTON1-12)
+--   + Shift held -> Bottom Left bar      (MULTIACTIONBAR2BUTTON1-12)
+--   + Alt held   -> Bottom Right bar     (MULTIACTIONBAR1BUTTON1-12)
+--   + Ctrl held  -> Right bar 1          (MULTIACTIONBAR4BUTTON1-12)
 --   (all extra bars must be enabled in the Blizzard Interface Options)
 --
 -- SLASH COMMANDS:
@@ -59,34 +59,89 @@ GPX.inputStyles = {
         id = "xbox",
         name = "Xbox",
         slotLabels = { "A", "B", "X", "Y", "D-Up", "D-Right", "D-Down", "D-Left", "LB", "RB", "L3", "R3" },
-        combatSlotLabels = { "X", "Y", "B", "Back", "Start", "D-Left", "D-Up", "D-Down" },
-        combatDisplayLabels = { "X", "Y", "B", "<|", "|>", "<-", "/|\\", "\\|/" },
+        combatSlotLabels = { "X", "Y", "B", "A", "LB", "RB", "D-Left", "D-Up", "D-Right" },
+        combatDisplayLabels = { "X", "Y", "B", "A", "LB", "RB", "D-Left", "D-Up", "D-Right" },
         modifierLabels = { "L1 / LB", "R1 / RB", "L3 / Click" },
         confirmLabel = "A",
+        shortModifierLabels = { "LB", "RB", "L3" },
+        buttonTextures = {
+            ["D-Left"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_LEFT",
+            ["D-Up"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_UP",
+            ["D-Right"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_RIGHT",
+            ["D-Down"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_DOWN",
+            ["Back"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_GRIP2",
+            ["Start"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_GRIP2",
+            ["X"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_LEFT",
+            ["Y"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_UP",
+            ["B"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_RIGHT",
+            ["A"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_DOWN",
+            ["LB"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TL1",
+            ["RB"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TR1",
+            ["L3"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_L3",
+            ["R3"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_R3",
+        },
     },
     playstation = {
         id = "playstation",
         name = "PlayStation",
         slotLabels = { "Cross", "Circle", "Square", "Triangle", "D-Up", "D-Right", "D-Down", "D-Left", "L1", "R1", "L3", "R3" },
-        combatSlotLabels = { "Square", "Triangle", "Circle", "Share", "Options", "D-Left", "D-Up", "D-Down" },
-        combatDisplayLabels = { "Square", "Triangle", "Circle", "<|", "|>", "<-", "/|\\", "\\|/" },
-        modifierLabels = { "L1", "R1", "L3" },
+        combatSlotLabels = { "Square", "Triangle", "Circle", "Share", "Options", "D-Left", "D-Up", "D-Right", "D-Down" },
+        combatDisplayLabels = { "Square", "Triangle", "Circle", "Share", "Options", "D-Left", "D-Up", "D-Right", "D-Down" },
+        modifierLabels = { "R1", "L1", "L3" },
+        shortModifierLabels = { "R1", "L1", "L3" },
         confirmLabel = "Cross",
+        buttonTextures = {
+            ["D-Left"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_LEFT",
+            ["D-Up"]     = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_UP",
+            ["D-Right"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_RIGHT",
+            ["D-Down"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_DOWN",
+            ["Share"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_GRIP1",
+            ["Options"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_GRIP1",
+            ["Square"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_LEFT",
+            ["Triangle"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_UP",
+            ["Circle"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_RIGHT",
+            ["Cross"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_DOWN",
+            ["X"]        = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_DOWN",
+            ["L1"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TL1",
+            ["R1"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TR1",
+            ["L2"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TL2",
+            ["R2"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TR2",
+            ["L3"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_L3",
+            ["R3"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_R3",
+        },
     },
     switch = {
         id = "switch",
         name = "Switch Pro",
         slotLabels = { "B", "A", "Y", "X", "D-Up", "D-Right", "D-Down", "D-Left", "L", "R", "L3", "R3" },
-        combatSlotLabels = { "Y", "X", "A", "Minus", "Plus", "D-Left", "D-Up", "D-Down" },
-        combatDisplayLabels = { "Y", "X", "A", "<|", "|>", "<-", "/|\\", "\\|/" },
+        combatSlotLabels = { "B", "A", "Y", "X", "Minus", "Plus", "D-Left", "D-Up", "D-Right" },
+        combatDisplayLabels = { "B", "A", "Y", "X", "Minus", "Plus", "D-Left", "D-Up", "D-Right" },
         modifierLabels = { "L", "R", "L-Stick" },
         confirmLabel = "B",
+        shortModifierLabels = { "L", "R", "L3" },
+        buttonTextures = {
+            ["B"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_DOWN",
+            ["Y"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_LEFT",
+            ["X"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_UP",
+            ["A"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_RIGHT",
+            ["Minus"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_GRIP2",
+            ["Plus"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_GRIP2",
+            ["D-Left"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_LEFT",
+            ["D-Up"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_UP",
+            ["D-Right"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_RIGHT",
+            ["D-Down"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_DOWN",
+            ["L"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TL1",
+            ["R"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TR1",
+            ["L3"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_L3",
+            ["R3"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_R3",
+        },
     },
     generic = {
         id = "generic",
         name = "Generic Bluetooth",
         slotLabels = { "Btn 1", "Btn 2", "Btn 3", "Btn 4", "Btn 5", "Btn 6", "Btn 7", "Btn 8", "Btn 9", "Btn 10", "Btn 11", "Btn 12" },
-        combatSlotLabels = { "Btn 1", "Btn 2", "Btn 3", "Btn 4", "Btn 5", "Btn 6", "Btn 7", "Btn 8" },
+        combatSlotLabels = { "Btn 1", "Btn 2", "Btn 3", "Btn 4", "Btn 5", "Btn 6", "Btn 7", "Btn 8", "Btn 9" },
+        combatDisplayLabels = { "Btn 1", "Btn 2", "Btn 3", "Btn 4", "Btn 5", "Btn 6", "Btn 7", "Btn 8", "Btn 9" },
         modifierLabels = { "Modifier 1", "Modifier 2", "Modifier 3" },
         confirmLabel = "Jump / Confirm",
     },
@@ -183,12 +238,13 @@ GPX.defaults = {
             autoMouseLookOnMove = true,
             centerCursorOnMove = true,
             mouseLookDelayMs = 0,
+            mouseLookMode = "move", -- off | move | platformer
         },
         bindingEngine = {
             transport = "click", -- direct | click | override
             claimModifiers = true,
             claimCombo = true,
-            useSetupKeys = true,
+            useSetupKeys = false,
             bindMenu = true,
             overrideFallback = true,
             stickyPage = "", -- "" | SHIFT | ALT | CTRL | SHIFT-ALT
@@ -199,7 +255,7 @@ GPX.defaults = {
             name = "AntiMicroX F-Key Layout",
             -- key (WoW key string)  ->  command (WoW binding command)
             bindings = {
-                -- ΓöÇΓöÇ Normal press  ΓåÆ  Main action bar slots 1-12 ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+                -- Normal press -> Main action bar slots 1-12
                 F1  = "ACTIONBUTTON1",
                 F2  = "ACTIONBUTTON2",
                 F3  = "ACTIONBUTTON3",
@@ -213,7 +269,7 @@ GPX.defaults = {
                 F11 = "ACTIONBUTTON11",
                 F12 = "ACTIONBUTTON12",
 
-                -- ΓöÇΓöÇ Shift held   ΓåÆ  Bottom Left bar slots 1-12 ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+                -- Shift held -> Bottom Left bar slots 1-12
                 -- In AntiMicroX: configure LT trigger to output the Shift key
                 ["SHIFT-F1"]  = "MULTIACTIONBAR2BUTTON1",
                 ["SHIFT-F2"]  = "MULTIACTIONBAR2BUTTON2",
@@ -228,7 +284,7 @@ GPX.defaults = {
                 ["SHIFT-F11"] = "MULTIACTIONBAR2BUTTON11",
                 ["SHIFT-F12"] = "MULTIACTIONBAR2BUTTON12",
 
-                -- ΓöÇΓöÇ Alt held     ΓåÆ  Bottom Right bar slots 1-12 ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+                -- Alt held -> Bottom Right bar slots 1-12
                 -- In AntiMicroX: configure RT trigger to output the Alt key
                 ["ALT-F1"]  = "MULTIACTIONBAR1BUTTON1",
                 ["ALT-F2"]  = "MULTIACTIONBAR1BUTTON2",
@@ -243,7 +299,7 @@ GPX.defaults = {
                 ["ALT-F11"] = "MULTIACTIONBAR1BUTTON11",
                 ["ALT-F12"] = "MULTIACTIONBAR1BUTTON12",
 
-                -- ΓöÇΓöÇ Ctrl held    ΓåÆ  Right bar 1 slots 1-12 ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+                -- Ctrl held -> Right bar 1 slots 1-12
                 -- In AntiMicroX: configure a spare button to output Ctrl
                 ["CTRL-F1"]  = "MULTIACTIONBAR4BUTTON1",
                 ["CTRL-F2"]  = "MULTIACTIONBAR4BUTTON2",
@@ -374,6 +430,27 @@ function GPX:InitDB()
         db._bindingEngineDefaultsV2 = true
     end
 
+    -- Migration: align controller utility defaults with the 9-slot combat bar.
+    -- Keep jump on key 0 (native JUMP binding) and reserve menu launcher on Z.
+    if db._controllerUtilityDefaultsV3 == nil then
+        local profileName = db.profile or "default"
+        local profile = db.profiles and (db.profiles[profileName] or db.profiles["default"]) or nil
+        local setup = profile and profile.setup or nil
+        if setup then
+            local actionCount = tonumber(setup.actionButtonCount) or 0
+            local isControllerProfile = (actionCount > 0 and actionCount <= 9) or (setup.actionKeyBaseSlot == 1)
+            if isControllerProfile then
+                if not setup.jumpKey or setup.jumpKey == "" or setup.jumpKey == "SPACE" then
+                    setup.jumpKey = "0"
+                end
+                if not setup.menuKey or setup.menuKey == "" or setup.menuKey == "M" then
+                    setup.menuKey = "Z"
+                end
+            end
+        end
+        db._controllerUtilityDefaultsV3 = true
+    end
+
     self.db = db
 end
 
@@ -384,6 +461,128 @@ function GPX:DeepCopy(orig)
         copy[self:DeepCopy(k)] = self:DeepCopy(v)
     end
     return setmetatable(copy, getmetatable(orig))
+end
+
+function GPX:GetActiveTalentGroupSafe()
+    if GetActiveTalentGroup then
+        local ok, group = pcall(GetActiveTalentGroup)
+        if ok and tonumber(group) then
+            return tonumber(group)
+        end
+    end
+    return 1
+end
+
+function GPX:CaptureActionBarSnapshot()
+    local snapshot = {}
+    for slot = 1, 72 do
+        local actionType, actionID = GetActionInfo(slot)
+        if actionType == "spell" and actionID then
+            snapshot[slot] = { kind = "spell", id = actionID }
+        elseif actionType == "item" and actionID then
+            snapshot[slot] = { kind = "item", id = actionID }
+        elseif actionType == "macro" and actionID then
+            local macroName = GetMacroInfo and select(1, GetMacroInfo(actionID)) or nil
+            snapshot[slot] = { kind = "macro", id = actionID, name = macroName }
+        end
+    end
+    return snapshot
+end
+
+function GPX:StoreCurrentSpecActionBars(specIndex)
+    if InCombatLockdown() then
+        return false
+    end
+    if not self.db then
+        return false
+    end
+    local spec = tonumber(specIndex) or self:GetActiveTalentGroupSafe()
+    self.db.specBarLayouts = self.db.specBarLayouts or {}
+    self.db.specBarLayouts[spec] = self:CaptureActionBarSnapshot()
+    return true
+end
+
+function GPX:RestoreSpecActionBars(specIndex)
+    if InCombatLockdown() then
+        return false
+    end
+    if not self.db or not self.db.specBarLayouts then
+        return false
+    end
+
+    local spec = tonumber(specIndex) or self:GetActiveTalentGroupSafe()
+    local snapshot = self.db.specBarLayouts[spec]
+    if type(snapshot) ~= "table" then
+        return false
+    end
+
+    for slot = 1, 72 do
+        if ClearAction then
+            ClearAction(slot)
+        end
+    end
+
+    local function placeAt(slot)
+        if GetCursorInfo and GetCursorInfo() then
+            PlaceAction(slot)
+            ClearCursor()
+            return true
+        end
+        return false
+    end
+
+    for slot = 1, 72 do
+        local entry = snapshot[slot]
+        if entry and entry.kind == "spell" and entry.id and PickupSpell then
+            pcall(PickupSpell, entry.id)
+            placeAt(slot)
+        elseif entry and entry.kind == "item" and entry.id and PickupItem then
+            pcall(PickupItem, entry.id)
+            placeAt(slot)
+        elseif entry and entry.kind == "macro" and PickupMacro then
+            local macroIndex = nil
+            if entry.name and GetMacroIndexByName then
+                macroIndex = GetMacroIndexByName(entry.name)
+            end
+            if (not macroIndex or macroIndex <= 0) and entry.id then
+                macroIndex = entry.id
+            end
+            if macroIndex and macroIndex > 0 then
+                pcall(PickupMacro, macroIndex)
+                placeAt(slot)
+            end
+        end
+    end
+
+    return true
+end
+
+function GPX:HandleSpecSwapLayouts()
+    if not self.db then
+        return
+    end
+    if InCombatLockdown() then
+        self.pendingSpecSwapLayout = true
+        return
+    end
+
+    local currentGroup = self:GetActiveTalentGroupSafe()
+    local previousGroup = tonumber(self.db.lastTalentGroup) or currentGroup
+
+    if previousGroup == currentGroup and self.db.specBarLayouts and self.db.specBarLayouts[currentGroup] then
+        return
+    end
+
+    self:StoreCurrentSpecActionBars(previousGroup)
+    if not self:RestoreSpecActionBars(currentGroup) then
+        self:StoreCurrentSpecActionBars(currentGroup)
+    end
+
+    self.db.lastTalentGroup = currentGroup
+
+    if self.VisualBar then
+        self.VisualBar:UpdateAll()
+    end
 end
 
 function GPX:StampDefaults(target, defaults)
@@ -423,6 +622,27 @@ end
 function GPX:GetCombatDisplayLabels(styleId)
     local style = self:GetInputStyle(styleId)
     return style.combatDisplayLabels or style.combatSlotLabels or style.slotLabels or {}
+
+end
+
+function GPX:GetButtonTexture(styleId, label)
+    local style = self:GetInputStyle(styleId)
+    return style.buttonTextures and style.buttonTextures[label]
+end
+
+function GPX:GetPageLabels(styleId)
+    local style = self:GetInputStyle(styleId)
+    local m = style.shortModifierLabels or style.modifierLabels or {}
+    local m1 = m[1] or "M1"
+    local m2 = m[2] or "M2"
+    local m3 = m[3] or "M3"
+    return {
+        [""]          = "Base",
+        ["SHIFT"]     = m1,
+        ["ALT"]       = m2,
+        ["CTRL"]      = m3,
+        ["SHIFT-ALT"] = m1 .. "+" .. m2,
+    }
 end
 
 function GPX:GetEffectiveControllerStyleId(setup, profile)
@@ -473,7 +693,6 @@ function GPX:FindBindingKeyForCommand(bindings, command)
             return key
         end
     end
-
     return nil
 end
 
@@ -560,6 +779,13 @@ function GPX:SetSetupActionKey(setup, slotIndex, value)
     end
 
     setup.actionKeys = setup.actionKeys or {}
+    if value and value ~= "" then
+        for index, existingValue in ipairs(setup.actionKeys) do
+            if index ~= arrayIndex and existingValue == value then
+                setup.actionKeys[index] = nil
+            end
+        end
+    end
     setup.actionKeys[arrayIndex] = value
 end
 
@@ -570,7 +796,8 @@ function GPX:HasCalibratedSetup(profile)
         return false
     end
 
-    if not setup.jumpKey or setup.jumpKey == "" then
+    local firstActionSlot = self:GetActionKeyBaseSlot(setup)
+    if firstActionSlot > 1 and (not setup.jumpKey or setup.jumpKey == "") then
         return false
     end
 
@@ -578,7 +805,6 @@ function GPX:HasCalibratedSetup(profile)
         return false
     end
 
-    local firstActionSlot = self:GetActionKeyBaseSlot(setup)
     local lastActionSlot = self:GetConfiguredActionButtonCount(setup)
     for slotIndex = firstActionSlot, lastActionSlot do
         local key = self:GetSetupActionKey(setup, slotIndex)
@@ -607,6 +833,10 @@ function GPX:BuildBindingsFromSetup(setup)
     local jumpKey = setup.jumpKey
     local firstActionSlot = self:GetActionKeyBaseSlot(setup)
     local lastActionSlot = self:GetConfiguredActionButtonCount(setup)
+    local controllerEnabled = self:IsControllerEnabled()
+    local fallbackKeys = controllerEnabled and self:GetControllerFallbackActionKeys(lastActionSlot) or nil
+    local resolvedActionKeys = {}
+    local usedActionKeys = {}
     local modifiers = { "SHIFT", "ALT", "CTRL" }
     local modifierPages = {
         { modifiers = { modifiers[1] }, bar = "MULTIACTIONBAR2BUTTON" },
@@ -629,8 +859,20 @@ function GPX:BuildBindingsFromSetup(setup)
 
     for slotIndex = firstActionSlot, lastActionSlot do
         local key = self:GetSetupActionKey(setup, slotIndex)
-        if key and key ~= "" then
-            bindings[key] = "ACTIONBUTTON" .. slotIndex
+        if key and key ~= "" and not usedActionKeys[key] then
+            resolvedActionKeys[slotIndex] = key
+            usedActionKeys[key] = true
+        elseif controllerEnabled then
+            local fallbackKey = fallbackKeys and fallbackKeys[slotIndex] or nil
+            if fallbackKey and fallbackKey ~= "" and not usedActionKeys[fallbackKey] then
+                resolvedActionKeys[slotIndex] = fallbackKey
+                usedActionKeys[fallbackKey] = true
+            end
+        end
+
+        local resolvedKey = resolvedActionKeys[slotIndex]
+        if resolvedKey and resolvedKey ~= "" then
+            bindings[resolvedKey] = "ACTIONBUTTON" .. slotIndex
         end
     end
 
@@ -654,7 +896,7 @@ function GPX:BuildBindingsFromSetup(setup)
             end
 
             for slotIndex = firstActionSlot, lastActionSlot do
-                local key = self:GetSetupActionKey(setup, slotIndex)
+                local key = resolvedActionKeys[slotIndex]
                 if key and key ~= "" then
                     bindings[self:BuildModifiedKey(parts, key)] = page.bar .. slotIndex
                     if #parts == 2 then
@@ -689,6 +931,9 @@ function GPX:GetControllerConfig()
     if tonumber(cfg.mouseLookDelayMs) == nil then
         cfg.mouseLookDelayMs = 0
     end
+    if cfg.mouseLookMode ~= "platformer" and cfg.mouseLookMode ~= "off" then
+        cfg.mouseLookMode = "move"
+    end
 
     return cfg
 end
@@ -701,6 +946,10 @@ function GPX:SetControllerEnabled(enabled)
         self.controllerMovePending = nil
         self.controllerMoveStartedAt = nil
         self:StopControllerMouseLook()
+    end
+
+    if self.MinimapButton and self.MinimapButton.Refresh then
+        self.MinimapButton:Refresh()
     end
 end
 
@@ -716,6 +965,62 @@ function GPX:ShouldUseControllerMouseLook()
         return false
     end
     return true
+end
+
+function GPX:IsControllerPlatformerMouseLookEnabled()
+    local cfg = self:GetControllerConfig()
+    return cfg.mouseLookMode == "platformer"
+end
+
+function GPX:GetControllerMouseLookMode()
+    local cfg = self:GetControllerConfig()
+    if cfg.mouseLookMode == "platformer" then
+        return "on"
+    end
+    if cfg.mouseLookMode == "off" then
+        return "off"
+    end
+    return "move"
+end
+
+function GPX:CycleControllerMouseLookMode()
+    local current = self:GetControllerMouseLookMode()
+    if current == "off" then
+        self:SetControllerMouseLookMode("move")
+        return "move"
+    elseif current == "move" then
+        self:SetControllerMouseLookMode("platformer")
+        return "on"
+    end
+
+    self:SetControllerMouseLookMode("off")
+    return "off"
+end
+
+function GPX:SetControllerMouseLookMode(mode)
+    local cfg = self:GetControllerConfig()
+    if mode == "off" then
+        cfg.mouseLookMode = "off"
+        cfg.autoMouseLookOnMove = false
+        self.controllerMovePending = nil
+        self.controllerMoveStartedAt = nil
+        self:StopControllerMouseLook()
+        return
+    end
+
+    if mode == "platformer" then
+        cfg.mouseLookMode = "platformer"
+        cfg.autoMouseLookOnMove = true
+        cfg.mouseLookDelayMs = 0
+        if self:ShouldUseControllerMouseLook() then
+            self:StartControllerMouseLook()
+        end
+        return
+    end
+
+    cfg.mouseLookMode = "move"
+    cfg.autoMouseLookOnMove = true
+    self:StopControllerMouseLook()
 end
 
 function GPX:CenterControllerCursor()
@@ -825,6 +1130,20 @@ do
         pollTimer = 0
         local speed = GetUnitSpeed and GetUnitSpeed("player") or 0
         local isMoving = speed > speedThreshold
+        local cfg = GPX:GetControllerConfig()
+        local mode = cfg.mouseLookMode or "move"
+
+        if mode == "platformer" then
+            if GPX:ShouldUseControllerMouseLook() then
+                if not GPX.controllerMouseLookActive and not GPX.controllerMovePending then
+                    GPX:StartControllerMouseLook()
+                end
+            else
+                GPX:SetControllerMovementState(false)
+            end
+            wasMoving = isMoving
+            return
+        end
 
         if isMoving ~= wasMoving then
             wasMoving = isMoving
@@ -923,8 +1242,28 @@ function GPX:OpenSettings()
     end
 end
 
+function GPX:ToggleSettings()
+    if self.SetupWizard and self.SetupWizard.frame and self.SetupWizard.frame:IsShown() then
+        self.SetupWizard.frame:Hide()
+    end
+
+    if not self.SettingsUI then
+        self:Print("Settings window module not loaded.")
+        return
+    end
+
+    local frame = self.SettingsUI.frame
+    if frame and frame:IsShown() then
+        frame:Hide()
+        return
+    end
+
+    self:OpenSettings()
+end
+
 function GPX:GetOrCreateSetup(profile)
     profile = profile or self:GetProfile()
+    local controllerEnabled = self:IsControllerEnabled()
     profile.setup = profile.setup or {
         deviceId = "keyboard",
         movement = {},
@@ -933,15 +1272,18 @@ function GPX:GetOrCreateSetup(profile)
         menuKey = nil,
         lookKey = nil,
         actionKeys = {},
-        actionKeyBaseSlot = 2,
-        actionButtonCount = 8,
+        actionKeyBaseSlot = controllerEnabled and 1 or 2,
+        actionButtonCount = controllerEnabled and 9 or 12,
     }
     profile.setup.movement = profile.setup.movement or {}
     profile.setup.modifiers = profile.setup.modifiers or {}
     profile.setup.actionKeys = profile.setup.actionKeys or {}
     profile.setup.deviceId = profile.setup.deviceId or profile.inputStyle or "keyboard"
-    profile.setup.actionKeyBaseSlot = tonumber(profile.setup.actionKeyBaseSlot) or 2
-    profile.setup.actionButtonCount = tonumber(profile.setup.actionButtonCount) or 8
+    profile.setup.actionKeyBaseSlot = tonumber(profile.setup.actionKeyBaseSlot) or (controllerEnabled and 1 or 2)
+    profile.setup.actionButtonCount = tonumber(profile.setup.actionButtonCount) or (controllerEnabled and 9 or 12)
+    if controllerEnabled and profile.setup.actionButtonCount < 9 then
+        profile.setup.actionButtonCount = 9
+    end
     return profile.setup
 end
 
@@ -970,6 +1312,76 @@ function GPX:ApplySetupFromProfile(profile, opts)
         self.SettingsUI:Refresh()
     end
     return true
+end
+
+function GPX:EnsureControllerVisibleButtonCount(profile)
+    if not self:IsControllerEnabled() then
+        return
+    end
+
+    profile = profile or self:GetProfile()
+    local setup = profile and profile.setup or nil
+    if not setup then
+        return
+    end
+
+    local desired = tonumber(self:GetConfiguredActionButtonCount(setup, profile)) or 0
+    if desired < 1 then
+        return
+    end
+
+    self.db.ui = self.db.ui or {}
+    self.db.ui.visualBar = self.db.ui.visualBar or {}
+    self.db.ui.visualBar.layout = self.db.ui.visualBar.layout or {}
+    self.db.ui.visualBar.layout.main = self.db.ui.visualBar.layout.main or {}
+
+    local current = tonumber(self.db.ui.visualBar.layout.main.buttonCount) or 0
+    if current < desired then
+        self.db.ui.visualBar.layout.main.buttonCount = desired
+    end
+end
+
+function GPX:ApplyQuickTogglePreset(mode, styleId)
+    local profile = self:GetProfile()
+    local setup = self:GetOrCreateSetup(profile)
+    local engine = self:GetBindingEngineConfig()
+
+    if mode == "controller" then
+        local resolvedStyle = styleId or self:GetEffectiveControllerStyleId(setup, profile) or "playstation"
+        if resolvedStyle == "keyboard" then
+            resolvedStyle = "playstation"
+        end
+
+        setup.deviceId = resolvedStyle
+        setup.inputStyle = resolvedStyle
+        setup.modifiers = { "SHIFT", "ALT", "CTRL" }
+        setup.actionKeyBaseSlot = 1
+        setup.actionButtonCount = 9
+        setup.jumpKey = "0"
+        setup.menuKey = "Z"
+        setup.lookKey = nil
+
+        local presetKeys = { "1", "2", "3", "4", "5", "6", "7", "8", "9" }
+        setup.actionKeys = {}
+        for slotIndex = 1, setup.actionButtonCount do
+            self:SetSetupActionKey(setup, slotIndex, presetKeys[slotIndex])
+        end
+
+        engine.useSetupKeys = true
+        self:EnsureControllerVisibleButtonCount(profile)
+    else
+        setup.deviceId = "keyboard"
+        setup.inputStyle = "keyboard"
+        setup.actionKeyBaseSlot = 2
+        setup.actionButtonCount = 12
+        setup.modifiers = setup.modifiers or { "SHIFT", "ALT", "CTRL" }
+        if not setup.modifiers[1] then setup.modifiers[1] = "SHIFT" end
+        if not setup.modifiers[2] then setup.modifiers[2] = "ALT" end
+        if not setup.modifiers[3] then setup.modifiers[3] = "CTRL" end
+        engine.useSetupKeys = false
+    end
+
+    self:ApplySetupFromProfile(profile, { deferBindings = true })
 end
 
 function GPX:PrintDiagnostics()
@@ -2058,7 +2470,7 @@ function GPX:GetBindingEngineConfig()
         cfg.claimCombo = true
     end
     if cfg.useSetupKeys == nil then
-        cfg.useSetupKeys = true
+        cfg.useSetupKeys = false
     end
     if cfg.bindMenu == nil then
         cfg.bindMenu = true
@@ -2080,16 +2492,13 @@ function GPX:GetBindingSyncConfig()
     if self.db.bindingSync.enabled == nil then
         self.db.bindingSync.enabled = false
     end
-    self.db.bindingSync.scope = self.db.bindingSync.scope or "character"
+    -- CoA fork safety: never persist WoWX bindings account-wide.
+    self.db.bindingSync.scope = "character"
     return self.db.bindingSync
 end
 
 function GPX:GetBindingScopeId()
-    local cfg = self:GetBindingSyncConfig()
-    local scope = string.lower(tostring(cfg.scope or "character"))
-    if scope == "account" then
-        return ACCOUNT_BINDINGS or 1
-    end
+    self:GetBindingSyncConfig()
     return CHARACTER_BINDINGS or 2
 end
 
@@ -2112,8 +2521,7 @@ function GPX:PersistBindings(reason)
     local scopeId = self:GetBindingScopeId()
     local ok, result = pcall(SaveBindings, scopeId)
     if ok and result then
-        local scopeText = (scopeId == (ACCOUNT_BINDINGS or 1)) and "account" or "character"
-        self:Print("Bindings saved to " .. scopeText .. (reason and (" (" .. reason .. ")") or "") .. ".")
+        self:Print("Bindings saved to character" .. (reason and (" (" .. reason .. ")") or "") .. ".")
     else
         self:Print("|cffff4444Binding save failed.|r")
     end
@@ -2154,6 +2562,9 @@ function GPX:ApplyBindings(silent)
     local engine = self:GetBindingEngineConfig()
     local controllerEnabled = self:IsControllerEnabled()
     local useSetupKeys = engine.useSetupKeys and controllerEnabled
+    if controllerEnabled then
+        self:EnsureControllerVisibleButtonCount(self:GetProfile())
+    end
 
     -- Skip clear if no bindings were previously applied
     if next(self.appliedBindings) then
@@ -2162,9 +2573,10 @@ function GPX:ApplyBindings(silent)
 
     local profile = self:GetProfile()
     local hasLegacyProfileBindings = profile and profile.bindings and next(profile.bindings)
+    local hasCalibratedSetup = self:HasCalibratedSetup(profile)
     local needsCalibration = useSetupKeys and not hasLegacyProfileBindings
     local useLegacyProfileBindings = false
-    if useSetupKeys and hasLegacyProfileBindings then
+    if useSetupKeys and not hasCalibratedSetup and hasLegacyProfileBindings then
         useLegacyProfileBindings = true
     elseif needsCalibration and not self:HasCalibratedSetup(profile) then
         if hasLegacyProfileBindings then
@@ -2173,20 +2585,12 @@ function GPX:ApplyBindings(silent)
                 self:Print("Calibration missing; using legacy profile bindings.")
             end
         else
-            if next(self.appliedBindings) then
-                self:ClearBindings()
+            -- Portable fallback: bind number-row keys slot-for-slot so characters
+            -- remain usable across machines even before local controller setup.
+            useSetupKeys = false
+            if not silent then
+                self:Print("Calibration missing; using portable slot mapping (1..=). Run /wowx init for custom controller keys.")
             end
-            self:Print("WoWX is enabled, but no calibration is active yet. Run /wowx init to capture your layout.")
-            if self.VisualBar then
-                self.VisualBar:UpdateAll()
-            end
-            if self.ActionButtons then
-                self.ActionButtons:UpdateAll()
-            end
-            if self.SettingsUI then
-                self.SettingsUI:Refresh()
-            end
-            return
         end
     end
 
@@ -2278,9 +2682,46 @@ function GPX:ApplyBindings(silent)
             ok = ok + 1
             return true
         end
-        self:Print("|cffff4444Bind failed:|r " .. key .. " ΓåÆ " .. command)
+        self:Print("|cffff4444Bind failed:|r " .. key .. " -> " .. command)
         fail = fail + 1
         return false
+    end
+
+    local function resolveActionSlotForCommand(bindingCommand, bindingSlotIndex)
+        if type(bindingCommand) ~= "string" or bindingCommand == "" then
+            return tonumber(bindingSlotIndex)
+        end
+
+        if bindingCommand:find("^ACTIONBUTTON%d+$") then
+            return tonumber(bindingCommand:match("(%d+)$")) or tonumber(bindingSlotIndex)
+        end
+
+        if GPX.ClickTransport and GPX.ClickTransport.StaticSlotForCommand then
+            local staticSlot = GPX.ClickTransport:StaticSlotForCommand(bindingCommand)
+            if staticSlot then
+                return staticSlot
+            end
+        end
+
+        return tonumber(bindingSlotIndex)
+    end
+
+    local function getNativeUtilityBindingAtSlot(actionSlot)
+        local slot = tonumber(actionSlot)
+        if not slot or slot < 1 or not GetActionInfo then
+            return nil
+        end
+
+        local actionType, actionID = GetActionInfo(slot)
+        if actionType ~= "macro" or not actionID or not GetMacroInfo then
+            return nil
+        end
+
+        local macroName = GetMacroInfo(actionID)
+        if GPX.SpellbookUI and GPX.SpellbookUI.GetNativeBindingCommandForUtilityMacro then
+            return GPX.SpellbookUI:GetNativeBindingCommandForUtilityMacro(macroName)
+        end
+        return nil
     end
 
     local function suppressBlizzardPageSwitchBinds()
@@ -2387,6 +2828,12 @@ function GPX:ApplyBindings(silent)
             return true
         end
 
+        local resolvedActionSlot = resolveActionSlotForCommand(command, slotIndex)
+        local nativeUtilityCommand = getNativeUtilityBindingAtSlot(resolvedActionSlot)
+        if nativeUtilityCommand and nativeUtilityCommand ~= "" then
+            return applyDirectBinding(key, nativeUtilityCommand)
+        end
+
         if engine.transport == "direct" then
             return applyDirectBinding(key, command)
         end
@@ -2419,7 +2866,7 @@ function GPX:ApplyBindings(silent)
                 return true
             end
             if not engine.overrideFallback then
-                self:Print("|cffff4444Override bind failed:|r " .. key .. " ΓåÆ " .. buttonName)
+                self:Print("|cffff4444Override bind failed:|r " .. key .. " -> " .. buttonName)
                 fail = fail + 1
                 return false
             end
@@ -2440,7 +2887,7 @@ function GPX:ApplyBindings(silent)
             ok = ok + 1
             return true
         end
-        self:Print("|cffff4444Bind failed:|r " .. key .. " ΓåÆ " .. buttonName)
+        self:Print("|cffff4444Bind failed:|r " .. key .. " -> " .. buttonName)
         fail = fail + 1
         return false
     end
@@ -2553,20 +3000,47 @@ function GPX:ApplyBindings(silent)
         local firstActionSlot = self:GetActionKeyBaseSlot(setup)
         local lastActionSlot = self:GetConfiguredActionButtonCount(setup)
 
-        if firstActionSlot > 1 then
+        if controllerEnabled and setup and setup.jumpKey and setup.jumpKey ~= "" then
+            applyDirectBinding(setup.jumpKey, "JUMP")
+
+            local mod1 = setup.modifiers and setup.modifiers[1] or "SHIFT"
+            local mod2 = setup.modifiers and setup.modifiers[2] or "ALT"
+            local mod3 = setup.modifiers and setup.modifiers[3] or "CTRL"
+            if mod1 and mod1 ~= "" then
+                applyDirectBinding(self:BuildModifiedKey({ mod1 }, setup.jumpKey), "TOGGLEWORLDMAP")
+            end
+            if mod2 and mod2 ~= "" then
+                applyDirectBinding(self:BuildModifiedKey({ mod2 }, setup.jumpKey), "TOGGLECHARACTER0")
+            end
+            if mod3 and mod3 ~= "" then
+                applyDirectBinding(self:BuildModifiedKey({ mod3 }, setup.jumpKey), "TOGGLEBATTLEFIELD")
+            end
+            if mod1 and mod1 ~= "" and mod2 and mod2 ~= "" then
+                applyDirectBinding(self:BuildModifiedKey({ mod1, mod2 }, setup.jumpKey), "TOGGLESOCIAL")
+                applyDirectBinding(self:BuildModifiedKey({ mod2, mod1 }, setup.jumpKey), "TOGGLESOCIAL")
+            end
+        elseif firstActionSlot > 1 then
             bindToButton(setup and setup.jumpKey, 1)
         end
 
         for slotIndex = firstActionSlot, lastActionSlot do
-            bindToButton(self:GetSetupActionKey(setup, slotIndex), slotIndex)
+            local key = self:GetSetupActionKey(setup, slotIndex)
+            local nativeCommand = getNativeUtilityBindingAtSlot(resolveActionSlotForCommand("ACTIONBUTTON" .. slotIndex, slotIndex))
+            if nativeCommand and nativeCommand ~= "" then
+                bindToButton(key, slotIndex)
+            else
+                bindToButton(key, slotIndex)
+            end
         end
     else
+        local numberRowMax = 12
+
         if stickyPage ~= "" then
-            for index = 1, 12 do
+            for index = 1, numberRowMax do
                 applySingleBinding(numberRowKeys[index], commandForStickyPage(index, stickyPage), index)
             end
         else
-            for index = 1, 12 do
+            for index = 1, numberRowMax do
                 bindToButton(numberRowKeys[index], index)
             end
         end
@@ -2613,7 +3087,7 @@ function GPX:ApplyBindings(silent)
             elseif engine.overrideFallback then
                 applyDirectBinding(activeLookKey, "CAMERAORSELECTORMOVE")
             else
-                self:Print("|cffff4444Override bind failed:|r " .. activeLookKey .. " ΓåÆ CAMERAORSELECTORMOVE")
+                self:Print("|cffff4444Override bind failed:|r " .. activeLookKey .. " -> CAMERAORSELECTORMOVE")
                 fail = fail + 1
             end
         else
@@ -2626,7 +3100,7 @@ function GPX:ApplyBindings(silent)
         GPX.SpellRing:ApplyBindings()
     end
 
-    local msg = string.format("|cff00ff00" .. self.brand .. " ON|r ΓÇö [%s] ΓÇö %d bindings (engine=%s)", profile.name or "default", ok, engine.transport)
+    local msg = string.format("|cff00ff00" .. self.brand .. " ON|r  [%s]  %d bindings (engine=%s)", profile.name or "default", ok, engine.transport)
     if fail > 0 then
         msg = msg .. string.format("  |cffff4444(%d failed)|r", fail)
     end
@@ -2715,14 +3189,50 @@ function GPX:Slash(msg)
         self:ClearBindings()
 
     elseif cmd == "toggle" then
-        if self.db.enabled then
-            self.db.characterOptIn = false
-            self.db.enabled = false
-            self:ClearBindings()
-        else
+        local argFull = string.lower((rest or ""):match("^%s*(.-)%s*$"))
+        local arg, styleArg = argFull:match("^(%S+)%s*(.*)$")
+        arg = arg or argFull
+        styleArg = (styleArg ~= "") and styleArg or nil
+
+        local styleAliases = {
+            ps5 = "playstation", ps4 = "playstation", ps = "playstation",
+            playstation = "playstation",
+            xbox = "xbox", xb = "xbox",
+            switch = "switch", ns = "switch",
+            generic = "generic",
+            keyboard = "keyboard", kb = "keyboard",
+        }
+        local resolvedStyle = styleArg and styleAliases[styleArg]
+
+        if arg == "keyboard" then
             self.db.characterOptIn = true
             self.db.enabled = true
-            self:ApplyBindings()
+            self:SetControllerEnabled(false)
+            self:ApplyQuickTogglePreset("keyboard", resolvedStyle)
+            self:ClearBindings(true)
+            self:ApplyBindings(true)
+            self:Print("Mode preset applied: KEYBOARD" .. (resolvedStyle and (" [" .. resolvedStyle .. "]") or ""))
+        elseif arg == "controller" then
+            self.db.characterOptIn = true
+            self.db.enabled = true
+            self:SetControllerEnabled(true)
+            self:ApplyQuickTogglePreset("controller", resolvedStyle)
+            self:ClearBindings(true)
+            self:ApplyBindings(true)
+            self:Print("Mode preset applied: CONTROLLER" .. (resolvedStyle and (" [" .. resolvedStyle .. "]") or ""))
+        else
+            if self.db.enabled then
+                self.db.characterOptIn = false
+                self.db.enabled = false
+                self:ClearBindings()
+            else
+                self.db.characterOptIn = true
+                self.db.enabled = true
+                self:ApplyBindings()
+            end
+        end
+        if self.MinimapButton and self.MinimapButton.Refresh then
+            self.MinimapButton:Refresh()
         end
 
     elseif cmd == "reload" then
@@ -2744,6 +3254,18 @@ function GPX:Slash(msg)
 
     elseif cmd == "config" or cmd == "options" then
         self:OpenSettings()
+
+    elseif cmd == "gridbook" or cmd == "spellgrid" then
+        if self.SpellbookUI then
+            self.SpellbookUI:CreateFrame()
+            if self.SpellbookUI.frame and self.SpellbookUI.frame:IsShown() then
+                self.SpellbookUI:ReturnToPreviousContext()
+            else
+                self.SpellbookUI:Open(nil, "settings")
+            end
+        else
+            self:Print("Gridbook module not loaded.")
+        end
 
     elseif cmd == "menu" then
         self:OpenMenuNav("settings")
@@ -2781,7 +3303,25 @@ function GPX:Slash(msg)
 
     elseif cmd == "controller" then
         local arg = string.lower((rest or ""):match("^%s*(.-)%s*$"))
-        if arg == "on" or arg == "enable" or arg == "1" then
+        if arg == "platformer" or arg == "platformer on" or arg == "platformer 1" or arg == "platformer enable" then
+            self:SetControllerMouseLookMode("platformer")
+            self:Print("Controller mouselook mode: PLATFORMER (always-on while controller mode is active)")
+        elseif arg == "mlook off" or arg == "platformer stop" or arg == "mouselook off" then
+            self:SetControllerMouseLookMode("off")
+            self:Print("Controller mouselook mode: OFF")
+        elseif arg == "platformer off" or arg == "platformer 0" or arg == "platformer disable" or arg == "move" then
+            self:SetControllerMouseLookMode("move")
+            self:Print("Controller mouselook mode: MOVE (starts/stops based on movement)")
+        elseif arg == "platformer status" or arg == "platformerstate" then
+            local mode = self:GetControllerMouseLookMode()
+            if mode == "on" then
+                self:Print("Controller mouselook mode: PLATFORMER")
+            elseif mode == "off" then
+                self:Print("Controller mouselook mode: OFF")
+            else
+                self:Print("Controller mouselook mode: MOVE")
+            end
+        elseif arg == "on" or arg == "enable" or arg == "1" then
             self:SetControllerEnabled(true)
         elseif arg == "off" or arg == "disable" or arg == "0" then
             self:SetControllerEnabled(false)
@@ -2795,6 +3335,9 @@ function GPX:Slash(msg)
         end
         if self.VisualBar then
             self.VisualBar:UpdateAll()
+        end
+        if self.MinimapButton and self.MinimapButton.Refresh then
+            self.MinimapButton:Refresh()
         end
         if self.ActionButtons then
             self.ActionButtons:UpdateAll()
@@ -2918,8 +3461,8 @@ function GPX:Slash(msg)
             cfg.enabled = false
             self:Print("Binding sync disabled.")
         elseif arg == "account" then
-            cfg.scope = "account"
-            self:Print("Binding sync scope set to account.")
+            cfg.scope = "character"
+            self:Print("Account scope is disabled for WoWX. Binding sync scope remains character.")
             self:PersistBindings("scope")
         elseif arg == "character" or arg == "char" then
             cfg.scope = "character"
@@ -2928,7 +3471,7 @@ function GPX:Slash(msg)
         elseif arg == "now" or arg == "save" then
             self:PersistBindings("manual")
         else
-            self:Print("Usage: /wowx bindsync [on|off|account|character|now|status]")
+            self:Print("Usage: /wowx bindsync [on|off|character|now|status]")
         end
 
     elseif cmd == "diag" then
@@ -3067,15 +3610,19 @@ end
 function GPX:PrintHelp()
     local c = "|cff88ccff"
     local r = "|r"
-    self:Print("|cffffcc00" .. self.brand .. " v" .. self.version .. " ΓÇö Commands:|r")
+    self:Print("|cffffcc00" .. self.brand .. " v" .. self.version .. " - Commands:|r")
     self:Print("  "..c.."/wowx enable"..r.."             Activate WoWX mode on this machine")
     self:Print("  "..c.."/wowx disable"..r.."            Deactivate (keyboard machine safe)")
     self:Print("  "..c.."/wowx toggle"..r.."             Toggle on/off")
+    self:Print("  "..c.."/wowx toggle keyboard"..r.."             Apply keyboard preset (WoWX on, controller off)")
+    self:Print("  "..c.."/wowx toggle controller"..r.."           Apply controller preset (WoWX on, controller on)")
+    self:Print("  "..c.."/wowx toggle controller ps5"..r.."       Controller + set PS5 label style (ps5/xbox/switch/generic)")
     self:Print("  "..c.."/wowx reload"..r.."             Re-apply bindings now")
     self:Print("  "..c.."/wowx status"..r.."             Show status, profile, binding count")
-    self:Print("  "..c.."/wowx init"..r.."               Open the visual setup wizard")
-    self:Print("  "..c.."/wowx recal"..r.."              Re-run controller or keyboard calibration")
+    self:Print("  "..c.."/wowx init"..r.."               Optional: open setup wizard for custom key capture")
+    self:Print("  "..c.."/wowx recal"..r.."              Optional: re-run controller or keyboard calibration")
     self:Print("  "..c.."/wowx config"..r.."             Open the WoWX control center")
+    self:Print("  "..c.."/wowx gridbook"..r.."           Toggle Gridbook window")
     self:Print("  "..c.."/wowx menu"..r.."               Open WoWX menu navigation")
     self:Print("  "..c.."/wowx edit"..r.."               Toggle layout edit mode (unlock/lock)")
     self:Print("  "..c.."/wowx unlock"..r.."             Enable layout edit mode")
@@ -3083,11 +3630,12 @@ function GPX:PrintHelp()
     self:Print("  "..c.."/wowx place"..r.."              Toggle all-pages placement panel")
     self:Print("  "..c.."/wowx manual"..r.."             Show categorical placement workflow")
     self:Print("  "..c.."/wowx controller [on|off]"..r.." Toggle controller verification mode")
+    self:Print("  "..c.."/wowx controller platformer"..r.." Enable always-on controller mouselook")
     self:Print("  "..c.."/wowx bags [on|off|toggle|status|reset]"..r.." Toggle WoWX bags action button")
     self:Print("  "..c.."/wowx engine ..."..r.."         Binding engine mode/options")
     self:Print("  "..c.."/wowx page ..."..r.."           Keyboard bar switch mode (hold/shift/alt/ctrl/combo)")
     self:Print("  "..c.."/wowx selfcast [on|off]"..r.."  Toggle or set auto self-cast")
-    self:Print("  "..c.."/wowx bindsync ..."..r.."       Save WoWX binding changes (on/off/account/character/now)")
+    self:Print("  "..c.."/wowx bindsync ..."..r.."       Save WoWX binding changes (on/off/character/now)")
     self:Print("  "..c.."/wowx diag"..r.."               Capture diagnostics into selectable output window")
     self:Print("  "..c.."/wowx diag stance"..r.."        Capture aura/stance frame diagnostics into output window")
     self:Print("  "..c.."/wowx diag verbose"..r.."       Save a timestamped diag + load it into output window")
@@ -3166,7 +3714,7 @@ function GPX:ListProfiles()
     self:Print("Profiles:")
     for name, profile in pairs(self.db.profiles) do
         local cur = (name == self.db.profile) and " |cff00ff00(current)|r" or ""
-        self:Print("  " .. name .. " ΓÇö " .. (profile.name or name) .. cur)
+        self:Print("  " .. name .. " - " .. (profile.name or name) .. cur)
     end
 end
 
@@ -3176,12 +3724,12 @@ function GPX:ListBindings()
         self:Print("No bindings in current profile.")
         return
     end
-    self:Print("Bindings ΓÇö profile: " .. (self.db.profile or "default"))
+    self:Print("Bindings - profile: " .. (self.db.profile or "default"))
     local keys = {}
     for k in pairs(profile.bindings) do keys[#keys + 1] = k end
     table.sort(keys)
     for _, k in ipairs(keys) do
-        self:Print("  " .. k .. "  ΓåÆ  " .. profile.bindings[k])
+        self:Print("  " .. k .. "  ->  " .. profile.bindings[k])
     end
 end
 
@@ -3202,9 +3750,9 @@ function GPX:AddBinding(key, command)
     end
 
     if old then
-        self:Print("Updated: " .. key .. " ΓåÆ " .. command .. "  (was: " .. old .. ")")
+        self:Print("Updated: " .. key .. " -> " .. command .. "  (was: " .. old .. ")")
     else
-        self:Print("Bound: " .. key .. " ΓåÆ " .. command)
+        self:Print("Bound: " .. key .. " -> " .. command)
     end
     self:PersistBindings("bind")
 end
@@ -3248,6 +3796,18 @@ function GPX:LogError(msg)
     self:Print("|cffff4444" .. text .. "|r")
 end
 
+function GPX:GetConfiguredBindingCount()
+    local profile = self:GetProfile()
+    local bindings = profile and profile.bindings or nil
+    local count = 0
+    if bindings then
+        for _ in pairs(bindings) do
+            count = count + 1
+        end
+    end
+    return count
+end
+
 -- ============================================================
 -- MAIN FRAME / EVENT HANDLER
 -- ============================================================
@@ -3269,6 +3829,8 @@ mainFrame:RegisterEvent("UNIT_ENTERED_VEHICLE")
 mainFrame:RegisterEvent("UNIT_EXITED_VEHICLE")
 mainFrame:RegisterEvent("PLAYER_CONTROL_GAINED")
 mainFrame:RegisterEvent("PLAYER_CONTROL_LOST")
+mainFrame:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+mainFrame:RegisterEvent("PLAYER_TALENT_UPDATE")
 
 local function isThisAddon(addonName)
     if not addonName then
@@ -3297,11 +3859,14 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_LOGIN" then
         ensureInitialized()
         if GPX.db then
+            GPX.db.specBarLayouts = GPX.db.specBarLayouts or {}
+            GPX.db.lastTalentGroup = GPX.db.lastTalentGroup or GPX:GetActiveTalentGroupSafe()
+            GPX:StoreCurrentSpecActionBars(GPX.db.lastTalentGroup)
             if GPX.db.enabled then
-                GPX:ApplyBindings()
-                GPX:RefreshActionStateSafety(true)
+                GPX.pendingStartupBindingApply = true
+                GPX:Print("WoWX spell grid configured for this character. Loading WoWX mode (" .. tostring(GPX:GetConfiguredBindingCount()) .. " bindings).")
             else
-                -- Just a friendly reminder ΓÇö not annoying if you know what you did
+                -- Just a friendly reminder - not annoying if you know what you did
                 local note = GPX.db.machineNote
                 local label = (note and note ~= "") and (" [" .. note .. "]") or ""
                 GPX:Print(GPX.brand .. " mode is OFF" .. label ..
@@ -3324,6 +3889,16 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_ENTERING_WORLD" then
         ensureInitialized()
         GPX:SetControllerMovementState(false)
+        if GPX.pendingStartupBindingApply then
+            if InCombatLockdown() then
+                GPX.pendingStartupBindingApplyAfterCombat = true
+            else
+                GPX.pendingStartupBindingApply = nil
+                GPX:ApplyBindings(true)
+                GPX:RefreshActionStateSafety(true)
+                GPX:Print("WoWX mode loaded (" .. tostring(GPX:GetConfiguredBindingCount()) .. " bindings).")
+            end
+        end
         GPX:RefreshActionStateSafety(true)
         GPX:RunAutomaticDiagnosticCapture("entering_world")
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -3331,11 +3906,34 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
             GPX.pendingBindingSave = nil
             GPX:PersistBindings("post-combat")
         end
+        if GPX.pendingSpecSwapLayout then
+            GPX.pendingSpecSwapLayout = nil
+            GPX:HandleSpecSwapLayouts()
+        end
         if GPX.pendingSafetyResume then
             GPX.pendingSafetyResume = nil
             GPX:ApplyBindings(true)
         end
+        if GPX.pendingStartupBindingApplyAfterCombat or GPX.pendingStartupBindingApply then
+            GPX.pendingStartupBindingApplyAfterCombat = nil
+            GPX.pendingStartupBindingApply = nil
+            GPX:ApplyBindings(true)
+            GPX:RefreshActionStateSafety(true)
+            GPX:Print("WoWX mode loaded (" .. tostring(GPX:GetConfiguredBindingCount()) .. " bindings).")
+        end
         GPX:RefreshActionStateSafety(true)
+    elseif event == "ACTIVE_TALENT_GROUP_CHANGED" or event == "PLAYER_TALENT_UPDATE" then
+        if C_Timer and C_Timer.After then
+            if not GPX._specSwapLayoutQueued then
+                GPX._specSwapLayoutQueued = true
+                C_Timer.After(0.25, function()
+                    GPX._specSwapLayoutQueued = nil
+                    GPX:HandleSpecSwapLayouts()
+                end)
+            end
+        else
+            GPX:HandleSpecSwapLayouts()
+        end
     elseif event == "UNIT_ENTERED_VEHICLE" or event == "UNIT_EXITED_VEHICLE" then
         local unit = ...
         if unit == "player" then

@@ -126,7 +126,7 @@ function Ring:ListRings()
         return
     end
 
-    GPX:Print("SpellRings ΓÇö profile: " .. (GPX.db.profile or "default"))
+    GPX:Print("SpellRings - profile: " .. (GPX.db.profile or "default"))
     for index, ring in ipairs(rings) do
         local key = ring.key or "(unbound)"
         local count = ring.spells and #ring.spells or 0

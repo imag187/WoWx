@@ -109,6 +109,42 @@ function CT:ConditionalMacroForCommand(command)
     return nil
 end
 
+function CT:IsNativeUtilitySlot(slot)
+    local actionSlot = tonumber(slot)
+    if not actionSlot or actionSlot < 1 then
+        return false
+    end
+    if not (GPX and GPX.SpellbookUI and GPX.SpellbookUI.IsNativeUtilityMacroAtSlot) then
+        return false
+    end
+    return GPX.SpellbookUI:IsNativeUtilityMacroAtSlot(actionSlot) == true
+end
+
+function CT:GetNativeUtilityCommandAtSlot(slot)
+    local actionSlot = tonumber(slot)
+    if not actionSlot or actionSlot < 1 then
+        return nil
+    end
+    if not (GetActionInfo and GetMacroInfo) then
+        return nil
+    end
+    if not (GPX and GPX.SpellbookUI and GPX.SpellbookUI.GetNativeBindingCommandForUtilityMacro) then
+        return nil
+    end
+
+    local actionType, actionID = GetActionInfo(actionSlot)
+    if actionType ~= "macro" or not actionID then
+        return nil
+    end
+
+    local macroName = GetMacroInfo(actionID)
+    if not macroName or macroName == "" then
+        return nil
+    end
+
+    return GPX.SpellbookUI:GetNativeBindingCommandForUtilityMacro(macroName)
+end
+
 -- The canonical secure frame name for a command's proxy button.
 function CT:ProxyButtonName(command)
     return command and ("WoWXBindButton_" .. command) or nil
@@ -138,6 +174,13 @@ function CT:WriteAttribute(button, prefix, command, resolvedSlot)
     button:SetAttribute(p .. "unit",        nil)
     button:SetAttribute(p .. "checkselfcast", nil)
     button:SetAttribute(p .. "checkfocuscast", nil)
+
+    -- Native utility placeholders (Jump/Menu/Map/etc) are icon-only guide slots.
+    -- Runtime execution is handled by dedicated native bindings.
+    local nativeUtilityCommand = slot and self:GetNativeUtilityCommandAtSlot(slot) or nil
+    if slot and nativeUtilityCommand and nativeUtilityCommand ~= "" then
+        return
+    end
 
     if proxyMacro then
         button:SetAttribute(p .. "type",       "macro")
