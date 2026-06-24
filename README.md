@@ -2,6 +2,10 @@
 
 WoWX is a WotLK 3.3.5a addon aimed at couch play, reduced-button control surfaces, and accessibility-focused input. It treats controller mappings as ordinary WoW key presses so Linux tools like AntiMicroX or Steam Input can stay outside the addon.
 
+## Practical Hardware Note
+
+For truly keyboardless couch play, a small attachable Bluetooth keyboard is strongly recommended as a fallback input device. This is especially useful for occasional text entry, edge-case UI interactions, and recovery actions when protected Blizzard panels cannot be safely opened from secure controller bindings.
+
 ## Accessibility Policy
 
 WoWX is an accessibility surface first.

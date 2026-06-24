@@ -2786,8 +2786,6 @@ function GPX:EnsureMenuLauncherButtons()
             end
             if GPX.MenuNav and GPX.MenuNav.Open then
                 GPX.MenuNav:Open("settings")
-            elseif ToggleGameMenu then
-                ToggleGameMenu()
             end
         end)
         self.menuLauncherButton = launcher

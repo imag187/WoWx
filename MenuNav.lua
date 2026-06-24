@@ -26,14 +26,6 @@ local function safeCall(fn)
     return ok
 end
 
-local function openGameMenu()
-    if ToggleGameMenu then
-        ToggleGameMenu()
-    elseif ShowUIPanel and GameMenuFrame then
-        ShowUIPanel(GameMenuFrame)
-    end
-end
-
 local function openInterfaceOptions()
     if InterfaceOptionsFrame_OpenToCategory and InterfaceOptionsFrame then
         InterfaceOptionsFrame_OpenToCategory(InterfaceOptionsFrame)
@@ -46,8 +38,6 @@ end
 local function openVideoOptions()
     if VideoOptionsFrame then
         ShowUIPanel(VideoOptionsFrame)
-    else
-        openGameMenu()
     end
 end
 
@@ -57,13 +47,10 @@ local function openKeyBindings()
     end
     if KeyBindingFrame then
         ShowUIPanel(KeyBindingFrame)
-    else
-        openGameMenu()
     end
 end
 
 local menuSpecs = {
-    { key = "gameMenu", label = "Game Menu", hint = "Logout, macros, options", click = openGameMenu },
     { key = "interface", label = "Interface", hint = "General game options", click = openInterfaceOptions },
     { key = "video", label = "Video", hint = "Resolution and graphics", click = openVideoOptions },
     { key = "bindings", label = "Key Bindings", hint = "View keymap", click = openKeyBindings },
