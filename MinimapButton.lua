@@ -14,6 +14,29 @@ local function ensureConfig()
     return GPX.db.ui.minimapButton
 end
 
+function Button:UpdateIconState()
+    if not self.button or not self.button.icon then
+        return
+    end
+
+    local wowxEnabled = GPX.db and GPX.db.enabled
+    local controllerEnabled = GPX.IsControllerEnabled and GPX:IsControllerEnabled()
+
+    if not wowxEnabled then
+        self.button.icon:SetTexture("Interface\\Icons\\Ability_Rogue_Sprint")
+        self.button.icon:SetVertexColor(0.55, 0.55, 0.55, 0.95)
+        return
+    end
+
+    if controllerEnabled then
+        self.button.icon:SetTexture("Interface\\Icons\\Spell_Nature_Lightning")
+        self.button.icon:SetVertexColor(0.72, 0.9, 1.0, 1.0)
+    else
+        self.button.icon:SetTexture("Interface\\Icons\\Ability_Rogue_Sprint")
+        self.button.icon:SetVertexColor(1.0, 0.9, 0.52, 1.0)
+    end
+end
+
 function Button:UpdatePosition()
     if not self.button then
         return
@@ -66,7 +89,11 @@ function Button:Create()
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine(GPX.brand, 1.0, 0.96, 0.7)
-        GameTooltip:AddLine("Left-click: open control center", 0.85, 0.9, 1.0)
+        local wowxEnabled = GPX.db and GPX.db.enabled
+        local controllerEnabled = GPX.IsControllerEnabled and GPX:IsControllerEnabled()
+        GameTooltip:AddLine("WoWX: " .. (wowxEnabled and "Enabled" or "Disabled"), 0.85, 0.9, 1.0)
+        GameTooltip:AddLine("Input Mode: " .. (controllerEnabled and "Controller" or "Keyboard"), 0.85, 0.9, 1.0)
+        GameTooltip:AddLine("Left-click: toggle control center", 0.85, 0.9, 1.0)
         GameTooltip:AddLine("Right-click: quick menu", 0.85, 0.9, 1.0)
         GameTooltip:AddLine("Drag: move around the minimap", 0.75, 0.82, 0.9)
         GameTooltip:Show()
@@ -79,7 +106,11 @@ function Button:Create()
         if mouseButton == "RightButton" then
             GPX.MinimapButton:ShowMenu()
         else
-            GPX:OpenSettings()
+            if GPX.ToggleSettings then
+                GPX:ToggleSettings()
+            else
+                GPX:OpenSettings()
+            end
         end
     end)
 
@@ -106,8 +137,10 @@ end
 
 function Button:ShowMenu()
     local bar = GPX.VisualBar
+    local settingsOpen = GPX.SettingsUI and GPX.SettingsUI.frame and GPX.SettingsUI.frame:IsShown()
     local layoutLabel = "Layout Edit"
     local buttonEditLabel = "Button Edit"
+    local configLabel = settingsOpen and "Close Config" or "Open Config"
     if bar and bar.IsLocked and bar:IsLocked() then
         layoutLabel = "Layout Edit: Off (Enable)"
     else
@@ -120,12 +153,12 @@ function Button:ShowMenu()
     end
     local menu = {
         { text = GPX.brand, isTitle = true, notCheckable = true },
-        { text = "Open Config", notCheckable = true, func = function() GPX:OpenSettings() end },
+        { text = configLabel, notCheckable = true, func = function() if GPX.ToggleSettings then GPX:ToggleSettings() else GPX:OpenSettings() end end },
+        { text = "Open Gridbook", notCheckable = true, func = function() if GPX.SpellbookUI then GPX.SpellbookUI:Open(nil, "settings") end end },
         { text = "Run Setup Wizard", notCheckable = true, func = function() GPX:OpenSetupWizard("init") end },
         { text = layoutLabel, notCheckable = true, func = function() if bar then bar:Slash((bar:IsLocked() and "unlock") or "lock") end end },
         { text = buttonEditLabel, notCheckable = true, func = function() if bar then bar:Slash((bar:IsButtonLockEnabled() and "buttonunlock") or "buttonlock") end end },
         { text = "Toggle XP/Rep Bar", notCheckable = true, func = function() if bar then bar:Slash("progress") end end },
-        { text = "Toggle Bag Bar", notCheckable = true, func = function() if bar then bar:Slash("bagbar") end end },
         { text = "Layout Edit uses chrome drag + Edit sizing", notCheckable = true, disabled = true },
     }
     EasyMenu(menu, dropdown, "cursor", 0, 0, "MENU")
@@ -139,6 +172,7 @@ function Button:Refresh()
     else
         self.button:Show()
         self:UpdatePosition()
+        self:UpdateIconState()
     end
 end
 

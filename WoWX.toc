@@ -2,7 +2,7 @@
 ## Title: WoWX
 ## Notes: Modernized WotLK couch-play addon for controller, keyboard, and accessibility-focused input. Designed for Linux + AntiMicroX. No cloud sync.
 ## Author: WoWX
-## Version: 1.0.0
+## Version: 2.0.1
 ## SavedVariablesPerCharacter: WoWXDB, GamePadXDB
 
 GamePadX.lua

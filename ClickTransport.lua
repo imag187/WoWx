@@ -96,17 +96,61 @@ function CT:ConditionalMacroForCommand(command)
     if not command then return nil end
     local actionIndex = tonumber(command:match("^ACTIONBUTTON(%d+)$"))
     if actionIndex then
-        return "/click [bonusbar:5] BonusActionButton" .. actionIndex
+        local macro = "/click [bonusbar:5] BonusActionButton" .. actionIndex
             .. "; [bonusbar:4] BonusActionButton" .. actionIndex
             .. "; [bonusbar:3] BonusActionButton" .. actionIndex
             .. "; [bonusbar:2] BonusActionButton" .. actionIndex
             .. "; [bonusbar:1] BonusActionButton" .. actionIndex
-            .. "; ActionButton" .. actionIndex
+        local _, classFile = UnitClass("player")
+        local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
+        if classFile == "DRUID" and not isCoA then
+            -- Non-CoA fallback: some realms expose bonus offset reliably but do not
+            -- always honor [bonusbar] at cast time during form swaps.
+            macro = macro .. "; [stance] BonusActionButton" .. actionIndex
+        end
+        macro = macro .. "; ActionButton" .. actionIndex
+        return macro
     end
     -- Multibar buttons must NOT route through native Blizzard bar frames;
     -- UpdateBlizzardBars() reparents those to a hidden frame so "/click" silently
     -- fails. Direct action slot execution is used instead.
     return nil
+end
+
+function CT:IsNativeUtilitySlot(slot)
+    local actionSlot = tonumber(slot)
+    if not actionSlot or actionSlot < 1 then
+        return false
+    end
+    if not (GPX and GPX.SpellbookUI and GPX.SpellbookUI.IsNativeUtilityMacroAtSlot) then
+        return false
+    end
+    return GPX.SpellbookUI:IsNativeUtilityMacroAtSlot(actionSlot) == true
+end
+
+function CT:GetNativeUtilityCommandAtSlot(slot)
+    local actionSlot = tonumber(slot)
+    if not actionSlot or actionSlot < 1 then
+        return nil
+    end
+    if not (GetActionInfo and GetMacroInfo) then
+        return nil
+    end
+    if not (GPX and GPX.SpellbookUI and GPX.SpellbookUI.GetNativeBindingCommandForUtilityMacro) then
+        return nil
+    end
+
+    local actionType, actionID = GetActionInfo(actionSlot)
+    if actionType ~= "macro" or not actionID then
+        return nil
+    end
+
+    local macroName = GetMacroInfo(actionID)
+    if not macroName or macroName == "" then
+        return nil
+    end
+
+    return GPX.SpellbookUI:GetNativeBindingCommandForUtilityMacro(macroName)
 end
 
 -- The canonical secure frame name for a command's proxy button.
@@ -138,6 +182,13 @@ function CT:WriteAttribute(button, prefix, command, resolvedSlot)
     button:SetAttribute(p .. "unit",        nil)
     button:SetAttribute(p .. "checkselfcast", nil)
     button:SetAttribute(p .. "checkfocuscast", nil)
+
+    -- Native utility placeholders (Jump/Menu/Map/etc) are icon-only guide slots.
+    -- Runtime execution is handled by dedicated native bindings.
+    local nativeUtilityCommand = slot and self:GetNativeUtilityCommandAtSlot(slot) or nil
+    if slot and nativeUtilityCommand and nativeUtilityCommand ~= "" then
+        return
+    end
 
     if proxyMacro then
         button:SetAttribute(p .. "type",       "macro")
@@ -218,5 +269,43 @@ function CT:UpdateAllProxyButtons(resolveFunc)
     for command, _ in pairs(self.proxyButtons) do
         local slot = resolveFunc and resolveFunc(command) or nil
         self:UpdateProxyButton(command, slot)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Bag item transport helpers
+-- Applies a secure right-click /use macro for a specific bag/slot.
+-- Left-click behavior remains owned by ContainerFrameItemButtonTemplate.
+-- ---------------------------------------------------------------------------
+
+function CT:BuildBagItemUseMacro(bagID, slot)
+    local bag = tonumber(bagID)
+    local idx = tonumber(slot)
+    if not bag or not idx then
+        return nil
+    end
+    return "/use " .. tostring(bag) .. " " .. tostring(idx)
+end
+
+function CT:ApplyBagItemUse(button, bagID, slot)
+    if not button or InCombatLockdown() then
+        return
+    end
+
+    local macro = self:BuildBagItemUseMacro(bagID, slot)
+    local prefixes = { "", "shift-", "alt-", "ctrl-", "shift-alt-", "alt-shift-" }
+
+    for _, pfx in ipairs(prefixes) do
+        button:SetAttribute(pfx .. "type2", nil)
+        button:SetAttribute(pfx .. "macrotext2", nil)
+    end
+
+    if not macro then
+        return
+    end
+
+    for _, pfx in ipairs(prefixes) do
+        button:SetAttribute(pfx .. "type2", "macro")
+        button:SetAttribute(pfx .. "macrotext2", macro)
     end
 end

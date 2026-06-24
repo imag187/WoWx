@@ -36,6 +36,8 @@ local modifierStates = {
     ["SHIFT-ALT"] = { title = "Combo", bar = "MULTIACTIONBAR3BUTTON" },
 }
 
+local cachedDisplayStates = { "", "SHIFT", "ALT", "CTRL", "SHIFT-ALT" }
+
 local placementRows = {
     { state = "", label = "Base" },
     { state = "SHIFT", label = "Shift" },
@@ -124,6 +126,215 @@ local function ensureVisualBarConfig()
     GPX.db.ui = GPX.db.ui or GPX:DeepCopy(GPX.defaults.ui)
     GPX.db.ui.visualBar = GPX.db.ui.visualBar or GPX:DeepCopy(GPX.defaults.ui.visualBar)
     return GPX.db.ui.visualBar
+end
+
+local function copyPoint(point, fallback)
+    local source = point or fallback or {}
+    return {
+        anchor = source.anchor or "BOTTOM",
+        relativeTo = source.relativeTo or "UIParent",
+        relativePoint = source.relativePoint or "BOTTOM",
+        x = tonumber(source.x) or 0,
+        y = tonumber(source.y) or 0,
+    }
+end
+
+local function copyLayoutTable(layout)
+    local source = layout or {}
+    return GPX:DeepCopy(source)
+end
+
+local function getLayoutProfileSnapshot()
+    local config = ensureVisualBarConfig()
+    return {
+        layout = copyLayoutTable(config.layout),
+        point = copyPoint(config.point, GPX.defaults.ui.visualBar.point),
+        progressPoint = copyPoint(config.progressPoint, GPX.defaults.ui.visualBar.progressPoint),
+        bagPoint = copyPoint(config.bagPoint, GPX.defaults.ui.visualBar.bagPoint),
+        microPoint = copyPoint(config.microPoint, GPX.defaults.ui.visualBar.microPoint),
+        modifierPoint = copyPoint(config.modifierPoint, GPX.defaults.ui.visualBar.modifierPoint),
+        stancePoint = copyPoint(config.stancePoint, GPX.defaults.ui.visualBar.stancePoint),
+        petPoint = copyPoint(config.petPoint, GPX.defaults.ui.visualBar.petPoint),
+        vehiclePoint = copyPoint(config.vehiclePoint, GPX.defaults.ui.visualBar.vehiclePoint),
+        showAlignmentGrid = config.showAlignmentGrid == true,
+        scale = tonumber(config.scale) or 1.0,
+        bagScale = tonumber(config.bagScale) or nil,
+        microScale = tonumber(config.microScale) or nil,
+        modifierScale = tonumber(config.modifierScale) or nil,
+        stanceScale = tonumber(config.stanceScale) or nil,
+        petScale = tonumber(config.petScale) or nil,
+        vehicleScale = tonumber(config.vehicleScale) or nil,
+    }
+end
+
+function Bar:GetLayoutProfileName()
+    local config = ensureVisualBarConfig()
+    return config.layoutProfile or "default"
+end
+
+function Bar:GetLayoutProfiles()
+    local config = ensureVisualBarConfig()
+    config.layoutProfiles = config.layoutProfiles or {}
+    return config.layoutProfiles
+end
+
+function Bar:GetLayoutProfileNames()
+    local names = {}
+    local profiles = self:GetLayoutProfiles()
+    for name in pairs(profiles) do
+        names[#names + 1] = name
+    end
+    table.sort(names)
+    return names
+end
+
+function Bar:EnsureLayoutProfile(profileName)
+    local config = ensureVisualBarConfig()
+    config.layoutProfiles = config.layoutProfiles or {}
+    local name = tostring(profileName or config.layoutProfile or "default")
+    if name == "" then
+        name = "default"
+    end
+    if type(config.layoutProfiles[name]) ~= "table" then
+        config.layoutProfiles[name] = getLayoutProfileSnapshot()
+    end
+    return config.layoutProfiles[name], name
+end
+
+function Bar:SaveLayoutProfile(profileName)
+    local config = ensureVisualBarConfig()
+    local snapshot, name = self:EnsureLayoutProfile(profileName)
+    local fresh = getLayoutProfileSnapshot()
+    config.layoutProfiles[name] = fresh
+    config.layoutProfile = name
+    return fresh
+end
+
+function Bar:ApplyLayoutProfile(profileName)
+    local config = ensureVisualBarConfig()
+    local snapshot, name = self:EnsureLayoutProfile(profileName)
+    if type(snapshot) ~= "table" then
+        return false
+    end
+
+    config.layout = copyLayoutTable(snapshot.layout)
+    config.point = copyPoint(snapshot.point, GPX.defaults.ui.visualBar.point)
+    config.progressPoint = copyPoint(snapshot.progressPoint, GPX.defaults.ui.visualBar.progressPoint)
+    config.bagPoint = copyPoint(snapshot.bagPoint, GPX.defaults.ui.visualBar.bagPoint)
+    config.microPoint = copyPoint(snapshot.microPoint, GPX.defaults.ui.visualBar.microPoint)
+    config.modifierPoint = copyPoint(snapshot.modifierPoint, GPX.defaults.ui.visualBar.modifierPoint)
+    config.stancePoint = copyPoint(snapshot.stancePoint, GPX.defaults.ui.visualBar.stancePoint)
+    config.petPoint = copyPoint(snapshot.petPoint, GPX.defaults.ui.visualBar.petPoint)
+    config.vehiclePoint = copyPoint(snapshot.vehiclePoint, GPX.defaults.ui.visualBar.vehiclePoint)
+    config.showAlignmentGrid = snapshot.showAlignmentGrid == true
+    if snapshot.scale ~= nil then config.scale = snapshot.scale end
+    if snapshot.bagScale ~= nil then config.bagScale = snapshot.bagScale end
+    if snapshot.microScale ~= nil then config.microScale = snapshot.microScale end
+    if snapshot.modifierScale ~= nil then config.modifierScale = snapshot.modifierScale end
+    if snapshot.stanceScale ~= nil then config.stanceScale = snapshot.stanceScale end
+    if snapshot.petScale ~= nil then config.petScale = snapshot.petScale end
+    if snapshot.vehicleScale ~= nil then config.vehicleScale = snapshot.vehicleScale end
+    config.layoutProfile = name
+    self:UpdateAll()
+    return true
+end
+
+function Bar:DeleteLayoutProfile(profileName)
+    local config = ensureVisualBarConfig()
+    local name = tostring(profileName or config.layoutProfile or "default")
+    if name == "" or name == "default" then
+        return false
+    end
+    if config.layoutProfiles then
+        config.layoutProfiles[name] = nil
+    end
+    if config.layoutProfile == name then
+        config.layoutProfile = "default"
+    end
+    return true
+end
+
+local function ensureAlignmentGrid(frame)
+    if frame and frame._wowxAlignmentGrid then
+        return frame._wowxAlignmentGrid
+    end
+    if not frame then
+        return nil
+    end
+
+    local grid = CreateFrame("Frame", nil, frame)
+    grid:SetFrameStrata("BACKGROUND")
+    grid:SetFrameLevel(0)
+    grid:EnableMouse(false)
+    grid:SetAllPoints(UIParent)
+    grid.lines = { vertical = {}, horizontal = {} }
+    grid:Hide()
+
+    frame._wowxAlignmentGrid = grid
+    return grid
+end
+
+function Bar:UpdateAlignmentGrid()
+    local config = ensureVisualBarConfig()
+    local shouldShow = config.showAlignmentGrid == true or (not self:IsLayoutEditLocked())
+    local grid = ensureAlignmentGrid(UIParent)
+    if not grid then
+        return
+    end
+
+    if not shouldShow then
+        grid:Hide()
+        return
+    end
+
+    local width = math.floor((UIParent and UIParent.GetWidth and UIParent:GetWidth()) or 0)
+    local height = math.floor((UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 0)
+    local cell = 40
+    local verticalCount = math.max(0, math.floor(width / cell))
+    local horizontalCount = math.max(0, math.floor(height / cell))
+
+    local function ensureLine(collection, index)
+        if not collection[index] then
+            local line = grid:CreateTexture(nil, "OVERLAY")
+            line:SetTexture("Interface\\Buttons\\WHITE8x8")
+            collection[index] = line
+        end
+        return collection[index]
+    end
+
+    for index = 1, verticalCount + 1 do
+        local line = ensureLine(grid.lines.vertical, index)
+        line:SetVertexColor(0.84, 0.9, 1.0, index % 5 == 0 and 0.16 or 0.07)
+        line:SetWidth(1)
+        local offset = (index - 1) * cell
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", grid, "TOPLEFT", offset, 0)
+        line:SetPoint("BOTTOMLEFT", grid, "BOTTOMLEFT", offset, 0)
+        line:Show()
+    end
+    for index = verticalCount + 2, #grid.lines.vertical do
+        if grid.lines.vertical[index] then
+            grid.lines.vertical[index]:Hide()
+        end
+    end
+
+    for index = 1, horizontalCount + 1 do
+        local line = ensureLine(grid.lines.horizontal, index)
+        line:SetVertexColor(0.84, 0.9, 1.0, index % 5 == 0 and 0.16 or 0.07)
+        line:SetHeight(1)
+        local offset = (index - 1) * cell
+        line:ClearAllPoints()
+        line:SetPoint("TOPLEFT", grid, "TOPLEFT", 0, -offset)
+        line:SetPoint("TOPRIGHT", grid, "TOPRIGHT", 0, -offset)
+        line:Show()
+    end
+    for index = horizontalCount + 2, #grid.lines.horizontal do
+        if grid.lines.horizontal[index] then
+            grid.lines.horizontal[index]:Hide()
+        end
+    end
+
+    grid:Show()
 end
 
 function Bar:UseModifierPages()
@@ -453,6 +664,48 @@ local function layoutIconPriorityWrapper(frame, icon, iconSize, bottomReserve)
     frame.slotPanel:ClearAllPoints()
     frame.slotPanel:SetPoint("TOPLEFT", icon, "TOPLEFT", -3, 3)
     frame.slotPanel:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 3, -3)
+
+    frame.slotBorder:ClearAllPoints()
+    frame.slotBorder.top:ClearAllPoints()
+    frame.slotBorder.top:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+    frame.slotBorder.top:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+    frame.slotBorder.bottom:ClearAllPoints()
+    frame.slotBorder.bottom:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+    frame.slotBorder.bottom:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+    frame.slotBorder.left:ClearAllPoints()
+    frame.slotBorder.left:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+    frame.slotBorder.left:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+    frame.slotBorder.right:ClearAllPoints()
+    frame.slotBorder.right:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+    frame.slotBorder.right:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+
+    if frame.slotTint then
+        frame.slotTint.top:ClearAllPoints()
+        frame.slotTint.top:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+        frame.slotTint.top:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+        frame.slotTint.bottom:ClearAllPoints()
+        frame.slotTint.bottom:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+        frame.slotTint.bottom:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+        frame.slotTint.left:ClearAllPoints()
+        frame.slotTint.left:SetPoint("TOPLEFT", frame.slotPanel, "TOPLEFT", 0, 0)
+        frame.slotTint.left:SetPoint("BOTTOMLEFT", frame.slotPanel, "BOTTOMLEFT", 0, 0)
+        frame.slotTint.right:ClearAllPoints()
+        frame.slotTint.right:SetPoint("TOPRIGHT", frame.slotPanel, "TOPRIGHT", 0, 0)
+        frame.slotTint.right:SetPoint("BOTTOMRIGHT", frame.slotPanel, "BOTTOMRIGHT", 0, 0)
+    end
+end
+
+local function layoutSlotWrapperToIcon(frame, icon, padding)
+    ensureSlotWrapper(frame)
+    if not frame or not icon then
+        return
+    end
+
+    local pad = math.max(0, tonumber(padding) or 0)
+
+    frame.slotPanel:ClearAllPoints()
+    frame.slotPanel:SetPoint("TOPLEFT", icon, "TOPLEFT", -pad, pad)
+    frame.slotPanel:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", pad, -pad)
 
     frame.slotBorder:ClearAllPoints()
     frame.slotBorder.top:ClearAllPoints()
@@ -1480,6 +1733,9 @@ function Bar:CreateLayoutEditor()
     frame:Hide()
 
     frame:SetScript("OnDragStart", function(self)
+        if not shouldStartFrameDrag(self) then
+            return
+        end
         self:StartMoving()
     end)
     frame:SetScript("OnDragStop", function(self)
@@ -1489,33 +1745,52 @@ function Bar:CreateLayoutEditor()
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -12)
     title:SetTextColor(0.96, 0.98, 1.0)
+    title._wowxDisableFrameDrag = true
 
     local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetWidth(252)
     subtitle:SetJustifyH("LEFT")
     subtitle:SetTextColor(0.78, 0.84, 0.95)
+    subtitle._wowxDisableFrameDrag = true
+
+    local aspectButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    aspectButton:SetWidth(116)
+    aspectButton:SetHeight(20)
+    aspectButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -40)
+    aspectButton._wowxDisableFrameDrag = true
+
+    local gridButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    gridButton:SetWidth(116)
+    gridButton:SetHeight(20)
+    gridButton:SetPoint("TOPLEFT", aspectButton, "TOPRIGHT", 8, 0)
+    gridButton._wowxDisableFrameDrag = true
 
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
+    closeButton._wowxDisableFrameDrag = true
 
     local resetButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     resetButton:SetWidth(82)
     resetButton:SetHeight(22)
     resetButton:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 12)
     resetButton:SetText("Defaults")
+    resetButton._wowxDisableFrameDrag = true
 
     local doneButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     doneButton:SetWidth(82)
     doneButton:SetHeight(22)
     doneButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 12)
     doneButton:SetText("Close")
+    doneButton._wowxDisableFrameDrag = true
     doneButton:SetScript("OnClick", function()
         frame:Hide()
     end)
 
     frame.title = title
     frame.subtitle = subtitle
+    frame.aspectButton = aspectButton
+    frame.gridButton = gridButton
     frame.resetButton = resetButton
     frame.controls = {}
 
@@ -1539,13 +1814,16 @@ function Bar:CreateLayoutEditor()
         local label = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         label:SetPoint("BOTTOMLEFT", slider, "TOPLEFT", 0, 4)
         label:SetTextColor(0.92, 0.95, 1.0)
+        label._wowxDisableFrameDrag = true
 
         local valueText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         valueText:SetPoint("BOTTOMRIGHT", slider, "TOPRIGHT", 0, 4)
         valueText:SetTextColor(1.0, 0.92, 0.58)
+        valueText._wowxDisableFrameDrag = true
 
         slider.label = label
         slider.valueText = valueText
+        slider._wowxDisableFrameDrag = true
         slider:Hide()
         slider:SetScript("OnValueChanged", function(self, value)
             if self._suspend or not self.control then
@@ -1589,6 +1867,30 @@ function Bar:GetEditorControls(kind)
     end
 
     if kind == "main" then
+        local function syncMainSize(axis, value)
+            local size = math.floor(value + 0.5)
+            layout[axis] = size
+            if layout.aspectLock then
+                layout.buttonWidth = size
+                layout.buttonHeight = size
+                if self.layoutEditor and self.layoutEditor.controls then
+                    local widthSlider = self.layoutEditor.controls[3]
+                    local heightSlider = self.layoutEditor.controls[4]
+                    if widthSlider and widthSlider ~= axis then
+                        widthSlider._suspend = true
+                        widthSlider:SetValue(size)
+                        widthSlider.valueText:SetText(tostring(size))
+                        widthSlider._suspend = false
+                    end
+                    if heightSlider then
+                        heightSlider._suspend = true
+                        heightSlider:SetValue(size)
+                        heightSlider.valueText:SetText(tostring(size))
+                        heightSlider._suspend = false
+                    end
+                end
+            end
+        end
         add("Scale", 0.5, 2.0, 0.01,
             function() return select(1, self:GetScaleForKind("main")) end,
             function(value) self:SetScaleForKind("main", value) end,
@@ -1598,10 +1900,10 @@ function Bar:GetEditorControls(kind)
             function(value) layout.buttonCount = clamp(math.floor(value + 0.5), 1, BAR_BUTTON_COUNT) end)
         add("Button Width", 42, 120, 1,
             function() return tonumber(layout.buttonWidth) or layoutDefaults.main.buttonWidth end,
-            function(value) layout.buttonWidth = math.floor(value + 0.5) end)
+            function(value) syncMainSize("buttonWidth", value) end)
         add("Button Height", 68, 156, 1,
             function() return tonumber(layout.buttonHeight) or layoutDefaults.main.buttonHeight end,
-            function(value) layout.buttonHeight = math.floor(value + 0.5) end)
+            function(value) syncMainSize("buttonHeight", value) end)
         add("Spacing", 0, 28, 1,
             function() return tonumber(layout.buttonSpacing) or layoutDefaults.main.buttonSpacing end,
             function(value) layout.buttonSpacing = math.floor(value + 0.5) end)
@@ -1659,6 +1961,41 @@ function Bar:OpenLayoutEditor(kind, anchorFrame)
     editor.kind = kind
     editor.title:SetText((layoutTitles[kind] or "Bar") .. " Edit Mode")
     editor.subtitle:SetText("Adjust this bar in place. Changes save immediately to the current WoWX profile.")
+    if editor.aspectButton then
+        if kind == "main" then
+            local layout = self:GetLayoutConfig("main")
+            editor.aspectButton:Show()
+            editor.aspectButton:SetText((layout.aspectLock == true) and "Aspect: Locked" or "Aspect: Free")
+            editor.aspectButton:SetScript("OnClick", function()
+                layout.aspectLock = not (layout.aspectLock == true)
+                if layout.aspectLock then
+                    local size = tonumber(layout.buttonWidth) or tonumber(layout.buttonHeight) or layoutDefaults.main.buttonWidth
+                    layout.buttonWidth = size
+                    layout.buttonHeight = size
+                end
+                if GPX.VisualBar then
+                    GPX.VisualBar:UpdateAll()
+                end
+                GPX.VisualBar:OpenLayoutEditor(kind, anchorFrame)
+            end)
+        else
+            editor.aspectButton:Hide()
+        end
+    end
+    if editor.gridButton then
+        local config = ensureVisualBarConfig()
+        editor.gridButton:Show()
+        editor.gridButton:SetText((config.showAlignmentGrid == true) and "Grid: On" or "Grid: Off")
+        editor.gridButton:SetScript("OnClick", function()
+            local cfg = ensureVisualBarConfig()
+            cfg.showAlignmentGrid = not (cfg.showAlignmentGrid == true)
+            if GPX.VisualBar then
+                GPX.VisualBar:UpdateAlignmentGrid()
+                GPX.VisualBar:UpdateAll()
+            end
+            GPX.VisualBar:OpenLayoutEditor(kind, anchorFrame)
+        end)
+    end
     editor:ClearAllPoints()
 
     if anchorFrame and anchorFrame.IsShown and anchorFrame:IsShown() and anchorFrame.GetCenter then
@@ -2548,6 +2885,27 @@ function Bar:GetPhysicalKeyForButton(index)
     return GPX:GetSetupActionKey(setup, index) or defaultKeyHints[index]
 end
 
+function Bar:GetControllerVisualForSlot(index)
+    if not GPX:IsControllerEnabled() then
+        return nil, nil
+    end
+
+    local setup = self:GetSetup()
+    local profile = self:GetProfile()
+    local styleId = GPX:GetEffectiveControllerStyleId(setup, profile)
+    local labels = GPX:GetCombatSlotLabels(styleId)
+    if not labels or #labels == 0 then
+        return nil, nil
+    end
+
+    local slotLabel = labels[tonumber(index) or 0]
+    if not slotLabel or slotLabel == "" then
+        return nil, nil
+    end
+
+    return slotLabel, GPX:GetButtonTexture(styleId, slotLabel)
+end
+
 function Bar:GetCommandForButton(index, state)
     if GPX.ClickTransport and GPX.ClickTransport.CommandForCell then
         return GPX.ClickTransport:CommandForCell(state, index, self:UseModifierPages())
@@ -2592,14 +2950,36 @@ function Bar:GetButtonCandidates(command)
 end
 
 local function getCurrentMainActionPage()
+    local _, classFile = UnitClass("player")
+    local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
     if GetBonusBarOffset then
         local bonusOffset = tonumber(GetBonusBarOffset()) or 0
         if bonusOffset > 0 then
+            if classFile == "DRUID" and not isCoA then
+                local stealthed = IsStealthed and IsStealthed() or false
+                if bonusOffset == 1 then
+                    return stealthed and 8 or 7
+                elseif bonusOffset == 2 then
+                    return 8
+                elseif bonusOffset == 3 then
+                    return 9
+                elseif bonusOffset == 4 then
+                    return 10
+                end
+            end
             return 6 + bonusOffset
         end
     end
 
-    -- Ascension PTR can report stale/non-visual page values after aura-driven swaps;
+    if not isCoA and GetActionBarPage then
+        local page = tonumber(GetActionBarPage()) or 1
+        if page < 1 then
+            page = 1
+        end
+        return page
+    end
+
+    -- CoA realms can report stale/non-visual page values after aura-driven swaps;
     -- treat base page as authoritative whenever bonus offset is zero.
     return 1
 end
@@ -2609,14 +2989,26 @@ function Bar:ResolveCommand(command)
     if mainIndex then
         local liveButton = _G["ActionButton" .. mainIndex]
         local liveAction = liveButton and liveButton.action or nil
+        local _, classFile = UnitClass("player")
+        local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
         local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
         local page = getCurrentMainActionPage()
         local slot = ((page - 1) * 12) + mainIndex
 
-        -- On Ascension PTR, hasOverride can remain noisy while bonusOffset is the
+        -- On CoA realms, hasOverride can remain noisy while bonusOffset is the
         -- reliable signal for Runeshroud page routing. Treat bonusOffset as
-        -- authoritative for ACTIONBUTTON slot resolution.
+        -- authoritative when present for ACTIONBUTTON slot resolution.
         if bonusOffset > 0 then
+            if classFile == "DRUID" and not isCoA then
+                local bonusButton = _G["BonusActionButton" .. mainIndex]
+                local bonusAction = bonusButton and tonumber(bonusButton.action)
+                if bonusAction and bonusAction > 0 then
+                    return bonusAction
+                end
+                if HasAction and HasAction(slot) then
+                    return slot
+                end
+            end
             return slot
         end
 
@@ -2682,12 +3074,49 @@ function Bar:GetActionName(slot)
     return nil
 end
 
-function Bar:GetDisplayForButton(index, state)
+function Bar:IsNativeUtilitySlot(slot)
+    local actionSlot = tonumber(slot)
+    if not actionSlot or actionSlot < 1 then
+        return false
+    end
+    if GPX and GPX.SpellbookUI and GPX.SpellbookUI.IsNativeUtilityMacroAtSlot then
+        return GPX.SpellbookUI:IsNativeUtilityMacroAtSlot(actionSlot) == true
+    end
+    return false
+end
+
+function Bar:InvalidateDisplayLayerCache()
+    self._displayLayerCache = nil
+end
+
+function Bar:BuildDisplayLayerCache()
+    local cache = {}
+    for _, state in ipairs(cachedDisplayStates) do
+        cache[state] = {}
+        for index = 1, BAR_BUTTON_COUNT do
+            cache[state][index] = self:GetDisplayForButton(index, state, true)
+        end
+    end
+    self._displayLayerCache = cache
+end
+
+function Bar:GetDisplayForButton(index, state, bypassCache)
+    state = state or ""
+
+    if not bypassCache then
+        local cache = self._displayLayerCache
+        local stateCache = cache and cache[state]
+        if stateCache and stateCache[index] then
+            return stateCache[index]
+        end
+    end
+
     local style = self:GetStyle()
+    local setup = self:GetSetup()
+    local styleId = GPX:GetEffectiveControllerStyleId(setup, self:GetProfile())
     local slotLabel = "Action " .. index
     if GPX:IsControllerEnabled() then
-        local setup = self:GetSetup()
-        local labels = GPX:GetCombatDisplayLabels(GPX:GetEffectiveControllerStyleId(setup, self:GetProfile()))
+        local labels = GPX:GetCombatSlotLabels(styleId)
         if labels[index] then
             slotLabel = labels[index]
         end
@@ -2698,17 +3127,26 @@ function Bar:GetDisplayForButton(index, state)
     local command = self:GetCommandForButton(index, state)
 
     if not command then
-        return {
+        local out = {
             icon = nil,
             title = slotLabel,
             subtitle = state == "" and "Empty" or "No page",
             hint = "No mapped page",
         }
+        if not bypassCache then
+            self._displayLayerCache = self._displayLayerCache or {}
+            self._displayLayerCache[state] = self._displayLayerCache[state] or {}
+            self._displayLayerCache[state][index] = out
+        end
+        return out
     end
 
     local slot = self:ResolveCommand(command)
     local texture = slot and GetActionTexture(slot) or nil
-    return {
+    if (not texture) and slot and GPX and GPX.SpellbookUI and GPX.SpellbookUI.GetUtilityIconForActionSlot then
+        texture = GPX.SpellbookUI:GetUtilityIconForActionSlot(slot)
+    end
+    local out = {
         icon = texture,
         title = slotLabel,
         subtitle = "",
@@ -2716,6 +3154,12 @@ function Bar:GetDisplayForButton(index, state)
         command = command,
         hint = command,
     }
+    if not bypassCache then
+        self._displayLayerCache = self._displayLayerCache or {}
+        self._displayLayerCache[state] = self._displayLayerCache[state] or {}
+        self._displayLayerCache[state][index] = out
+    end
+    return out
 end
 
 function Bar:UpdateButtonTooltip(button)
@@ -2724,8 +3168,11 @@ function Bar:UpdateButtonTooltip(button)
     end
 
     GameTooltip:SetOwner(button, "ANCHOR_TOP")
-    if button.display.slot then
+    if button.display.slot and not self:IsNativeUtilitySlot(button.display.slot) then
         GameTooltip:SetAction(button.display.slot)
+    elseif button.display.slot then
+        GameTooltip:AddLine(button.display.title or "WoWX", 1.0, 0.96, 0.7)
+        GameTooltip:AddLine("Native utility placeholder", 0.82, 0.9, 1.0)
     else
         GameTooltip:AddLine(button.display.title or "WoWX", 1.0, 0.96, 0.7)
         GameTooltip:AddLine(button.display.subtitle or "", 0.85, 0.9, 1.0)
@@ -2740,8 +3187,10 @@ function Bar:UpdateButtonTooltip(button)
         GameTooltip:AddDoubleLine("Page", button.display.hint, 0.7, 0.82, 0.95, 0.82, 0.9, 0.98)
     end
 
-    if button.display and button.display.slot then
+    if button.display and button.display.slot and not self:IsNativeUtilitySlot(button.display.slot) then
         GameTooltip:AddLine("Drag spells, items, or macros here to place them on this WoWX page.", 0.75, 0.82, 0.9, true)
+    elseif button.display and button.display.slot then
+        GameTooltip:AddLine("This slot is reserved for a native keybind utility. Replace it with a spell to restore normal click casting.", 0.75, 0.82, 0.9, true)
     end
     GameTooltip:Show()
 end
@@ -3299,13 +3748,42 @@ function Bar:UpdateButtonVisualState(button)
     local display = button.display
     local alpha = button._wowxBaseAlpha or layoutDefaults.main.alpha
     local borderR, borderG, borderB, borderA = 0.14, 0.18, 0.24, 0.85
+    local slotR, slotG, slotB, slotA = 0.62, 0.72, 0.84, 0.9
     if self:IsEditChromeActive() then
         borderR, borderG, borderB, borderA = 0.96, 0.8, 0.22, 0.9
+        slotR, slotG, slotB, slotA = 0.96, 0.8, 0.22, 0.95
     else
         borderR, borderG, borderB, borderA = 0.22, 0.66, 0.98, 0.9
     end
 
+    local isNativeUtility = display and display.slot and self:IsNativeUtilitySlot(display.slot)
+
     if display and display.slot then
+        if isNativeUtility then
+            CooldownFrame_SetTimer(button.cooldown, 0, 0, 0)
+            button.icon:SetVertexColor(0.95, 0.95, 0.95)
+            button:SetAlpha(alpha)
+            if button.countText then
+                button.countText:SetText("")
+                button.countText:Hide()
+            end
+            if button.shine then
+                button.shine:Hide()
+            end
+            if button.slotPanel then
+                button.slotPanel:Hide()
+            end
+            if button.slotBorder then
+                button.slotBorder:Hide()
+            end
+            if button.slotTint then
+                button.slotTint:Hide()
+            end
+            button:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
+            button:SetBackdropBorderColor(borderR, borderG, borderB, 0.0)
+            return
+        end
+
         local chargeCount, maxCharges, chargeStart, chargeDuration, chargeEnable = self:GetActionChargeState(display.slot)
         local start, duration, enable = self:GetResolvedCooldown(display.slot)
         if maxCharges and maxCharges > 1 and chargeCount and chargeCount < maxCharges and chargeDuration and chargeDuration > 0 then
@@ -3326,11 +3804,14 @@ function Bar:UpdateButtonVisualState(button)
             red, green, blue = 0.95, 0.22, 0.22
             finalAlpha = math.max(0.35, alpha * 0.7)
             borderR, borderG, borderB, borderA = 0.9, 0.22, 0.22, 0.95
+            slotR, slotG, slotB, slotA = 0.9, 0.22, 0.22, 0.95
         elseif not usable and oom then
             red, green, blue = 0.3, 0.5, 1.0
+            slotR, slotG, slotB, slotA = 0.3, 0.5, 1.0, 0.95
         elseif not usable then
             red, green, blue = 0.45, 0.45, 0.45
             finalAlpha = math.max(0.45, alpha * 0.82)
+            slotR, slotG, slotB, slotA = 0.45, 0.45, 0.45, 0.85
         end
 
         button.icon:SetVertexColor(red, green, blue)
@@ -3351,17 +3832,32 @@ function Bar:UpdateButtonVisualState(button)
             end
         end
         if button.shine then
-            if equippedAction then
+            local isQueued = IsCurrentAction and IsCurrentAction(display.slot)
+            if isQueued then
+                button.shine:SetVertexColor(1.0, 0.82, 0.0, 0.55)
+                button.shine:Show()
+            elseif equippedAction then
+                button.shine:SetVertexColor(0.2, 1.0, 0.42, 0.5)
                 button.shine:Show()
             else
                 button.shine:Hide()
             end
         end
         if button.slotPanel then
-            button.slotPanel:Hide()
+            button.slotPanel:Show()
+            button.slotPanel:SetVertexColor(0.07, 0.09, 0.12, 0.18)
         end
         if button.slotBorder then
-            button.slotBorder:Hide()
+            button.slotBorder:Show()
+            if button._wowxSlotSetStrokeColor then
+                button._wowxSlotSetStrokeColor(button.slotBorder, slotR, slotG, slotB, slotA)
+            end
+        end
+        if button.slotTint then
+            if button._wowxSlotSetStrokeColor then
+                button._wowxSlotSetStrokeColor(button.slotTint, 0.0, 0.0, 0.0, 0.0)
+            end
+            button.slotTint:Show()
         end
         button:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
         button:SetBackdropBorderColor(borderR, borderG, borderB, 0.0)
@@ -3378,9 +3874,19 @@ function Bar:UpdateButtonVisualState(button)
         end
         if button.slotPanel then
             button.slotPanel:Show()
+            button.slotPanel:SetVertexColor(0.07, 0.09, 0.12, 0.22)
         end
         if button.slotBorder then
             button.slotBorder:Show()
+            if button._wowxSlotSetStrokeColor then
+                button._wowxSlotSetStrokeColor(button.slotBorder, 0.62, 0.7, 0.82, 0.82)
+            end
+        end
+        if button.slotTint then
+            if button._wowxSlotSetStrokeColor then
+                button._wowxSlotSetStrokeColor(button.slotTint, 0.0, 0.0, 0.0, 0.0)
+            end
+            button.slotTint:Show()
         end
         button:SetBackdropColor(0.05, 0.07, 0.12, 0.08)
         button:SetBackdropBorderColor(borderR, borderG, borderB, 0.24)
@@ -3427,7 +3933,8 @@ function Bar:UpdateButton(index, state)
     local hasAction = display and display.slot
     local iconInset = hasAction and 2 or 4
 
-    local keyLabel = (GPX:IsControllerEnabled() and display and display.title) or physicalKey or defaultKeyHints[index] or tostring(index)
+    local keyLabel = physicalKey or defaultKeyHints[index] or tostring(index)
+    local controllerLabel, controllerTexture = self:GetControllerVisualForSlot(index)
     button.glyph:SetText(keyLabel)
     button.name:SetText("")
     if showSecondaryKeyText then
@@ -3439,11 +3946,10 @@ function Bar:UpdateButton(index, state)
     end
 
     if button.controllerIcon then
-        local iconPath = GPX:IsControllerEnabled() and physicalKey and PS5Icons[physicalKey]
+        local iconPath = GPX:IsControllerEnabled() and controllerTexture
         if iconPath then
             button.controllerIcon:SetTexture(iconPath)
             button.controllerIcon:Show()
-            button.glyph:SetText("")
         else
             button.controllerIcon:Hide()
         end
@@ -3463,15 +3969,16 @@ function Bar:UpdateButton(index, state)
             if hasAction then
                 ensureSlotWrapper(button)
                 if button.slotPanel then
-                    button.slotPanel:Hide()
+                    button.slotPanel:Show()
                 end
                 if button.slotBorder then
-                    button.slotBorder:Hide()
+                    button.slotBorder:Show()
                 end
                 button.icon:SetWidth(iconSize)
                 button.icon:SetHeight(iconSize)
                 button.icon:ClearAllPoints()
                 button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", iconInset, -iconTopInset)
+                layoutSlotWrapperToIcon(button, button.icon, 2)
             else
                 layoutIconPriorityWrapper(button, button.icon, iconSize, bottomReserve)
                 if button.slotPanel then
@@ -3501,11 +4008,16 @@ function Bar:UpdateButton(index, state)
                 end
             end
             if button.shine then
-                local shineSize = math.max(iconSize + 20, 54)
-                button.shine:SetWidth(shineSize)
-                button.shine:SetHeight(shineSize)
+                local shineWidth = math.max(((button.slotPanel and button.slotPanel.GetWidth and button.slotPanel:GetWidth()) or iconSize) + 18, 54)
+                local shineHeight = math.max(((button.slotPanel and button.slotPanel.GetHeight and button.slotPanel:GetHeight()) or iconSize) + 18, 54)
+                button.shine:SetWidth(shineWidth)
+                button.shine:SetHeight(shineHeight)
                 button.shine:ClearAllPoints()
-                button.shine:SetPoint("CENTER", button.icon, "CENTER", 0, 0)
+                if button.slotPanel then
+                    button.shine:SetPoint("CENTER", button.slotPanel, "CENTER", 0, 0)
+                else
+                    button.shine:SetPoint("CENTER", button.icon, "CENTER", 0, 0)
+                end
             end
         else
             button:Hide()
@@ -3559,6 +4071,7 @@ function Bar:UpdateAll()
     self:UpdateBindingProxyButtons()
 
     if not GPX.db or not GPX.db.enabled or not GPX.db.ui or not GPX.db.ui.visualBar or not GPX.db.ui.visualBar.enabled then
+        self:InvalidateDisplayLayerCache()
         if not inCombat then
             self.frame:Hide()
             if self.frame and self.frame._wowxShell then
@@ -3579,6 +4092,7 @@ function Bar:UpdateAll()
 
     local metrics = self:GetMainLayoutMetrics()
     self._mainLayoutMetrics = metrics
+    self:BuildDisplayLayerCache()
     local visibleCount = metrics.visibleCount
     local buttonWidth = metrics.buttonWidth
     local buttonHeight = metrics.buttonHeight
@@ -3614,13 +4128,13 @@ function Bar:UpdateAll()
     self.frame.title:SetText("Action Bar")
     self.frame.pageText:SetText(pageLabel)
     if GPX.actionStateSuspended and GPX.actionStateReason then
-        self.frame.title:SetText("Action Bar ΓÇö Native " .. GPX.actionStateReason)
+        self.frame.title:SetText("Action Bar - Native " .. GPX.actionStateReason)
         self.frame:SetBackdropBorderColor(0.95, 0.36, 0.18, 0.98)
         self.frame:SetBackdropColor(0.1, 0.05, 0.04, math.max(chromeAlpha, 0.18))
         showHeader = true
     end
     if GPX.UIMode and GPX.UIMode.activeContext == "bar" then
-        self.frame.title:SetText("Action Bar ΓÇö UI Mode")
+        self.frame.title:SetText("Action Bar - UI Mode")
         self.frame:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.98)
     else
         if not (GPX.actionStateSuspended and GPX.actionStateReason) then
@@ -3640,6 +4154,7 @@ function Bar:UpdateAll()
     self:UpdateDetachedClassBars()
     self:UpdateVehicleLeaveButton()
     self:UpdateResizeHandles()
+    self:UpdateAlignmentGrid()
 
     for index = 1, BAR_BUTTON_COUNT do
         self:UpdateButton(index, state)

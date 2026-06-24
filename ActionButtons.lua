@@ -15,6 +15,11 @@ local defaultConfig = {
     iconInset = 4,
     framePadding = 8,
     textSpacing = 1,
+    bagWindowPoint = { anchor = "CENTER", relativePoint = "CENTER", x = 120, y = -20 },
+    bagSlotsExpanded = false,
+    selectedBagID = nil,
+    includeKeyRingWithBags = false,
+    selectedBankBagID = nil,
 }
 
 local updateFrame = CreateFrame("Frame", "WoWXActionButtonsEventFrame")
@@ -27,10 +32,24 @@ local ITEM_GRID_PADDING = 8
 local SLOT_ICON_INSET = 2
 local BAG_BUTTON_SIZE = 40
 local BAG_ICON_INSET = 4
+local UTILITY_BUTTON_GAP = 8
+-- Use Blizzard constants directly, same as Bagnon
+local KEYRING_BAG_ID = KEYRING_CONTAINER
+local BANK_CONTAINER_ID = BANK_CONTAINER
+
+local MOUSELOOK_ICON_OFF = "Interface\\Icons\\Ability_Stealth"
+local MOUSELOOK_ICON_MOVE = "Interface\\Icons\\Ability_Rogue_Sprint"
+local MOUSELOOK_ICON_ON = "Interface\\Icons\\Ability_Hunter_EagleEye"
 
 local BLUE_BORDER = { 0.22, 0.66, 0.98, 0.92 }
 local GOLD_BORDER = { 0.96, 0.8, 0.22, 0.96 }
 local DIM_BORDER = { 0.34, 0.4, 0.5, 0.85 }
+local KEYRING_BORDER = { 0.88, 0.68, 0.22, 0.96 }
+local LOCKED_BORDER = { 0.72, 0.26, 0.26, 0.95 }
+local BLIZZARD_BANK_FRAME_NAMES = {
+    "BankFrame",
+    "BankSlotsFrame",
+}
 
 local function clamp(value, minValue, maxValue)
     value = tonumber(value) or minValue
@@ -144,6 +163,95 @@ local function applyBlueChromeBackdrop(frame, border)
     frame:SetBackdropBorderColor(c[1], c[2], c[3], c[4])
 end
 
+local function RaiseStackSplitFrame()
+    local split = StackSplitFrame
+    if not split then
+        return
+    end
+
+    split:SetToplevel(true)
+    split:SetFrameStrata("TOOLTIP")
+    local currentLevel = split:GetFrameLevel() or 0
+    if currentLevel < 200 then
+        split:SetFrameLevel(200)
+    end
+    split:Raise()
+end
+
+local function HideBlizzardContainerFrames()
+    for index = 1, 13 do
+        local frame = _G["ContainerFrame" .. tostring(index)]
+        if frame and frame:IsShown() then
+            frame:Hide()
+        end
+    end
+end
+
+local function safeContainerIDToInventoryID(bagID)
+    local id = tonumber(bagID)
+    if not id or id <= 0 then
+        return nil
+    end
+    if ContainerIDToInventoryID then
+        local ok, invSlot = pcall(ContainerIDToInventoryID, id)
+        if ok then
+            return invSlot
+        end
+    end
+    return 19 + id
+end
+
+local function isBankBagID(bagID)
+    local id = tonumber(bagID)
+    return id and id >= 5 and id <= 11
+end
+
+local function getBankBagSlotIndex(bagID)
+    local id = tonumber(bagID)
+    if not id then
+        return nil
+    end
+    return id - 4
+end
+
+local function getPurchasedBankBagSlotCount()
+    if not GetNumBankSlots then
+        return 0
+    end
+    return tonumber(GetNumBankSlots()) or 0
+end
+
+local function isBankBagSlotPurchased(bagID)
+    if not isBankBagID(bagID) then
+        return true
+    end
+    local slotIndex = getBankBagSlotIndex(bagID)
+    if not slotIndex then
+        return false
+    end
+    return slotIndex <= getPurchasedBankBagSlotCount()
+end
+
+local function getNextBankBagSlotForPurchase()
+    local purchased = getPurchasedBankBagSlotCount()
+    local nextIndex = purchased + 1
+    if nextIndex > 7 then
+        return nil
+    end
+    return nextIndex + 4
+end
+
+local function getBankBagSlotPurchaseCost()
+    if not GetBankSlotCost then
+        return nil
+    end
+    local cost = tonumber(GetBankSlotCost())
+    if not cost or cost <= 0 then
+        return nil
+    end
+    return cost
+end
+
 local function addChamferAccents(frame)
     if not frame or frame._wowxChamferAccents then
         return
@@ -167,6 +275,28 @@ local function addChamferAccents(frame)
         tex:SetVertexColor(1.0, 0.85, 0.24, 0.95)
         frame._wowxChamferAccents[#frame._wowxChamferAccents + 1] = tex
     end
+end
+
+local function getControllerMouseLookUiMode()
+    if GPX and GPX.GetControllerMouseLookMode then
+        return GPX:GetControllerMouseLookMode()
+    end
+
+    local cfg = GPX and GPX.GetControllerConfig and GPX:GetControllerConfig() or nil
+    if cfg and cfg.mouseLookMode == "platformer" then
+        return "on"
+    end
+    return "move"
+end
+
+local function getMouseLookModeMeta(mode)
+    if mode == "off" then
+        return "Off", MOUSELOOK_ICON_OFF, "Mouselook disabled"
+    end
+    if mode == "on" then
+        return "On", MOUSELOOK_ICON_ON, "Always-on mouselook"
+    end
+    return "Move", MOUSELOOK_ICON_MOVE, "Starts/stops with movement"
 end
 
 local function ensureSlotChrome(button, borderColor)
@@ -204,10 +334,88 @@ local function ensureSlotChrome(button, borderColor)
 end
 
 local function getBagLabel(bagID)
+    if bagID == KEYRING_BAG_ID then
+        return "Keyring"
+    end
+    if bagID == BANK_CONTAINER_ID then
+        return "Bank"
+    end
     if bagID == 0 then
         return "Backpack"
     end
+    if type(bagID) == "number" and bagID >= 5 then
+        return "Bank Bag " .. tostring(bagID - 4)
+    end
     return "Bag " .. tostring(bagID)
+end
+
+local function getBagShortLabel(bagID)
+    if bagID == KEYRING_BAG_ID then
+        return "Key"
+    end
+    if bagID == BANK_CONTAINER_ID then
+        return "Bank"
+    end
+    if bagID == 0 then
+        return "BP"
+    end
+    if type(bagID) == "number" and bagID >= 5 then
+        return "B" .. tostring(bagID - 4)
+    end
+    return tostring(bagID)
+end
+
+local function collectPlayerBagIDs()
+    local bagIDs = { 0, 1, 2, 3, 4 }
+    return bagIDs
+end
+
+local function collectBankBagIDs()
+    local bagIDs = { BANK_CONTAINER_ID }
+    for bagID = 5, 11 do
+        bagIDs[#bagIDs + 1] = bagID
+    end
+    return bagIDs
+end
+
+local function bagIDExistsInList(list, bagID)
+    for _, id in ipairs(list or {}) do
+        if id == bagID then
+            return true
+        end
+    end
+    return false
+end
+
+local function normalizeSelectedBagID(selectedBagID, availableBagIDs)
+    -- Only keep selection if bag is actually available this refresh
+    -- This prevents stale selections from locking the view
+    if selectedBagID == nil then
+        return nil
+    end
+    if bagIDExistsInList(availableBagIDs, selectedBagID) then
+        return selectedBagID
+    end
+    return nil
+end
+
+local function toggleSelectedBagID(currentSelected, clickedBagID)
+    -- clicking the same bag deselects (returns to show-all), clicking another selects
+    if currentSelected == clickedBagID then
+        return nil
+    end
+    return clickedBagID
+end
+
+local function isJunkItem(itemLink)
+    if not itemLink or not GetItemInfo then
+        return false, 0
+    end
+    local _, _, quality, _, _, _, _, _, _, _, sellPrice = GetItemInfo(itemLink)
+    if tonumber(quality) == 0 and (tonumber(sellPrice) or 0) > 0 then
+        return true, tonumber(sellPrice) or 0
+    end
+    return false, 0
 end
 
 local function formatMoneyText(copper)
@@ -241,6 +449,34 @@ local function collectWatchedCurrencies()
     return out
 end
 
+local function formatWatchedCurrenciesText(watched, maxEntries, separator)
+    if not watched or #watched == 0 then
+        return ""
+    end
+
+    local sep = separator or "  "
+    local limit = tonumber(maxEntries) or #watched
+    if limit < 1 then
+        limit = 1
+    end
+    if limit > #watched then
+        limit = #watched
+    end
+
+    local parts = {}
+    for index = 1, limit do
+        local entry = watched[index]
+        parts[#parts + 1] = tostring(entry.name or "Currency") .. ": " .. tostring(tonumber(entry.count) or 0)
+    end
+
+    local extra = #watched - limit
+    if extra > 0 then
+        parts[#parts + 1] = "+" .. tostring(extra) .. " more"
+    end
+
+    return table.concat(parts, sep)
+end
+
 local function cloneDefaults()
     if GPX.DeepCopy then
         return GPX:DeepCopy(defaultConfig)
@@ -262,6 +498,16 @@ local function cloneDefaults()
         iconInset = defaultConfig.iconInset,
         framePadding = defaultConfig.framePadding,
         textSpacing = defaultConfig.textSpacing,
+        bagWindowPoint = {
+            anchor = defaultConfig.bagWindowPoint.anchor,
+            relativePoint = defaultConfig.bagWindowPoint.relativePoint,
+            x = defaultConfig.bagWindowPoint.x,
+            y = defaultConfig.bagWindowPoint.y,
+        },
+        bagSlotsExpanded = defaultConfig.bagSlotsExpanded,
+        selectedBagID = defaultConfig.selectedBagID,
+        includeKeyRingWithBags = defaultConfig.includeKeyRingWithBags,
+        selectedBankBagID = defaultConfig.selectedBankBagID,
     }
 end
 
@@ -283,6 +529,11 @@ local function ensureConfig()
     if cfg.iconInset == nil then cfg.iconInset = defaultConfig.iconInset end
     if cfg.framePadding == nil then cfg.framePadding = defaultConfig.framePadding end
     if cfg.textSpacing == nil then cfg.textSpacing = defaultConfig.textSpacing end
+    cfg.bagWindowPoint = cfg.bagWindowPoint or cloneDefaults().bagWindowPoint
+    if cfg.bagSlotsExpanded == nil then cfg.bagSlotsExpanded = defaultConfig.bagSlotsExpanded end
+    if cfg.selectedBagID == nil then cfg.selectedBagID = defaultConfig.selectedBagID end
+    if cfg.includeKeyRingWithBags == nil then cfg.includeKeyRingWithBags = defaultConfig.includeKeyRingWithBags end
+    if cfg.selectedBankBagID == nil then cfg.selectedBankBagID = defaultConfig.selectedBankBagID end
 
     return cfg
 end
@@ -374,6 +625,31 @@ function Buttons:CreateFrame()
     key:SetText("Bags")
     key:SetTextColor(1.0, 0.82, 0.18)
 
+    local mouseLookButton = CreateFrame("Button", "WoWXUtilityMouseLookButton", frame)
+    mouseLookButton:SetWidth(BAG_BUTTON_SIZE)
+    mouseLookButton:SetHeight(BAG_BUTTON_SIZE)
+    mouseLookButton:RegisterForClicks("LeftButtonUp")
+    if mouseLookButton.SetNormalTexture then mouseLookButton:SetNormalTexture(nil) end
+    if mouseLookButton.SetPushedTexture then mouseLookButton:SetPushedTexture(nil) end
+    if mouseLookButton.SetHighlightTexture then mouseLookButton:SetHighlightTexture(nil) end
+    if mouseLookButton.SetDisabledTexture then mouseLookButton:SetDisabledTexture(nil) end
+
+    ensureSlotChrome(mouseLookButton, BLUE_BORDER)
+    if mouseLookButton._slotBg then
+        mouseLookButton._slotBg:SetVertexColor(0.06, 0.08, 0.12, 0.14)
+    end
+
+    local mouseLookIcon = mouseLookButton:CreateTexture(nil, "ARTWORK", nil, 1)
+    mouseLookIcon:SetPoint("TOPLEFT", mouseLookButton, "TOPLEFT", BAG_ICON_INSET, -BAG_ICON_INSET)
+    mouseLookIcon:SetPoint("BOTTOMRIGHT", mouseLookButton, "BOTTOMRIGHT", -BAG_ICON_INSET, BAG_ICON_INSET)
+    mouseLookIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    mouseLookIcon:SetTexture(MOUSELOOK_ICON_MOVE)
+
+    local mouseLookLabel = mouseLookButton:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    mouseLookLabel:SetPoint("TOP", mouseLookButton, "BOTTOM", 0, -1)
+    mouseLookLabel:SetText("Look")
+    mouseLookLabel:SetTextColor(0.72, 0.9, 1.0)
+
     local money = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     money:SetPoint("TOP", key, "BOTTOM", 0, -1)
     money:SetText("")
@@ -409,7 +685,7 @@ function Buttons:CreateFrame()
         GameTooltip:SetOwner(selfBtn, "ANCHOR_TOP")
         GameTooltip:SetText("WoWX Bags", 1, 0.82, 0.2)
         GameTooltip:AddLine("Left-click toggles the WoWX combined bag window.", 0.86, 0.9, 1.0)
-        GameTooltip:AddLine("Right-click opens key ring.", 0.86, 0.9, 1.0)
+        GameTooltip:AddLine("Keyring is available as a bag selector inside WoWX Bags.", 0.86, 0.9, 1.0)
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine("Money: " .. formatMoneyText(GetMoney and GetMoney() or 0), 1.0, 0.82, 0.18)
         local watched = collectWatchedCurrencies()
@@ -427,24 +703,50 @@ function Buttons:CreateFrame()
         GameTooltip:Hide()
     end)
     button:SetScript("OnClick", function(_, mouseButton)
-        if mouseButton == "LeftButton" then
-            Buttons:ToggleBagWindow()
+        Buttons:ToggleBagWindow()
+    end)
+
+    mouseLookButton:SetScript("OnEnter", function(selfBtn)
+        GameTooltip:SetOwner(selfBtn, "ANCHOR_TOP")
+        local mode = getControllerMouseLookUiMode()
+        local label, _, detail = getMouseLookModeMeta(mode)
+        GameTooltip:SetText("Controller Mouselook", 0.75, 0.9, 1.0)
+        GameTooltip:AddLine("Current: " .. label, 1.0, 0.92, 0.58)
+        GameTooltip:AddLine(detail, 0.86, 0.9, 1.0)
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Click to cycle: Off -> Move -> On", 0.82, 0.9, 1.0)
+        GameTooltip:Show()
+    end)
+    mouseLookButton:SetScript("OnLeave", function()
+        GameTooltip:Hide()
+    end)
+    mouseLookButton:SetScript("OnClick", function()
+        if not (GPX and GPX.IsControllerEnabled and GPX:IsControllerEnabled()) then
+            GPX:Print("Controller mode is disabled.")
             return
         end
 
-        if mouseButton == "RightButton" then
-            if InCombatLockdown() then
-                GPX:Print("Cannot open key ring in combat.")
-                return
-            end
-            if ToggleKeyRing then
-                ToggleKeyRing()
-            elseif _G.KeyRingButton and _G.KeyRingButton.Click then
-                _G.KeyRingButton:Click()
+        local mode = nil
+        if GPX and GPX.CycleControllerMouseLookMode then
+            mode = GPX:CycleControllerMouseLookMode()
+        else
+            local cfg = GPX:GetControllerConfig()
+            if cfg.mouseLookMode == "platformer" then
+                GPX:SetControllerMouseLookMode("move")
+                mode = "move"
             else
-                GPX:Print("Key ring button unavailable on this client.")
+                GPX:SetControllerMouseLookMode("platformer")
+                mode = "on"
             end
         end
+
+        Buttons:RefreshMouseLookButton()
+        if GPX.SettingsUI and GPX.SettingsUI.frame and GPX.SettingsUI.frame:IsShown() then
+            GPX.SettingsUI:Refresh()
+        end
+
+        local modeLabel = getMouseLookModeMeta(mode)
+        GPX:Print("Controller mouselook: " .. tostring(modeLabel))
     end)
 
     self.frame = frame
@@ -456,10 +758,44 @@ function Buttons:CreateFrame()
     self.bagButtonBorder = button._border
     self.bagButtonTint = button._borderTint
     self.bagLabel = key
+    self.mouseLookButton = mouseLookButton
+    self.mouseLookIcon = mouseLookIcon
+    self.mouseLookLabel = mouseLookLabel
 
     self:ApplyBagButtonLayout()
     self:RefreshEconomyText()
     self:RefreshBagButtonChrome(true)
+    self:RefreshMouseLookButton()
+end
+
+function Buttons:RefreshMouseLookButton()
+    if not self.mouseLookButton then
+        return
+    end
+
+    local show = GPX and GPX.IsControllerEnabled and GPX:IsControllerEnabled()
+    self.mouseLookButton:SetShown(show)
+
+    if not show then
+        return
+    end
+
+    local mode = getControllerMouseLookUiMode()
+    local label, icon, _ = getMouseLookModeMeta(mode)
+    if self.mouseLookIcon then
+        self.mouseLookIcon:SetTexture(icon)
+        self.mouseLookIcon:SetDesaturated(mode == "off")
+    end
+    if self.mouseLookLabel then
+        self.mouseLookLabel:SetText(label)
+        if mode == "off" then
+            self.mouseLookLabel:SetTextColor(0.88, 0.68, 0.68)
+        elseif mode == "on" then
+            self.mouseLookLabel:SetTextColor(0.72, 1.0, 0.72)
+        else
+            self.mouseLookLabel:SetTextColor(0.72, 0.9, 1.0)
+        end
+    end
 end
 
 function Buttons:ApplyBagButtonLayout()
@@ -475,7 +811,11 @@ function Buttons:ApplyBagButtonLayout()
     local labelHeight = 12
     local currencyShown = self.currencyLabel and self.currencyLabel:GetText() and self.currencyLabel:GetText() ~= ""
     local textRows = currencyShown and 3 or 2
-    local frameWidth = buttonSize + (framePadding * 2)
+    local showMouseLook = self.mouseLookButton and self.mouseLookButton:IsShown()
+    local frameWidth = (buttonSize + (framePadding * 2))
+    if showMouseLook then
+        frameWidth = (buttonSize * 2) + UTILITY_BUTTON_GAP + (framePadding * 2)
+    end
     local frameHeight = buttonSize + (framePadding * 2) + (textRows * labelHeight) + (math.max(0, textRows - 1) * textSpacing)
 
     self.frame:SetWidth(frameWidth)
@@ -484,11 +824,31 @@ function Buttons:ApplyBagButtonLayout()
     self.bagButton:SetWidth(buttonSize)
     self.bagButton:SetHeight(buttonSize)
     self.bagButton:ClearAllPoints()
-    self.bagButton:SetPoint("TOP", self.frame, "TOP", 0, -framePadding)
+    if showMouseLook then
+        self.bagButton:SetPoint("TOPLEFT", self.frame, "TOPLEFT", framePadding, -framePadding)
+    else
+        self.bagButton:SetPoint("TOP", self.frame, "TOP", 0, -framePadding)
+    end
+
+    if self.mouseLookButton then
+        self.mouseLookButton:SetWidth(buttonSize)
+        self.mouseLookButton:SetHeight(buttonSize)
+        self.mouseLookButton:ClearAllPoints()
+        if showMouseLook then
+            self.mouseLookButton:SetPoint("TOPLEFT", self.bagButton, "TOPRIGHT", UTILITY_BUTTON_GAP, 0)
+            self.mouseLookButton:Show()
+        else
+            self.mouseLookButton:Hide()
+        end
+    end
 
     if self.editButton then
         self.editButton:ClearAllPoints()
-        self.editButton:SetPoint("BOTTOMLEFT", self.bagButton, "TOPRIGHT", 2, -6)
+        if showMouseLook and self.mouseLookButton then
+            self.editButton:SetPoint("BOTTOMLEFT", self.mouseLookButton, "TOPRIGHT", 2, -6)
+        else
+            self.editButton:SetPoint("BOTTOMLEFT", self.bagButton, "TOPRIGHT", 2, -6)
+        end
     end
 
     if self.bagIcon then
@@ -500,6 +860,11 @@ function Buttons:ApplyBagButtonLayout()
     if self.bagLabel then
         self.bagLabel:ClearAllPoints()
         self.bagLabel:SetPoint("TOP", self.bagButton, "BOTTOM", 0, -textSpacing)
+    end
+
+    if self.mouseLookLabel and self.mouseLookButton then
+        self.mouseLookLabel:ClearAllPoints()
+        self.mouseLookLabel:SetPoint("TOP", self.mouseLookButton, "BOTTOM", 0, -textSpacing)
     end
 
     if self.moneyLabel and self.bagLabel then
@@ -684,6 +1049,12 @@ function Buttons:RefreshBagButtonChrome(force)
     if self.bagButtonTint then
         setStrokeColor(self.bagButtonTint, c[1], c[2], c[3], 0.18)
     end
+    if self.mouseLookButton and self.mouseLookButton._border then
+        setStrokeColor(self.mouseLookButton._border, c[1], c[2], c[3], 1.0)
+    end
+    if self.mouseLookButton and self.mouseLookButton._borderTint then
+        setStrokeColor(self.mouseLookButton._borderTint, c[1], c[2], c[3], 0.18)
+    end
 
     if self.editButton then
         self.editButton:SetShown(not locked)
@@ -694,6 +1065,45 @@ function Buttons:RefreshBagButtonChrome(force)
             self.bagLabel:SetTextColor(0.66, 0.86, 1.0)
         else
             self.bagLabel:SetTextColor(1.0, 0.82, 0.18)
+        end
+    end
+    if self.mouseLookLabel then
+        if locked then
+            self.mouseLookLabel:SetTextColor(0.72, 0.9, 1.0)
+        else
+            self:RefreshMouseLookButton()
+        end
+    end
+end
+
+function Buttons:SetBlizzardBankSuppressed(suppressed)
+    self._bankSuppressedState = self._bankSuppressedState or {}
+    for _, frameName in ipairs(BLIZZARD_BANK_FRAME_NAMES) do
+        local frame = _G[frameName]
+        if frame then
+            local state = self._bankSuppressedState[frameName] or {}
+            self._bankSuppressedState[frameName] = state
+            if suppressed then
+                if state.alpha == nil and frame.GetAlpha then
+                    state.alpha = frame:GetAlpha()
+                end
+                if state.mouseEnabled == nil and frame.IsMouseEnabled then
+                    state.mouseEnabled = frame:IsMouseEnabled()
+                end
+                if frame.SetAlpha then
+                    frame:SetAlpha(0)
+                end
+                if frame.EnableMouse then
+                    frame:EnableMouse(false)
+                end
+            else
+                if frame.SetAlpha then
+                    frame:SetAlpha(state.alpha or 1)
+                end
+                if frame.EnableMouse then
+                    frame:EnableMouse(state.mouseEnabled ~= false)
+                end
+            end
         end
     end
 end
@@ -740,7 +1150,7 @@ function Buttons:SetBagHighlight(activeBagID)
 end
 
 function Buttons:CreateBagSlotButton(parent, bagID)
-    local invSlot = bagID == 0 and 16 or ((ContainerIDToInventoryID and ContainerIDToInventoryID(bagID)) or (19 + bagID))
+    local invSlot = safeContainerIDToInventoryID(bagID)
     local button = CreateFrame("Button", nil, parent)
     button:SetWidth(38)
     button:SetHeight(38)
@@ -764,30 +1174,69 @@ function Buttons:CreateBagSlotButton(parent, bagID)
     button._icon = icon
 
     button:SetScript("OnClick", function(selfBtn)
-        if CursorHasItem() then
-            if PutItemInBag then
-                PutItemInBag(selfBtn._invSlot)
+        local cfg = ensureConfig()
+        if not cfg then
+            return
+        end
+        if selfBtn._isBankSelector then
+            if isBankBagID(selfBtn._bagID) and not isBankBagSlotPurchased(selfBtn._bagID) then
+                if not Buttons._bankIsOpen then
+                    GPX:Print("Open the bank before buying slots.")
+                    return
+                end
+                local nextBagID = getNextBankBagSlotForPurchase()
+                if nextBagID ~= selfBtn._bagID then
+                    GPX:Print("Unlock bank slots in order.")
+                    return
+                end
+                if BuyBankSlot then
+                    local ok, err = pcall(BuyBankSlot)
+                    if not ok then
+                        GPX:Print("Unable to buy bank slot: " .. tostring(err))
+                    end
+                end
+                Buttons:RefreshBankWindow()
+                return
             end
+            cfg.selectedBankBagID = toggleSelectedBagID(cfg.selectedBankBagID, selfBtn._bagID)
+            Buttons:RefreshBankWindow()
+        elseif selfBtn._bagID == KEYRING_BAG_ID then
+            cfg.includeKeyRingWithBags = not (cfg.includeKeyRingWithBags == true)
+            Buttons:RefreshBagWindow()
         else
-            if PickupInventoryItem then
-                PickupInventoryItem(selfBtn._invSlot)
-            end
+            cfg.selectedBagID = toggleSelectedBagID(cfg.selectedBagID, selfBtn._bagID)
+            Buttons:RefreshBagWindow()
         end
     end)
-    button:SetScript("OnReceiveDrag", function(selfBtn)
-        if PutItemInBag then
-            PutItemInBag(selfBtn._invSlot)
-        end
+    button:SetScript("OnReceiveDrag", function()
+        return
     end)
     button:SetScript("OnEnter", function(selfBtn)
         if GameTooltip then
             GameTooltip:SetOwner(selfBtn, "ANCHOR_RIGHT")
-            if GameTooltip.SetInventoryItem then
+            if selfBtn._bagID == 0 then
+                GameTooltip:SetText("Backpack", 1, 0.82, 0.2)
+            elseif selfBtn._bagID == KEYRING_BAG_ID then
+                GameTooltip:SetText("Keyring", 1, 0.82, 0.2)
+            elseif GameTooltip.SetInventoryItem and selfBtn._invSlot then
                 GameTooltip:SetInventoryItem("player", selfBtn._invSlot)
             end
             local slotCount = GetContainerNumSlots and (GetContainerNumSlots(selfBtn._bagID) or 0) or 0
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine(getBagLabel(selfBtn._bagID) .. " slots: " .. tostring(slotCount), 0.86, 0.9, 1.0)
+            if selfBtn._isBankSelector and isBankBagID(selfBtn._bagID) and not isBankBagSlotPurchased(selfBtn._bagID) then
+                local nextBagID = getNextBankBagSlotForPurchase()
+                if nextBagID == selfBtn._bagID then
+                    local cost = getBankBagSlotPurchaseCost()
+                    if cost then
+                        GameTooltip:AddLine("Left-click to unlock for " .. formatMoneyText(cost) .. ".", 1.0, 0.82, 0.18)
+                    else
+                        GameTooltip:AddLine("Left-click to unlock this slot.", 1.0, 0.82, 0.18)
+                    end
+                else
+                    GameTooltip:AddLine("Unlock previous bank slots first.", 0.95, 0.48, 0.48)
+                end
+            end
             GameTooltip:Show()
         end
         Buttons:SetBagHighlight(selfBtn._bagID)
@@ -811,6 +1260,8 @@ function Buttons:CreateItemButton(parent)
     local button = CreateFrame("Button", "WoWXBagItem" .. buttonID, parent, "ContainerFrameItemButtonTemplate")
     button:SetWidth(ITEM_BUTTON_SIZE)
     button:SetHeight(ITEM_BUTTON_SIZE)
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    ensureSlotChrome(button, DIM_BORDER)
     
     -- ContainerFrameItemButtonTemplate creates: icon, Count, Stock, etc.
     button._icon = _G[button:GetName() .. "IconTexture"] or button.icon
@@ -820,6 +1271,16 @@ function Buttons:CreateItemButton(parent)
     if not button._icon and button.icon then
         button._icon = button.icon
     end
+
+    local keyRingGlow = button:CreateTexture(nil, "OVERLAY")
+    keyRingGlow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+    keyRingGlow:SetBlendMode("ADD")
+    keyRingGlow:SetPoint("CENTER", button, "CENTER", 0, 1)
+    keyRingGlow:SetWidth(58)
+    keyRingGlow:SetHeight(58)
+    keyRingGlow:SetVertexColor(1.0, 0.82, 0.22, 0.0)
+    keyRingGlow:Hide()
+    button._keyRingGlow = keyRingGlow
     
     -- Keep template's default click/drag handling, just override tooltip
     button:SetScript("OnEnter", function(selfBtn)
@@ -830,12 +1291,14 @@ function Buttons:CreateItemButton(parent)
             GameTooltip:SetBagItem(bagID, slot)
             GameTooltip:Show()
         end
+        Buttons:SetBagHighlight(bagID)
     end)
     
     button:SetScript("OnLeave", function()
         if GameTooltip then
             GameTooltip:Hide()
         end
+        Buttons:SetBagHighlight(nil)
     end)
 
     return button
@@ -850,9 +1313,18 @@ function Buttons:EnsureBagWindow()
     local bagWindowWidth = 16 + ITEM_GRID_PADDING * 2 + contentWidth + 20
     local frame = CreateFrame("Frame", "WoWXCombinedBagWindow", UIParent)
     frame:SetWidth(bagWindowWidth)
-    frame:SetHeight(520)
-    frame:SetPoint("CENTER", UIParent, "CENTER", 120, -20)
+    frame:SetHeight(460)
+    local cfg = ensureConfig()
+    local bagPoint = (cfg and cfg.bagWindowPoint) or defaultConfig.bagWindowPoint
+    frame:SetPoint(
+        bagPoint.anchor or "CENTER",
+        UIParent,
+        bagPoint.relativePoint or "CENTER",
+        tonumber(bagPoint.x) or 120,
+        tonumber(bagPoint.y) or -20
+    )
     frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
@@ -861,56 +1333,115 @@ function Buttons:EnsureBagWindow()
     end)
     frame:SetScript("OnDragStop", function(selfFrame)
         selfFrame:StopMovingOrSizing()
+        local cfgInner = ensureConfig()
+        if cfgInner then
+            local anchor, _, relativePoint, x, y = selfFrame:GetPoint(1)
+            cfgInner.bagWindowPoint = {
+                anchor = anchor or "CENTER",
+                relativePoint = relativePoint or "CENTER",
+                x = x or 120,
+                y = y or -20,
+            }
+        end
     end)
     applyBlueChromeBackdrop(frame, BLUE_BORDER)
     frame:Hide()
+
+    if not self._stackSplitHookInstalled and hooksecurefunc then
+        hooksecurefunc("OpenStackSplitFrame", function()
+            RaiseStackSplitFrame()
+        end)
+        self._stackSplitHookInstalled = true
+    end
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
     title:SetText("WoWX Bags")
 
-    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -3)
-    subtitle:SetText("Single-window inventory. Drag items to top bag slots to change equipped bags.")
-    subtitle:SetTextColor(1.0, 0.82, 0.2)
-
     local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
     closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
 
-    local summary = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    summary:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -48)
-    summary:SetText("")
-    summary:SetTextColor(1.0, 0.82, 0.18)
+    local controls = CreateFrame("Frame", nil, frame)
+    controls:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -40)
+    controls:SetWidth(420)
+    controls:SetHeight(62)
 
-    local bagSlotHeader = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    bagSlotHeader:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -8)
-    bagSlotHeader:SetText("Bag slots")
-    bagSlotHeader:SetTextColor(0.66, 0.86, 1.0)
+    local bagSlotsToggle = CreateFrame("Button", nil, controls, "UIPanelButtonTemplate")
+    bagSlotsToggle:SetPoint("LEFT", controls, "LEFT", 0, 0)
+    bagSlotsToggle:SetWidth(120)
+    bagSlotsToggle:SetHeight(22)
+
+    local sellJunkButton = CreateFrame("Button", nil, controls, "UIPanelButtonTemplate")
+    sellJunkButton:SetPoint("LEFT", bagSlotsToggle, "RIGHT", 8, 0)
+    sellJunkButton:SetWidth(120)
+    sellJunkButton:SetHeight(22)
+    sellJunkButton:SetText("Sell Junk")
+
+    local bagMoney = controls:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    bagMoney:SetPoint("TOPLEFT", controls, "TOPLEFT", 2, -26)
+    bagMoney:SetText("")
+    bagMoney:SetTextColor(1.0, 0.82, 0.18)
+
+    local bagCurrency = controls:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    bagCurrency:SetPoint("TOPLEFT", bagMoney, "BOTTOMLEFT", 0, -2)
+    bagCurrency:SetWidth(400)
+    bagCurrency:SetJustifyH("LEFT")
+    bagCurrency:SetJustifyV("TOP")
+    bagCurrency:SetText("")
+    bagCurrency:SetTextColor(0.75, 0.9, 1.0)
+
+    bagSlotsToggle:SetScript("OnClick", function()
+        local cfg = ensureConfig()
+        if not cfg then
+            return
+        end
+        cfg.bagSlotsExpanded = not (cfg.bagSlotsExpanded == true)
+        Buttons:RefreshBagWindow()
+    end)
+
+    sellJunkButton:SetScript("OnClick", function()
+        Buttons:SellAllJunkToMerchant()
+    end)
 
     local bagSlotRow = CreateFrame("Frame", nil, frame)
-    bagSlotRow:SetPoint("TOPLEFT", bagSlotHeader, "BOTTOMLEFT", 0, -4)
+    bagSlotRow:SetPoint("TOPLEFT", controls, "BOTTOMLEFT", 0, -4)
     bagSlotRow:SetWidth(420)
     bagSlotRow:SetHeight(38)
 
     self.bagSlotButtons = {}
-    for bagID = 0, 4 do
+    for _, bagID in ipairs(collectPlayerBagIDs()) do
         local slotButton = self:CreateBagSlotButton(bagSlotRow, bagID)
-        slotButton:SetPoint("LEFT", bagSlotRow, "LEFT", bagID * 46, 0)
+        slotButton:SetPoint("LEFT", bagSlotRow, "LEFT", (#self.bagSlotButtons) * 46, 0)
         self.bagSlotButtons[#self.bagSlotButtons + 1] = slotButton
 
         local label = bagSlotRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         label:SetPoint("TOP", slotButton, "BOTTOM", 0, -1)
-        label:SetText(bagID == 0 and "BP" or tostring(bagID))
+        label:SetText(getBagShortLabel(bagID))
+    end
+
+    if KEYRING_BAG_ID then
+        local keyButton = self:CreateBagSlotButton(bagSlotRow, KEYRING_BAG_ID)
+        keyButton:SetPoint("LEFT", bagSlotRow, "LEFT", (#self.bagSlotButtons) * 46, 0)
+        self.keyRingSlotButton = keyButton
+
+        local keyLabel = bagSlotRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        keyLabel:SetPoint("TOP", keyButton, "BOTTOM", 0, -1)
+        keyLabel:SetText(getBagShortLabel(KEYRING_BAG_ID))
     end
 
     local grid = CreateFrame("Frame", nil, frame)
-    grid:SetPoint("TOPLEFT", bagSlotRow, "BOTTOMLEFT", 0, -22)
+    grid:SetPoint("TOPLEFT", controls, "BOTTOMLEFT", 0, -8)
     grid:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 20)
     applyBlueChromeBackdrop(grid, DIM_BORDER)
 
     self.itemButtons = self.itemButtons or {}
 
-    frame._wowxSummary = summary
+    frame._wowxControls = controls
+    frame._wowxMoney = bagMoney
+    frame._wowxCurrency = bagCurrency
+    frame._wowxBagSlotsToggle = bagSlotsToggle
+    frame._wowxSellJunkButton = sellJunkButton
+    frame._wowxBagSlotRow = bagSlotRow
     frame._wowxGrid = grid
 
     self.bagWindow = frame
@@ -958,34 +1489,79 @@ function Buttons:RefreshBagWindow()
         return
     end
 
-    local totalSlots = 0
-    local usedSlots = 0
     local entries = {}
+    local cfg = ensureConfig()
+    local bagSlotsExpanded = cfg and cfg.bagSlotsExpanded == true
+    local includeKeyRingWithBags = cfg and cfg.includeKeyRingWithBags == true
+    local bagIDs = collectPlayerBagIDs()
+    -- Don't write-back normalize into cfg; only validate for display
+    local selectedBagID = normalizeSelectedBagID(cfg and cfg.selectedBagID or nil, bagIDs)
 
-    for bagID = 0, 4 do
+    if frame._wowxMoney then
+        frame._wowxMoney:SetText("Money: " .. formatMoneyText(GetMoney and GetMoney() or 0))
+    end
+    if frame._wowxCurrency then
+        local watched = collectWatchedCurrencies()
+        frame._wowxCurrency:SetText(formatWatchedCurrenciesText(watched, 6, "   "))
+    end
+
+    for _, bagID in ipairs(bagIDs) do
         local slotCount = GetContainerNumSlots and (GetContainerNumSlots(bagID) or 0) or 0
-        totalSlots = totalSlots + slotCount
-
-        for slot = 1, slotCount do
-            local texture, itemCount, locked, quality = GetContainerItemInfo(bagID, slot)
-            if texture then
-                usedSlots = usedSlots + 1
+        if selectedBagID == nil or selectedBagID == bagID then
+            for slot = 1, slotCount do
+                local texture, itemCount, locked, quality = GetContainerItemInfo(bagID, slot)
+                entries[#entries + 1] = {
+                    bagID = bagID,
+                    slot = slot,
+                    texture = texture,
+                    count = tonumber(itemCount) or 0,
+                    locked = locked,
+                    quality = tonumber(quality) or 1,
+                    isKeyRing = false,
+                }
             end
-            local entry = {
-                bagID = bagID,
-                slot = slot,
-                texture = texture,
-                count = tonumber(itemCount) or 0,
-                locked = locked,
-                quality = tonumber(quality) or 1,
-            }
-
-            entries[#entries + 1] = entry
         end
     end
 
-    if frame._wowxSummary then
-        frame._wowxSummary:SetText(string.format("Slots: %d / %d", usedSlots, totalSlots))
+    if includeKeyRingWithBags and KEYRING_BAG_ID then
+        local keySlotCount = GetContainerNumSlots and (GetContainerNumSlots(KEYRING_BAG_ID) or 0) or 0
+        for slot = 1, keySlotCount do
+            local texture, itemCount, locked, quality = GetContainerItemInfo(KEYRING_BAG_ID, slot)
+            -- Append only occupied keyring slots so keyring grows the grid without empty placeholders.
+            if texture then
+                entries[#entries + 1] = {
+                    bagID = KEYRING_BAG_ID,
+                    slot = slot,
+                    texture = texture,
+                    count = tonumber(itemCount) or 0,
+                    locked = locked,
+                    quality = tonumber(quality) or 1,
+                    isKeyRing = true,
+                }
+            end
+        end
+    end
+
+    if frame._wowxBagSlotRow then
+        frame._wowxBagSlotRow:SetShown(bagSlotsExpanded)
+    end
+    if frame._wowxBagSlotsToggle then
+        frame._wowxBagSlotsToggle:SetText(bagSlotsExpanded and "Bags: Hide" or "Bags: Show")
+    end
+    if frame._wowxSellJunkButton then
+        frame._wowxSellJunkButton:SetEnabled(MerchantFrame and MerchantFrame:IsShown())
+    end
+
+    if frame._wowxGrid then
+        frame._wowxGrid:ClearAllPoints()
+        if bagSlotsExpanded and frame._wowxBagSlotRow then
+            frame._wowxGrid:SetPoint("TOPLEFT", frame._wowxBagSlotRow, "BOTTOMLEFT", 0, -22)
+        elseif frame._wowxControls then
+            frame._wowxGrid:SetPoint("TOPLEFT", frame._wowxControls, "BOTTOMLEFT", 0, -8)
+        else
+            frame._wowxGrid:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -66)
+        end
+        frame._wowxGrid:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 20)
     end
 
     local rows = math.ceil((#entries > 0 and #entries or 1) / ITEM_BUTTON_COLUMNS)
@@ -994,23 +1570,62 @@ function Buttons:RefreshBagWindow()
         rows = minRows
     end
     local gridHeight = ITEM_GRID_PADDING * 2 + (rows * ITEM_BUTTON_SIZE) + ((rows - 1) * ITEM_BUTTON_GAP)
+    -- topInset must match actual anchored offsets used by controls/grid points.
+    -- Collapsed: grid top at -110 and bottom inset is 20 => 130.
+    -- Expanded:  grid top at -166 and bottom inset is 20 => 186.
+    local topInset = bagSlotsExpanded and 186 or 130
+    local minWindowHeight = 320
+    local parentHeight = (UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 900
+    local maxWindowHeight = math.floor(parentHeight - 120)
+    if maxWindowHeight < minWindowHeight then
+        maxWindowHeight = minWindowHeight
+    end
+    local windowHeight = clamp(topInset + gridHeight, minWindowHeight, maxWindowHeight)
+    -- Clamp grid to actual available space so it never escapes the window
+    local availableGridHeight = windowHeight - topInset
+    if gridHeight > availableGridHeight then
+        gridHeight = availableGridHeight
+    end
     if frame._wowxGrid then
         frame._wowxGrid:SetHeight(gridHeight)
-    end
-    local windowHeight = 176 + gridHeight
-    if windowHeight < 360 then
-        windowHeight = 360
-    elseif windowHeight > 620 then
-        windowHeight = 620
     end
     frame:SetHeight(windowHeight)
 
     for index, slotButton in ipairs(self.bagSlotButtons or {}) do
-        local bagID = index - 1
-        local invSlot = bagID == 0 and 16 or ((ContainerIDToInventoryID and ContainerIDToInventoryID(bagID)) or (19 + bagID))
-        local texture = GetInventoryItemTexture("player", invSlot)
+        local bagID = bagIDs[index]
+        local invSlot = safeContainerIDToInventoryID(bagID)
+        local texture = nil
+        if bagID == 0 then
+            texture = "Interface\\Icons\\INV_Misc_Bag_08"
+        elseif bagID == KEYRING_BAG_ID then
+            texture = "Interface\\Icons\\INV_Misc_Key_14"
+        else
+            texture = invSlot and GetInventoryItemTexture("player", invSlot)
+        end
         if slotButton and slotButton._icon then
             slotButton._icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_Bag_08")
+        end
+        if slotButton then
+            slotButton._invSlot = invSlot
+            local active = selectedBagID ~= nil and bagID == selectedBagID
+            if slotButton._borderTint then
+                if active then
+                    setStrokeColor(slotButton._borderTint, 0.22, 0.9, 0.36, 0.5)
+                else
+                    setStrokeColor(slotButton._borderTint, 0.0, 0.0, 0.0, 0.0)
+                end
+            end
+        end
+    end
+
+    if self.keyRingSlotButton and self.keyRingSlotButton._icon then
+        self.keyRingSlotButton._icon:SetTexture("Interface\\Icons\\INV_Misc_Key_14")
+    end
+    if self.keyRingSlotButton and self.keyRingSlotButton._borderTint then
+        if includeKeyRingWithBags then
+            setStrokeColor(self.keyRingSlotButton._borderTint, 0.98, 0.82, 0.24, 0.55)
+        else
+            setStrokeColor(self.keyRingSlotButton._borderTint, 0.0, 0.0, 0.0, 0.0)
         end
     end
 
@@ -1038,11 +1653,34 @@ function Buttons:RefreshBagWindow()
             end
             button._dummyParent:SetID(info.bagID)
             button:SetID(info.slot)
+            if GPX.ClickTransport and GPX.ClickTransport.ApplyBagItemUse then
+                GPX.ClickTransport:ApplyBagItemUse(button, info.bagID, info.slot)
+            end
         end
+        button._bagID = info.bagID
         
         if info.spacer then
             button:Hide()
         else
+            local qualityColor = nil
+            if info.quality and info.quality > 1 and GetItemQualityColor then
+                local r, g, b = GetItemQualityColor(info.quality)
+                if r and g and b then
+                    qualityColor = { r, g, b, 0.95 }
+                end
+            end
+            if info.isKeyRing then
+                button._baseBorderColor = KEYRING_BORDER
+            else
+                button._baseBorderColor = qualityColor or { 0.38, 0.44, 0.54, 0.85 }
+            end
+            if button._border then
+                setStrokeColor(button._border, button._baseBorderColor[1], button._baseBorderColor[2], button._baseBorderColor[3], button._baseBorderColor[4])
+            end
+            if button._borderTint then
+                setStrokeColor(button._borderTint, 0.0, 0.0, 0.0, 0.0)
+            end
+
             -- Explicitly drive icon/count so visual state stays stable on load.
             if info.texture then
                 if button._icon then
@@ -1067,14 +1705,390 @@ function Buttons:RefreshBagWindow()
                 end
                 button:Show()
             end
+
+            if button._keyRingGlow then
+                button._keyRingGlow:Hide()
+            end
         end
     end
 
     for i = #entries + 1, #self.itemButtons do
+        if self.itemButtons[i]._keyRingGlow then
+            self.itemButtons[i]._keyRingGlow:Hide()
+        end
         self.itemButtons[i]:Hide()
     end
 
     self:SetBagHighlight(nil)
+end
+
+function Buttons:SellAllJunkToMerchant()
+    if InCombatLockdown() then
+        GPX:Print("Cannot sell junk in combat.")
+        return
+    end
+    if not (MerchantFrame and MerchantFrame:IsShown()) then
+        GPX:Print("Open a merchant before selling junk.")
+        return
+    end
+
+    local soldCount = 0
+    local soldValue = 0
+    for bagID = 0, 4 do
+        local slots = GetContainerNumSlots and (GetContainerNumSlots(bagID) or 0) or 0
+        for slot = 1, slots do
+            local texture, itemCount, locked = GetContainerItemInfo(bagID, slot)
+            if texture and not locked and GetContainerItemLink then
+                local link = GetContainerItemLink(bagID, slot)
+                local junk, sellPrice = isJunkItem(link)
+                if junk and UseContainerItem then
+                    local count = tonumber(itemCount) or 1
+                    pcall(UseContainerItem, bagID, slot)
+                    soldCount = soldCount + count
+                    soldValue = soldValue + (sellPrice * count)
+                end
+            end
+        end
+    end
+
+    if soldCount > 0 then
+        GPX:Print("Sold junk: " .. tostring(soldCount) .. " item(s) for " .. formatMoneyText(soldValue) .. ".")
+    else
+        GPX:Print("No junk items to sell.")
+    end
+
+    if self.bagWindow and self.bagWindow:IsShown() then
+        self:RefreshBagWindow()
+    end
+end
+
+function Buttons:EnsureBankWindow()
+    if self.bankWindow then
+        return self.bankWindow
+    end
+
+    local contentWidth = ITEM_BUTTON_COLUMNS * ITEM_BUTTON_SIZE + (ITEM_BUTTON_COLUMNS - 1) * ITEM_BUTTON_GAP
+    local bankWindowWidth = 16 + ITEM_GRID_PADDING * 2 + contentWidth + 20
+    local frame = CreateFrame("Frame", "WoWXBankWindow", UIParent)
+    frame:SetWidth(bankWindowWidth)
+    frame:SetHeight(460)
+    frame:SetPoint("CENTER", UIParent, "CENTER", -120, -20)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", function(selfFrame)
+        selfFrame:StartMoving()
+    end)
+    frame:SetScript("OnDragStop", function(selfFrame)
+        selfFrame:StopMovingOrSizing()
+    end)
+    applyBlueChromeBackdrop(frame, BLUE_BORDER)
+    frame:Hide()
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
+    title:SetText("WoWX Bank")
+
+    local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
+
+    local controls = CreateFrame("Frame", nil, frame)
+    controls:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -40)
+    controls:SetWidth(420)
+    controls:SetHeight(62)
+
+    local bankSlotsToggle = CreateFrame("Button", nil, controls, "UIPanelButtonTemplate")
+    bankSlotsToggle:SetPoint("LEFT", controls, "LEFT", 0, 0)
+    bankSlotsToggle:SetWidth(120)
+    bankSlotsToggle:SetHeight(22)
+    bankSlotsToggle:SetText("Bags: Show")
+    bankSlotsToggle:SetScript("OnClick", function()
+        local cfg = ensureConfig()
+        if not cfg then
+            return
+        end
+        cfg.bagSlotsExpanded = not (cfg.bagSlotsExpanded == true)
+        Buttons:RefreshBankWindow()
+    end)
+
+    local buySlotButton = CreateFrame("Button", nil, controls, "UIPanelButtonTemplate")
+    buySlotButton:SetPoint("LEFT", bankSlotsToggle, "RIGHT", 8, 0)
+    buySlotButton:SetWidth(120)
+    buySlotButton:SetHeight(22)
+    buySlotButton:SetText("Buy Slot")
+    buySlotButton:SetScript("OnClick", function()
+        local nextBagID = getNextBankBagSlotForPurchase()
+        if not Buttons._bankIsOpen then
+            GPX:Print("Open the bank before buying slots.")
+            return
+        end
+        if not nextBagID then
+            GPX:Print("All bank bag slots are already unlocked.")
+            return
+        end
+        if not BuyBankSlot then
+            GPX:Print("This client does not support bank slot purchase API.")
+            return
+        end
+        local ok, err = pcall(BuyBankSlot)
+        if not ok then
+            GPX:Print("Unable to buy bank slot: " .. tostring(err))
+        end
+        Buttons:RefreshBankWindow()
+    end)
+
+    local buySlotCost = controls:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    buySlotCost:SetPoint("TOPLEFT", controls, "TOPLEFT", 2, -26)
+    buySlotCost:SetText("")
+    buySlotCost:SetTextColor(1.0, 0.82, 0.18)
+
+    local bagSlotRow = CreateFrame("Frame", nil, frame)
+    bagSlotRow:SetPoint("TOPLEFT", controls, "BOTTOMLEFT", 0, -4)
+    bagSlotRow:SetWidth(420)
+    bagSlotRow:SetHeight(38)
+
+    self.bankBagSlotButtons = {}
+    for _, bagID in ipairs(collectBankBagIDs()) do
+        local slotButton = self:CreateBagSlotButton(bagSlotRow, bagID)
+        slotButton._isBankSelector = true
+        slotButton:SetPoint("LEFT", bagSlotRow, "LEFT", (#self.bankBagSlotButtons) * 46, 0)
+        self.bankBagSlotButtons[#self.bankBagSlotButtons + 1] = slotButton
+
+        local label = bagSlotRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        label:SetPoint("TOP", slotButton, "BOTTOM", 0, -1)
+        label:SetText(getBagShortLabel(bagID))
+    end
+
+    local grid = CreateFrame("Frame", nil, frame)
+    grid:SetPoint("TOPLEFT", controls, "BOTTOMLEFT", 0, -8)
+    grid:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 20)
+    applyBlueChromeBackdrop(grid, DIM_BORDER)
+
+    self.bankItemButtons = self.bankItemButtons or {}
+
+    frame._wowxControls = controls
+    frame._wowxBagSlotsToggle = bankSlotsToggle
+    frame._wowxBuySlotButton = buySlotButton
+    frame._wowxBuySlotCost = buySlotCost
+    frame._wowxBagSlotRow = bagSlotRow
+    frame._wowxGrid = grid
+
+    self.bankWindow = frame
+    registerAsEscapeClosable("WoWXBankWindow")
+    return frame
+end
+
+function Buttons:RefreshBankWindow()
+    local frame = self:EnsureBankWindow()
+    if not frame then
+        return
+    end
+
+    local cfg = ensureConfig()
+    local bagSlotsExpanded = cfg and cfg.bagSlotsExpanded == true
+    local bagIDs = collectBankBagIDs()
+    local selectedBagID = normalizeSelectedBagID(cfg and cfg.selectedBankBagID or nil, bagIDs)
+
+    local entries = {}
+    for _, bagID in ipairs(bagIDs) do
+        local slotCount = GetContainerNumSlots and (GetContainerNumSlots(bagID) or 0) or 0
+        if selectedBagID == nil or selectedBagID == bagID then
+            for slot = 1, slotCount do
+                local texture, itemCount, locked, quality = GetContainerItemInfo(bagID, slot)
+                entries[#entries + 1] = {
+                    bagID = bagID,
+                    slot = slot,
+                    texture = texture,
+                    count = tonumber(itemCount) or 0,
+                    locked = locked,
+                    quality = tonumber(quality) or 1,
+                }
+            end
+        end
+    end
+
+    if frame._wowxBagSlotRow then
+        frame._wowxBagSlotRow:SetShown(bagSlotsExpanded)
+    end
+    if frame._wowxBagSlotsToggle then
+        frame._wowxBagSlotsToggle:SetText(bagSlotsExpanded and "Bags: Hide" or "Bags: Show")
+    end
+    if frame._wowxBuySlotButton then
+        local nextBagID = getNextBankBagSlotForPurchase()
+        frame._wowxBuySlotButton:SetEnabled(self._bankIsOpen and nextBagID ~= nil)
+        if nextBagID then
+            frame._wowxBuySlotButton:SetText("Buy Slot " .. tostring(nextBagID - 4))
+        else
+            frame._wowxBuySlotButton:SetText("Slots Maxed")
+        end
+    end
+    if frame._wowxBuySlotCost then
+        local nextBagID = getNextBankBagSlotForPurchase()
+        local cost = getBankBagSlotPurchaseCost()
+        if nextBagID and cost then
+            frame._wowxBuySlotCost:SetText("Next slot cost: " .. formatMoneyText(cost))
+        elseif nextBagID then
+            frame._wowxBuySlotCost:SetText("Next slot cost: unknown")
+        else
+            frame._wowxBuySlotCost:SetText("All bank bag slots unlocked.")
+        end
+    end
+
+    if frame._wowxGrid then
+        frame._wowxGrid:ClearAllPoints()
+        if bagSlotsExpanded and frame._wowxBagSlotRow then
+            frame._wowxGrid:SetPoint("TOPLEFT", frame._wowxBagSlotRow, "BOTTOMLEFT", 0, -22)
+        elseif frame._wowxControls then
+            frame._wowxGrid:SetPoint("TOPLEFT", frame._wowxControls, "BOTTOMLEFT", 0, -8)
+        else
+            frame._wowxGrid:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -66)
+        end
+        frame._wowxGrid:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 20)
+    end
+
+    local rows = math.ceil((#entries > 0 and #entries or 1) / ITEM_BUTTON_COLUMNS)
+    local minRows = 4
+    if rows < minRows then
+        rows = minRows
+    end
+    local gridHeight = ITEM_GRID_PADDING * 2 + (rows * ITEM_BUTTON_SIZE) + ((rows - 1) * ITEM_BUTTON_GAP)
+    -- Keep bank window sizing in sync with bag window anchor math.
+    local topInset = bagSlotsExpanded and 186 or 130
+    local minWindowHeight = 320
+    local parentHeight = (UIParent and UIParent.GetHeight and UIParent:GetHeight()) or 900
+    local maxWindowHeight = math.floor(parentHeight - 120)
+    if maxWindowHeight < minWindowHeight then
+        maxWindowHeight = minWindowHeight
+    end
+    local windowHeight = clamp(topInset + gridHeight, minWindowHeight, maxWindowHeight)
+    local availableGridHeight = windowHeight - topInset
+    if gridHeight > availableGridHeight then
+        gridHeight = availableGridHeight
+    end
+    if frame._wowxGrid then
+        frame._wowxGrid:SetHeight(gridHeight)
+    end
+    frame:SetHeight(windowHeight)
+
+    for index, slotButton in ipairs(self.bankBagSlotButtons or {}) do
+        local bagID = bagIDs[index]
+        local invSlot = safeContainerIDToInventoryID(bagID)
+        local isPurchased = isBankBagSlotPurchased(bagID)
+        local texture = nil
+        if bagID == BANK_CONTAINER_ID then
+            texture = "Interface\\Icons\\INV_Misc_Bag_10_Blue"
+        elseif not isPurchased then
+            texture = "Interface\\Icons\\INV_Misc_QuestionMark"
+        else
+            texture = invSlot and GetInventoryItemTexture("player", invSlot)
+        end
+        if slotButton and slotButton._icon then
+            slotButton._icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_Bag_10_Blue")
+            if not isPurchased then
+                slotButton._icon:SetVertexColor(0.65, 0.65, 0.65, 1.0)
+            else
+                slotButton._icon:SetVertexColor(1, 1, 1, 1)
+            end
+        end
+        if slotButton then
+            slotButton._invSlot = invSlot
+            local active = selectedBagID ~= nil and bagID == selectedBagID
+            local nextBagID = getNextBankBagSlotForPurchase()
+            if slotButton._border then
+                local border = (not isPurchased and bagID == nextBagID) and GOLD_BORDER or ((not isPurchased) and LOCKED_BORDER or GOLD_BORDER)
+                setStrokeColor(slotButton._border, border[1], border[2], border[3], border[4])
+            end
+            if slotButton._borderTint then
+                if active then
+                    setStrokeColor(slotButton._borderTint, 0.22, 0.9, 0.36, 0.5)
+                elseif not isPurchased and bagID == nextBagID then
+                    setStrokeColor(slotButton._borderTint, 0.96, 0.8, 0.22, 0.35)
+                elseif not isPurchased then
+                    setStrokeColor(slotButton._borderTint, 0.72, 0.26, 0.26, 0.24)
+                else
+                    setStrokeColor(slotButton._borderTint, 0.0, 0.0, 0.0, 0.0)
+                end
+            end
+        end
+    end
+
+    for i = 1, #entries do
+        local info = entries[i]
+        local button = self.bankItemButtons[i]
+        if not button then
+            button = self:CreateItemButton(frame._wowxGrid)
+            self.bankItemButtons[i] = button
+        end
+
+        local col = (i - 1) % ITEM_BUTTON_COLUMNS
+        local row = math.floor((i - 1) / ITEM_BUTTON_COLUMNS)
+        local x = ITEM_GRID_PADDING + col * (ITEM_BUTTON_SIZE + ITEM_BUTTON_GAP)
+        local y = -(ITEM_GRID_PADDING + row * (ITEM_BUTTON_SIZE + ITEM_BUTTON_GAP))
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", frame._wowxGrid, "TOPLEFT", x, y)
+
+        if info.bagID and info.slot then
+            if not button._dummyParent then
+                button._dummyParent = CreateFrame("Frame", nil, frame._wowxGrid)
+                button:SetParent(button._dummyParent)
+            end
+            button._dummyParent:SetID(info.bagID)
+            button:SetID(info.slot)
+            if GPX.ClickTransport and GPX.ClickTransport.ApplyBagItemUse then
+                GPX.ClickTransport:ApplyBagItemUse(button, info.bagID, info.slot)
+            end
+        end
+        button._bagID = info.bagID
+
+        local qualityColor = nil
+        if info.quality and info.quality > 1 and GetItemQualityColor then
+            local r, g, b = GetItemQualityColor(info.quality)
+            if r and g and b then
+                qualityColor = { r, g, b, 0.95 }
+            end
+        end
+        button._baseBorderColor = qualityColor or { 0.38, 0.44, 0.54, 0.85 }
+        if button._border then
+            setStrokeColor(button._border, button._baseBorderColor[1], button._baseBorderColor[2], button._baseBorderColor[3], button._baseBorderColor[4])
+        end
+        if button._borderTint then
+            setStrokeColor(button._borderTint, 0.0, 0.0, 0.0, 0.0)
+        end
+
+        if info.texture then
+            if button._icon then
+                button._icon:SetTexture(info.texture)
+                button._icon:SetVertexColor(1, 1, 1, 1)
+            end
+            if button._count then
+                if info.count and info.count > 1 then
+                    button._count:SetText(tostring(info.count))
+                    button._count:Show()
+                else
+                    button._count:Hide()
+                end
+            end
+        else
+            if button._icon then
+                button._icon:SetTexture(nil)
+            end
+            if button._count then
+                button._count:Hide()
+            end
+        end
+        if button._keyRingGlow then
+            button._keyRingGlow:Hide()
+        end
+        button:Show()
+    end
+
+    for i = #entries + 1, #self.bankItemButtons do
+        if self.bankItemButtons[i]._keyRingGlow then
+            self.bankItemButtons[i]._keyRingGlow:Hide()
+        end
+        self.bankItemButtons[i]:Hide()
+    end
 end
 
 function Buttons:ToggleBagWindow()
@@ -1098,6 +2112,32 @@ function Buttons:ToggleBagWindow()
     self:RefreshBagWindow()
     frame:Show()
     frame:Raise()
+    HideBlizzardContainerFrames()
+end
+
+function Buttons:ToggleBankWindow(forceShow)
+    local frame = self:EnsureBankWindow()
+    if not frame then
+        return
+    end
+
+    if forceShow == false then
+        frame:Hide()
+        self:SetBlizzardBankSuppressed(false)
+        return
+    end
+
+    if forceShow ~= true and frame:IsShown() then
+        frame:Hide()
+        self:SetBlizzardBankSuppressed(false)
+        return
+    end
+
+    self:RefreshBankWindow()
+    frame:Show()
+    frame:Raise()
+    self:SetBlizzardBankSuppressed(true)
+    HideBlizzardContainerFrames()
 end
 
 function Buttons:RefreshEconomyText()
@@ -1111,12 +2151,7 @@ function Buttons:RefreshEconomyText()
 
     if self.currencyLabel then
         local watched = collectWatchedCurrencies()
-        if #watched > 0 then
-            local first = watched[1]
-            self.currencyLabel:SetText(first.name .. ": " .. tostring(first.count))
-        else
-            self.currencyLabel:SetText("")
-        end
+        self.currencyLabel:SetText(formatWatchedCurrenciesText(watched, 2, "  "))
     end
 end
 
@@ -1139,6 +2174,7 @@ function Buttons:UpdateAll()
         self.frame:SetScale(cfg.scale or 1.0)
         self.frame:SetAlpha(cfg.alpha or 1.0)
         applyPoint(self.frame, cfg)
+        self:RefreshMouseLookButton()
         self:RefreshEconomyText()
         self:ApplyBagButtonLayout()
         self:RefreshBagButtonChrome()
@@ -1148,6 +2184,10 @@ function Buttons:UpdateAll()
         if self.bagWindow then
             self.bagWindow:Hide()
         end
+        if self.bankWindow then
+            self.bankWindow:Hide()
+        end
+        self:SetBlizzardBankSuppressed(false)
     end
 
     self:ApplyHotkeys()
@@ -1174,6 +2214,9 @@ function Buttons:InstallBlizzardBagHooks()
         self._originalToggleBackpack = ToggleBackpack
         ToggleBackpack = function()
             if Buttons:GetShowState() then
+                if Buttons._bankIsOpen then
+                    return
+                end
                 Buttons:ToggleBagWindow()
             else
                 Buttons._originalToggleBackpack()
@@ -1186,14 +2229,71 @@ function Buttons:InstallBlizzardBagHooks()
         self._originalOpenAllBags = OpenAllBags
         OpenAllBags = function()
             if Buttons:GetShowState() then
+                if Buttons._bankIsOpen then
+                    return
+                end
                 local frame = Buttons:EnsureBagWindow()
                 if frame and not frame:IsShown() then
                     Buttons:RefreshBagWindow()
                     frame:Show()
                     frame:Raise()
+                    HideBlizzardContainerFrames()
                 end
             else
                 Buttons._originalOpenAllBags()
+            end
+        end
+    end
+
+    -- Some interactions (altars, special objects) call OpenBackpack/OpenBag directly.
+    -- Redirect those paths too so Blizzard container windows do not open under WoWX.
+    if OpenBackpack and not self._originalOpenBackpack then
+        self._originalOpenBackpack = OpenBackpack
+        OpenBackpack = function()
+            if Buttons:GetShowState() then
+                if Buttons._bankIsOpen then
+                    return
+                end
+                local frame = Buttons:EnsureBagWindow()
+                if frame and not frame:IsShown() then
+                    Buttons:RefreshBagWindow()
+                    frame:Show()
+                    frame:Raise()
+                    HideBlizzardContainerFrames()
+                end
+            else
+                Buttons._originalOpenBackpack()
+            end
+        end
+    end
+
+    if OpenBag and not self._originalOpenBag then
+        self._originalOpenBag = OpenBag
+        OpenBag = function(_)
+            if Buttons:GetShowState() then
+                if Buttons._bankIsOpen then
+                    return
+                end
+                local frame = Buttons:EnsureBagWindow()
+                if frame and not frame:IsShown() then
+                    Buttons:RefreshBagWindow()
+                    frame:Show()
+                    frame:Raise()
+                    HideBlizzardContainerFrames()
+                end
+            else
+                Buttons._originalOpenBag(_)
+            end
+        end
+    end
+
+    if ToggleBag and not self._originalToggleBag then
+        self._originalToggleBag = ToggleBag
+        ToggleBag = function(_)
+            if Buttons:GetShowState() then
+                Buttons:ToggleBagWindow()
+            else
+                Buttons._originalToggleBag(_)
             end
         end
     end
@@ -1207,6 +2307,28 @@ function Buttons:InstallBlizzardBagHooks()
                 Buttons._openedByMerchant = nil
             end
             Buttons._originalCloseAllBags()
+        end
+    end
+
+    if CloseBackpack and not self._originalCloseBackpack then
+        self._originalCloseBackpack = CloseBackpack
+        CloseBackpack = function()
+            if Buttons:GetShowState() and Buttons.bagWindow and Buttons.bagWindow:IsShown() then
+                Buttons.bagWindow:Hide()
+                Buttons._openedByMerchant = nil
+            end
+            Buttons._originalCloseBackpack()
+        end
+    end
+
+    if CloseBag and not self._originalCloseBag then
+        self._originalCloseBag = CloseBag
+        CloseBag = function(bag)
+            if Buttons:GetShowState() and Buttons.bagWindow and Buttons.bagWindow:IsShown() then
+                Buttons.bagWindow:Hide()
+                Buttons._openedByMerchant = nil
+            end
+            Buttons._originalCloseBag(bag)
         end
     end
 end
@@ -1233,12 +2355,17 @@ function Buttons:Slash(msg)
         cfg.showBags = not (cfg.showBags == true)
     elseif arg == "reset" then
         cfg.point = cloneDefaults().point
+        cfg.bagWindowPoint = cloneDefaults().bagWindowPoint
         cfg.scale = defaultConfig.scale
         cfg.alpha = defaultConfig.alpha
         cfg.buttonSize = defaultConfig.buttonSize
         cfg.iconInset = defaultConfig.iconInset
         cfg.framePadding = defaultConfig.framePadding
         cfg.textSpacing = defaultConfig.textSpacing
+        if self.bagWindow then
+            self.bagWindow:ClearAllPoints()
+            self.bagWindow:SetPoint("CENTER", UIParent, "CENTER", 120, -20)
+        end
     else
         GPX:Print("Usage: /wowx bags [on|off|toggle|status|reset]")
         return
@@ -1258,6 +2385,11 @@ updateFrame:RegisterEvent("BAG_UPDATE_COOLDOWN")
 updateFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 updateFrame:RegisterEvent("MERCHANT_SHOW")
 updateFrame:RegisterEvent("MERCHANT_CLOSED")
+updateFrame:RegisterEvent("MAIL_SHOW")
+updateFrame:RegisterEvent("MAIL_CLOSED")
+updateFrame:RegisterEvent("BANKFRAME_OPENED")
+updateFrame:RegisterEvent("BANKFRAME_CLOSED")
+updateFrame:RegisterEvent("PLAYERBANKSLOTS_CHANGED")
 updateFrame:SetScript("OnEvent", function(_, event)
     if not GPX.ActionButtons then
         return
@@ -1290,6 +2422,57 @@ updateFrame:SetScript("OnEvent", function(_, event)
         return
     end
 
+    if event == "MAIL_SHOW" then
+        local cfg = ensureConfig()
+        if cfg and cfg.enabled and cfg.showBags and GPX.db and GPX.db.enabled then
+            local frame = GPX.ActionButtons:EnsureBagWindow()
+            if frame and not frame:IsShown() then
+                GPX.ActionButtons:RefreshBagWindow()
+                frame:Show()
+                frame:Raise()
+                HideBlizzardContainerFrames()
+                GPX.ActionButtons._openedByMail = true
+            else
+                HideBlizzardContainerFrames()
+            end
+        end
+        return
+    end
+
+    if event == "MAIL_CLOSED" then
+        if GPX.ActionButtons.bagWindow and GPX.ActionButtons.bagWindow:IsShown() and GPX.ActionButtons._openedByMail then
+            GPX.ActionButtons.bagWindow:Hide()
+            GPX.ActionButtons._openedByMail = nil
+        end
+        return
+    end
+
+    if event == "BANKFRAME_OPENED" then
+        GPX.ActionButtons._bankIsOpen = true
+        GPX.ActionButtons._reopenBagAfterBank = GPX.ActionButtons.bagWindow and GPX.ActionButtons.bagWindow:IsShown() or false
+        if GPX.ActionButtons.bagWindow and GPX.ActionButtons.bagWindow:IsShown() then
+            GPX.ActionButtons.bagWindow:Hide()
+        end
+        GPX.ActionButtons:ToggleBankWindow(true)
+        return
+    end
+
+    if event == "BANKFRAME_CLOSED" then
+        GPX.ActionButtons._bankIsOpen = nil
+        GPX.ActionButtons:ToggleBankWindow(false)
+        if GPX.ActionButtons._reopenBagAfterBank and GPX.ActionButtons:GetShowState() then
+            local frame = GPX.ActionButtons:EnsureBagWindow()
+            if frame then
+                GPX.ActionButtons:RefreshBagWindow()
+                frame:Show()
+                frame:Raise()
+                HideBlizzardContainerFrames()
+            end
+        end
+        GPX.ActionButtons._reopenBagAfterBank = nil
+        return
+    end
+
     if event == "PLAYER_MONEY" or event == "CURRENCY_DISPLAY_UPDATE" then
         GPX.ActionButtons:RefreshEconomyText()
         return
@@ -1299,6 +2482,16 @@ updateFrame:SetScript("OnEvent", function(_, event)
         GPX.ActionButtons:RefreshEconomyText()
         if GPX.ActionButtons.bagWindow and GPX.ActionButtons.bagWindow:IsShown() then
             GPX.ActionButtons:RefreshBagWindow()
+        end
+        if GPX.ActionButtons.bankWindow and GPX.ActionButtons.bankWindow:IsShown() then
+            GPX.ActionButtons:RefreshBankWindow()
+        end
+        return
+    end
+
+    if event == "PLAYERBANKSLOTS_CHANGED" then
+        if GPX.ActionButtons.bankWindow and GPX.ActionButtons.bankWindow:IsShown() then
+            GPX.ActionButtons:RefreshBankWindow()
         end
         return
     end

@@ -235,23 +235,26 @@ function Mode:UpdateIndicator()
 
     local context = self:GetContext(self.activeContext)
     local nav = self:GetNavigationKeys()
-    local detail = string.format(
-        "Navigate: %s/%s/%s/%s   Confirm: %s   Cancel: %s   Window: %s / %s",
-        nav.up or "--",
-        nav.right or "--",
-        nav.down or "--",
-        nav.left or "--",
-        nav.confirm or "--",
-        nav.cancel or "ESCAPE",
-        nav.prevWindow or "--",
-        nav.nextWindow or "--"
-    )
+    local detail
+    local hasNav = nav.up or nav.down or nav.left or nav.right
+    if hasNav then
+        detail = string.format("Navigate: %s/%s/%s/%s", nav.up or "--", nav.right or "--", nav.down or "--", nav.left or "--")
+        if nav.confirm then
+            detail = detail .. "   Confirm: " .. nav.confirm
+        end
+        detail = detail .. "   Cancel: " .. (nav.cancel or "ESCAPE")
+        if nav.prevWindow or nav.nextWindow then
+            detail = detail .. string.format("   Window: %s / %s", nav.prevWindow or "--", nav.nextWindow or "--")
+        end
+    else
+        detail = ""
+    end
 
     if context and context.getIndicatorText then
         detail = context.getIndicatorText(self, detail) or detail
     end
 
-    self.indicatorTitle:SetText("WoWX UI Mode ΓÇö " .. self:GetContextLabel(self.activeContext))
+    self.indicatorTitle:SetText("WoWX - " .. self:GetContextLabel(self.activeContext))
     self.indicatorDetail:SetText(detail)
     self.indicator:Show()
 end

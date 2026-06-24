@@ -123,14 +123,25 @@ function UI:CreateFrame()
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     subtitle:SetWidth(480)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Visual setup, bar control, and couch-play status in one place. Use this instead of remembering slash commands.")
+    subtitle:SetText("General tab is for bar/actions. Keybinds tab is for key mapping and optional controller setup.")
 
     local setTab
+
+    local tabProfiles = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    tabProfiles:SetWidth(92)
+    tabProfiles:SetHeight(22)
+    tabProfiles:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -324, -14)
+    tabProfiles:SetText("Profiles")
+    tabProfiles:SetScript("OnClick", function()
+        if setTab then
+            setTab("profiles")
+        end
+    end)
 
     local tabGeneral = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     tabGeneral:SetWidth(92)
     tabGeneral:SetHeight(22)
-    tabGeneral:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -124, -14)
+    tabGeneral:SetPoint("LEFT", tabProfiles, "RIGHT", 8, 0)
     tabGeneral:SetText("General")
     tabGeneral:SetScript("OnClick", function()
         if setTab then
@@ -142,19 +153,20 @@ function UI:CreateFrame()
     tabController:SetWidth(92)
     tabController:SetHeight(22)
     tabController:SetPoint("LEFT", tabGeneral, "RIGHT", 8, 0)
-    tabController:SetText("Controllers")
+    tabController:SetText("Keybinds")
     tabController:SetScript("OnClick", function()
         if setTab then
             setTab("controller")
         end
     end)
 
+    frame.tabProfiles = tabProfiles
     frame.tabGeneral = tabGeneral
     frame.tabController = tabController
 
     local statusPanel = CreateFrame("Frame", nil, frame)
     statusPanel:SetWidth(510)
-    statusPanel:SetHeight(90)
+    statusPanel:SetHeight(192)
     statusPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -76)
     createBackdrop(statusPanel, 0.18, 0.3, 0.5, 0.8)
     statusPanel:SetBackdropColor(0.07, 0.09, 0.14, 0.92)
@@ -198,7 +210,7 @@ function UI:CreateFrame()
     local utilityPanel = CreateFrame("Frame", nil, frame)
     utilityPanel:SetWidth(510)
     utilityPanel:SetHeight(108)
-    utilityPanel:SetPoint("TOPLEFT", bindingPanel, "BOTTOMLEFT", 0, -14)
+    utilityPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -76)
     createBackdrop(utilityPanel, 0.18, 0.3, 0.5, 0.8)
     utilityPanel:SetBackdropColor(0.06, 0.08, 0.12, 0.92)
 
@@ -210,7 +222,7 @@ function UI:CreateFrame()
     utilityHint:SetPoint("TOPLEFT", utilityTitle, "BOTTOMLEFT", 0, -6)
     utilityHint:SetWidth(480)
     utilityHint:SetJustifyH("LEFT")
-    utilityHint:SetText("Enable controller mode to verify your AntiMicroX keyboard mapping and show controller labels on the WoWX bar.")
+    utilityHint:SetText("Controller tools are optional. Use them to verify AntiMicroX keys and choose label style shown on the WoWX bar.")
 
     local inputPanel = CreateFrame("Frame", nil, frame)
     inputPanel:SetWidth(510)
@@ -221,31 +233,89 @@ function UI:CreateFrame()
 
     local inputTitle = inputPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     inputTitle:SetPoint("TOPLEFT", inputPanel, "TOPLEFT", 14, -12)
-    inputTitle:SetText("Controller Verification (Click To Capture)")
+    inputTitle:SetText("Input Mapping (Optional Override Capture)")
 
     local inputHint = inputPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     inputHint:SetPoint("TOPLEFT", inputTitle, "BOTTOMLEFT", 0, -6)
     inputHint:SetWidth(480)
     inputHint:SetJustifyH("LEFT")
-    inputHint:SetText("Enable controller mode first. Then click a mapping button and press the key sent by your AntiMicroX profile.")
+    inputHint:SetText("Click a mapping field, then press a key to update WoWX mapping labels and optional session overrides.")
+
+    local profilePanel = CreateFrame("Frame", nil, frame)
+    profilePanel:SetWidth(510)
+    profilePanel:SetHeight(194)
+    profilePanel:SetPoint("TOPLEFT", utilityPanel, "BOTTOMLEFT", 0, -14)
+    createBackdrop(profilePanel, 0.18, 0.3, 0.5, 0.8)
+    profilePanel:SetBackdropColor(0.06, 0.08, 0.12, 0.92)
+
+    local profileTitle = profilePanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    profileTitle:SetPoint("TOPLEFT", profilePanel, "TOPLEFT", 14, -12)
+    profileTitle:SetText("Layout Profiles")
+
+    local profileHint = profilePanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    profileHint:SetPoint("TOPLEFT", profileTitle, "BOTTOMLEFT", 0, -6)
+    profileHint:SetWidth(480)
+    profileHint:SetJustifyH("LEFT")
+    profileHint:SetText("These profiles save sizing and placement only. WoWX bindings stay per character.")
+
+    local profileNameLabel = profilePanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    profileNameLabel:SetPoint("TOPLEFT", profileHint, "BOTTOMLEFT", 0, -14)
+    profileNameLabel:SetText("Profile Name")
+
+    local profileNameBox = CreateFrame("EditBox", nil, profilePanel, "InputBoxTemplate")
+    profileNameBox:SetWidth(160)
+    profileNameBox:SetHeight(20)
+    profileNameBox:SetPoint("LEFT", profileNameLabel, "RIGHT", 10, 0)
+    profileNameBox:SetAutoFocus(false)
+    profileNameBox:SetTextColor(1.0, 0.92, 0.58)
+
+    local currentProfileText = profilePanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    currentProfileText:SetPoint("TOPLEFT", profileNameLabel, "BOTTOMLEFT", 0, -14)
+    currentProfileText:SetWidth(480)
+    currentProfileText:SetJustifyH("LEFT")
+
+    local profileButtons = {
+        { key = "saveProfile", label = "Save", x = 14, y = -130, width = 92 },
+        { key = "loadProfile", label = "Load", x = 114, y = -130, width = 92 },
+        { key = "newProfile", label = "New From Current", x = 214, y = -130, width = 132 },
+        { key = "deleteProfile", label = "Delete", x = 354, y = -130, width = 92 },
+    }
+
+    frame.profilePanel = profilePanel
+    frame.profileNameBox = profileNameBox
+    frame.currentProfileText = currentProfileText
+    frame.profileButtons = {}
+
+    for _, spec in ipairs(profileButtons) do
+        local button = CreateFrame("Button", nil, profilePanel, "UIPanelButtonTemplate")
+        button:SetWidth(spec.width)
+        button:SetHeight(24)
+        button:SetPoint("TOPLEFT", profilePanel, "TOPLEFT", spec.x, spec.y)
+        button:SetText(spec.label)
+        frame.profileButtons[spec.key] = button
+    end
 
     setTab = function(tab)
         frame.activeTab = tab
-        local showGeneral = tab ~= "controller"
+        local showGeneral = tab == "general"
+        local showProfiles = tab == "profiles"
+        local showController = tab == "controller"
         statusPanel:SetShown(showGeneral)
         actionPanel:SetShown(showGeneral)
-        bindingPanel:SetShown(showGeneral)
-        utilityPanel:SetShown(not showGeneral)
-        inputPanel:SetShown(not showGeneral)
-        if frame.tabGeneral and frame.tabController then
+        bindingPanel:SetShown(showController)
+        utilityPanel:SetShown(showController)
+        inputPanel:SetShown(showController)
+        profilePanel:SetShown(showProfiles)
+        if frame.tabProfiles and frame.tabGeneral and frame.tabController then
+            frame.tabProfiles:SetText(showProfiles and "Profiles *" or "Profiles")
             frame.tabGeneral:SetText(showGeneral and "General *" or "General")
-            frame.tabController:SetText((not showGeneral) and "Controllers *" or "Controllers")
+            frame.tabController:SetText(showController and "Keybinds *" or "Keybinds")
         end
     end
 
     frame.buttons = {}
     local specs = {
-        { key = "init", label = "Run Init", x = 14, y = -42, width = 116, click = function() GPX:OpenSetupWizard("init") end },
+        { key = "init", label = "Init Wizard", x = 14, y = -42, width = 116, click = function() GPX:OpenSetupWizard("init") end },
         { key = "recal", label = "Recalibrate", x = 140, y = -42, width = 116, click = function() GPX:OpenSetupWizard("recal") end },
         { key = "toggleMode", label = "Enable / Disable", x = 266, y = -42, width = 140, click = function() GPX.db.enabled = not GPX.db.enabled if GPX.db.enabled then GPX:ApplyBindings() else GPX:ClearBindings() end UI:Refresh() end },
         { key = "toggleBar", label = "Show / Hide Bar", x = 14, y = -82, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash("toggle") end UI:Refresh() end },
@@ -257,7 +327,10 @@ function UI:CreateFrame()
         { key = "spellbook", label = "Open Spellbook", x = 14, y = -162, width = 116, click = function() if GPX.SpellbookUI then GPX.SpellbookUI:Open(nil, "settings") end end },
         { key = "menuNav", label = "Menu Navigator", x = 140, y = -162, width = 140, click = function() GPX:OpenMenuNav("settings") end },
         { key = "buttonEdit", label = "Button Edit", x = 290, y = -162, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash((GPX.db.ui.visualBar.buttonLocked ~= false) and "buttonunlock" or "buttonlock") end UI:Refresh() end },
-        { key = "close", label = "Close", x = 140, y = -242, width = 116, click = function() frame:Hide() end },
+        { key = "gridbook", label = "Open Gridbook", x = 14, y = -202, width = 116, click = function() GPX:Slash("gridbook") end },
+        { key = "toggleBags", label = "WoWX Bags", x = 140, y = -202, width = 116, click = function() if GPX.ActionButtons and GPX.ActionButtons.Slash then GPX.ActionButtons:Slash("toggle") end UI:Refresh() end },
+        { key = "layoutProfiles", label = "Layout Profiles", x = 266, y = -202, width = 140, click = function() if setTab then setTab("profiles") end end },
+        { key = "close", label = "Close", x = 290, y = -242, width = 116, click = function() frame:Hide() end },
     }
 
     frame.navOrder = {}
@@ -286,6 +359,21 @@ function UI:CreateFrame()
     end)
     frame.navOrder[#frame.navOrder + 1] = frame.controllerEnable
 
+    frame.mouseLookMode = CreateFrame("Button", nil, utilityPanel, "UIPanelButtonTemplate")
+    frame.mouseLookMode:SetWidth(146)
+    frame.mouseLookMode:SetHeight(24)
+    frame.mouseLookMode:SetPoint("TOPRIGHT", utilityPanel, "TOPRIGHT", -14, -38)
+    frame.mouseLookMode:SetScript("OnClick", function()
+        local cfg = GPX:GetControllerConfig()
+        if cfg.mouseLookMode == "platformer" then
+            GPX:SetControllerMouseLookMode("move")
+        else
+            GPX:SetControllerMouseLookMode("platformer")
+        end
+        UI:Refresh()
+    end)
+    frame.navOrder[#frame.navOrder + 1] = frame.mouseLookMode
+
     frame.styleButtons = {}
     local styleSpecs = {
         { id = "keyboard", label = "Keyboard" },
@@ -299,7 +387,7 @@ function UI:CreateFrame()
         button:SetWidth(92)
         button:SetHeight(22)
         local col = (index - 1) % 5
-        button:SetPoint("TOPLEFT", utilityPanel, "TOPLEFT", 14 + (col * 98), -44)
+        button:SetPoint("TOPLEFT", utilityPanel, "TOPLEFT", 14 + (col * 98), -70)
         button.styleId = spec.id
         button.baseLabel = spec.label
         button:SetScript("OnClick", function(self)
@@ -309,20 +397,59 @@ function UI:CreateFrame()
         frame.navOrder[#frame.navOrder + 1] = button
     end
 
+    for _, button in pairs(frame.profileButtons) do
+        frame.navOrder[#frame.navOrder + 1] = button
+    end
+
+    if frame.profileButtons then
+        if frame.profileButtons.saveProfile then
+            frame.profileButtons.saveProfile:SetScript("OnClick", function()
+                local name = UI.frame and UI.frame.profileNameBox and UI.frame.profileNameBox:GetText() or nil
+                if GPX.VisualBar and GPX.VisualBar.SaveLayoutProfile then
+                    GPX.VisualBar:SaveLayoutProfile(name)
+                    UI:Refresh()
+                end
+            end)
+        end
+        if frame.profileButtons.loadProfile then
+            frame.profileButtons.loadProfile:SetScript("OnClick", function()
+                local name = UI.frame and UI.frame.profileNameBox and UI.frame.profileNameBox:GetText() or nil
+                if GPX.VisualBar and GPX.VisualBar.ApplyLayoutProfile then
+                    GPX.VisualBar:ApplyLayoutProfile(name)
+                    UI:Refresh()
+                end
+            end)
+        end
+        if frame.profileButtons.newProfile then
+            frame.profileButtons.newProfile:SetScript("OnClick", function()
+                local name = UI.frame and UI.frame.profileNameBox and UI.frame.profileNameBox:GetText() or nil
+                if GPX.VisualBar and GPX.VisualBar.SaveLayoutProfile then
+                    GPX.VisualBar:SaveLayoutProfile(name)
+                    UI:Refresh()
+                end
+            end)
+        end
+        if frame.profileButtons.deleteProfile then
+            frame.profileButtons.deleteProfile:SetScript("OnClick", function()
+                local name = UI.frame and UI.frame.profileNameBox and UI.frame.profileNameBox:GetText() or nil
+                if GPX.VisualBar and GPX.VisualBar.DeleteLayoutProfile then
+                    GPX.VisualBar:DeleteLayoutProfile(name)
+                    UI:Refresh()
+                end
+            end)
+        end
+    end
+
     frame.barOptions = {}
     local optionSpecs = {
-        { key = "toggleProgress", label = "XP/Rep Bar", x = 14, click = function() if GPX.VisualBar then GPX.VisualBar:Slash("progress") end UI:Refresh() end },
+        { key = "toggleProgress", label = "XP/Rep Bar", x = 266, y = -202, width = 140, click = function() if GPX.VisualBar then GPX.VisualBar:Slash("progress") end UI:Refresh() end },
     }
 
     for _, spec in ipairs(optionSpecs) do
         local button = CreateFrame("Button", nil, actionPanel, "UIPanelButtonTemplate")
-        button:SetWidth(104)
-        button:SetHeight(24)
-        local y = (spec.row == 2) and -206 or -206
-        if spec.row == 2 then
-            y = -236
-        end
-        button:SetPoint("TOPLEFT", actionPanel, "TOPLEFT", spec.x, y)
+        button:SetWidth(spec.width or 104)
+        button:SetHeight(30)
+        button:SetPoint("TOPLEFT", actionPanel, "TOPLEFT", spec.x, spec.y or -202)
         button:SetText(spec.label)
         button:SetScript("OnClick", spec.click)
         frame.barOptions[spec.key] = button
@@ -331,7 +458,7 @@ function UI:CreateFrame()
 
     frame.mappingButtons = {}
     local mappingFields = {
-        { field = "jump", label = "Action 1" },
+        { field = "jump", label = "Confirm / Jump" },
         { field = "menu", label = "Menu" },
         { field = "look", label = "Look" },
         { field = "mod1", label = "Mod 1" },
@@ -408,9 +535,13 @@ function UI:CreateFrame()
     self.frame.statusText = statusText
     self.frame.bindingText = bindingText
     self.frame.inputHint = inputHint
+    self.frame.utilityHint = utilityHint
     self.frame.keyCapture = keyCapture
     self.frame.setTab = setTab
+    self.frame.profileNameBox = profileNameBox
+    self.frame.currentProfileText = currentProfileText
     self.frame.navOrder[#self.frame.navOrder + 1] = tabGeneral
+    self.frame.navOrder[#self.frame.navOrder + 1] = tabProfiles
     self.frame.navOrder[#self.frame.navOrder + 1] = tabController
     setTab("general")
 
@@ -425,7 +556,11 @@ function UI:CreateFrame()
                 return UI.frame and UI.frame:IsShown()
             end,
             getIndicatorText = function(_, baseText)
-                return "Use Focus Bar or Open Spellbook to move deeper into WoWX UI.   " .. baseText
+                local hint = "Use Focus Bar or Open Spellbook to go deeper."
+                if baseText and baseText ~= "" then
+                    return hint .. "   " .. baseText
+                end
+                return hint
             end,
             onCancel = function()
                 if UI.frame then
@@ -445,22 +580,45 @@ function UI:RefreshUtilityButtons()
     local setup = profile and profile.setup or nil
 
     local controllerEnabled = GPX:IsControllerEnabled()
+    local controllerCfg = GPX:GetControllerConfig()
     if self.frame.controllerEnable then
-        self.frame.controllerEnable:SetText(controllerEnabled and "Controller: Enabled" or "Enable Controller")
+        self.frame.controllerEnable:SetText(controllerEnabled and "Controller: Enabled" or "Controller: Disabled - Click to Enable")
+    end
+    if self.frame.mouseLookMode then
+        if controllerEnabled then
+            local modeText = "Move"
+            if controllerCfg.mouseLookMode == "platformer" then
+                modeText = "On"
+            elseif controllerCfg.mouseLookMode == "off" then
+                modeText = "Off"
+            end
+            self.frame.mouseLookMode:SetText("Mouselook: " .. modeText)
+            self.frame.mouseLookMode:Show()
+        else
+            self.frame.mouseLookMode:Hide()
+        end
     end
 
     if self.frame.styleButtons then
         local styleId = setup and (setup.deviceId or setup.inputStyle) or "keyboard"
         for _, button in ipairs(self.frame.styleButtons) do
-            local isSelected = button.styleId == styleId
-            button:SetText(button.baseLabel .. (isSelected and " *" or ""))
             if controllerEnabled then
+                local isSelected = button.styleId == styleId
+                button:SetText(button.baseLabel .. (isSelected and " *" or ""))
                 button:Enable()
                 button:SetAlpha(1.0)
+                button:Show()
             else
-                button:Disable()
-                button:SetAlpha(0.5)
+                button:Hide()
             end
+        end
+    end
+
+    if self.frame.utilityHint then
+        if controllerEnabled then
+            self.frame.utilityHint:SetText("Choose your controller label style below. AntiMicroX maps physical buttons to these keys.")
+        else
+            self.frame.utilityHint:SetText("Controller integration is disabled. Enable above to access controller label and mapping options.")
         end
     end
 
@@ -480,6 +638,44 @@ function UI:RefreshUtilityButtons()
         end
         if self.frame.barOptions.toggleProgress then
             self.frame.barOptions.toggleProgress:SetText((cfg.showProgress ~= false) and "XP/Rep: On" or "XP/Rep: Off")
+        end
+    end
+end
+
+function UI:RefreshProfilePanel()
+    if not self.frame then
+        return
+    end
+
+    local visualBar = GPX.VisualBar
+    if not self.frame.profilePanel or not visualBar then
+        return
+    end
+
+    local activeName = visualBar.GetLayoutProfileName and visualBar:GetLayoutProfileName() or "default"
+    local names = visualBar.GetLayoutProfileNames and visualBar:GetLayoutProfileNames() or {}
+    if self.frame.currentProfileText then
+        self.frame.currentProfileText:SetText("Active Layout Profile: " .. tostring(activeName) .. "   Available: " .. table.concat(names, ", "))
+    end
+    if self.frame.profileNameBox and (not self.captureField) then
+        if self.frame.profileNameBox:GetText() == nil or self.frame.profileNameBox:GetText() == "" then
+            self.frame.profileNameBox:SetText(activeName)
+        end
+    end
+    if self.frame.profileButtons then
+        local hasName = self.frame.profileNameBox and self.frame.profileNameBox:GetText() and self.frame.profileNameBox:GetText() ~= ""
+        if self.frame.profileButtons.saveProfile then
+            self.frame.profileButtons.saveProfile:Enable()
+            self.frame.profileButtons.saveProfile:SetText("Save")
+        end
+        if self.frame.profileButtons.loadProfile then
+            self.frame.profileButtons.loadProfile:Enable()
+        end
+        if self.frame.profileButtons.newProfile then
+            self.frame.profileButtons.newProfile:SetEnabled(hasName)
+        end
+        if self.frame.profileButtons.deleteProfile then
+            self.frame.profileButtons.deleteProfile:SetEnabled(hasName and self.frame.profileNameBox:GetText() ~= "default")
         end
     end
 end
@@ -508,12 +704,6 @@ function UI:GetActiveMappingFields()
     local fields = {}
 
     if controllerEnabled then
-        fields[#fields + 1] = {
-            field = "jump",
-            label = GPX:GetConfirmLabel(setup and setup.deviceId) .. " / Jump",
-        }
-        fields[#fields + 1] = { field = "menu", label = "Menu / Map" }
-        fields[#fields + 1] = { field = "look", label = "Hold Look" }
         fields[#fields + 1] = { field = "mod1", label = "Mod 1" }
         fields[#fields + 1] = { field = "mod2", label = "Mod 2" }
         fields[#fields + 1] = { field = "mod3", label = "Mod 3" }
@@ -529,6 +719,10 @@ function UI:GetActiveMappingFields()
 
         return fields
     end
+
+    fields[#fields + 1] = { field = "mod1", label = "Mod 1" }
+    fields[#fields + 1] = { field = "mod2", label = "Mod 2" }
+    fields[#fields + 1] = { field = "mod3", label = "Mod 3" }
 
     for slotIndex = 1, 12 do
         fields[#fields + 1] = {
@@ -589,7 +783,7 @@ function UI:SetMappingValue(field, value)
         if actionSlot and actionSlot >= 1 and actionSlot <= 12 then
             if GPX:IsControllerEnabled() then
                 setup.actionKeyBaseSlot = 1
-                setup.actionButtonCount = math.max(8, GPX:GetConfiguredActionButtonCount(setup), actionSlot)
+                setup.actionButtonCount = math.max(9, GPX:GetConfiguredActionButtonCount(setup), actionSlot)
             elseif not setup.actionKeyBaseSlot or setup.actionKeyBaseSlot < 2 then
                 setup.actionKeyBaseSlot = 2
                 setup.actionButtonCount = 12
@@ -611,13 +805,8 @@ function UI:StartInputCapture(field)
         return
     end
 
-    if not GPX:IsControllerEnabled() and not getActionCommandForField(field) then
-        self.frame.inputHint:SetText("This field is for controller mode only. Enable Controller first.")
-        return
-    end
-
     self.captureField = field
-    self.frame.inputHint:SetText("Capturing " .. field .. "... press a key now (TAB works here, ESC cancels)")
+    self.frame.inputHint:SetText("Capturing " .. field .. "... press a key now (ESC cancels)")
     self.frame.keyCapture:SetFocus()
 end
 
@@ -633,7 +822,7 @@ function UI:HandleCapturedKey(rawKey)
 
     if key == "ESCAPE" then
         self.captureField = nil
-        self.frame.inputHint:SetText("Click a mapping button, then press a key. WoWX maps these keys to its own bar buttons for this session.")
+        self.frame.inputHint:SetText("Click a mapping button, then press a key to update labels and optional session overrides.")
         self.frame.keyCapture:ClearFocus()
         self:Refresh()
         return
@@ -685,15 +874,19 @@ function UI:BuildBindingSummary()
     local profile = GPX:GetProfile()
     local setup = profile and profile.setup or nil
     if not profile or not profile.bindings or not setup then
-        return "No bindings available. Run Init to build controller bindings."
+        return "No mapping profile yet. Init is optional; keyboard slot routing still works with defaults."
     end
 
     local style = GPX:GetInputStyle(setup.deviceId)
     local lines = {}
 
     if GPX:IsControllerEnabled() then
-        lines[#lines + 1] = "Confirm / Jump  " .. (setup.jumpKey or "--")
-        lines[#lines + 1] = "Hold Look  " .. (setup.lookKey or "--") .. " -> CAMERAORSELECTORMOVE"
+        if setup.jumpKey and setup.jumpKey ~= "" then
+            lines[#lines + 1] = "Confirm / Jump  " .. setup.jumpKey
+        end
+        if setup.lookKey and setup.lookKey ~= "" then
+            lines[#lines + 1] = "Hold Look  " .. setup.lookKey .. " -> CAMERAORSELECTORMOVE"
+        end
     elseif setup.jumpKey and setup.jumpKey ~= "" then
         lines[#lines + 1] = "Action 1 (Base)  " .. setup.jumpKey .. " -> ACTIONBUTTON1"
     end
@@ -719,6 +912,19 @@ function UI:BuildBindingSummary()
         end
     end
 
+    if GPX:IsControllerEnabled() and setup.jumpKey and setup.jumpKey ~= "" then
+        local jumpKey = setup.jumpKey
+        local mods = setup.modifiers or {}
+        local m1 = mods[1] or "SHIFT"
+        local m2 = mods[2] or "ALT"
+        local m3 = mods[3] or "CTRL"
+        lines[#lines + 1] = "Utility (machine-wide): " .. jumpKey .. "=JUMP"
+        lines[#lines + 1] = "Utility (machine-wide): " .. m1 .. "-" .. jumpKey .. "=TOGGLEWORLDMAP"
+        lines[#lines + 1] = "Utility (machine-wide): " .. m2 .. "-" .. jumpKey .. "=TOGGLECHARACTER0"
+        lines[#lines + 1] = "Utility (machine-wide): " .. m3 .. "-" .. jumpKey .. "=TOGGLEBATTLEFIELD"
+        lines[#lines + 1] = "Utility (machine-wide): " .. m1 .. "-" .. m2 .. "-" .. jumpKey .. "=TOGGLESOCIAL"
+    end
+
     return table.concat(lines, "\n")
 end
 
@@ -734,15 +940,26 @@ function UI:BuildStatusText()
     local buttonLockState = GPX.db and GPX.db.ui and GPX.db.ui.visualBar and GPX.db.ui.visualBar.buttonLocked ~= false and "Locked" or "Unlocked"
     local minimap = GPX.db and GPX.db.ui and GPX.db.ui.minimapButton and GPX.db.ui.minimapButton.enabled and "Shown" or "Hidden"
     local controllerMode = GPX:IsControllerEnabled() and "Enabled" or "Disabled"
+    local controllerCfg = GPX:GetControllerConfig()
+    local mouseLookMode = "Move"
+    if controllerCfg.mouseLookMode == "platformer" then
+        mouseLookMode = "On"
+    elseif controllerCfg.mouseLookMode == "off" then
+        mouseLookMode = "Off"
+    end
+    local bagsCfg = GPX.db and GPX.db.ui and GPX.db.ui.actionButtons
+    local wowxBags = (bagsCfg and bagsCfg.enabled ~= false and bagsCfg.showBags ~= false) and "On" or "Off"
     local lastError = GPX.db and GPX.db.lastError and GPX.db.lastError ~= "" and GPX.db.lastError or "None"
 
     return string.format(
-        "Mode: %s\nProfile: %s\nInput Style: %s\nController Mode: %s\nVisual Bar: %s\nLayout Edit: %s\nButton Edit: %s\nMinimap Button: %s\nLast Error: %s",
+        "Mode: %s\nProfile: %s\nInput Style: %s\nController Mode: %s\nMouselook Mode: %s\nVisual Bar: %s\nWoWX Bags: %s\nLayout Edit: %s\nButton Edit: %s\nMinimap Button: %s\nLast Error: %s",
         mode,
         profileName,
         inputStyle,
         controllerMode,
+        mouseLookMode,
         visualBar,
+        wowxBags,
         layoutLockState,
         buttonLockState,
         minimap,
@@ -763,14 +980,19 @@ function UI:Refresh()
     if self.frame.buttons and self.frame.buttons.buttonEdit and GPX.db and GPX.db.ui and GPX.db.ui.visualBar then
         self.frame.buttons.buttonEdit:SetText((GPX.db.ui.visualBar.buttonLocked ~= false) and "Button Edit: Off" or "Button Edit: On")
     end
+    if self.frame.buttons and self.frame.buttons.toggleBags and GPX.db and GPX.db.ui and GPX.db.ui.actionButtons then
+        local cfg = GPX.db.ui.actionButtons
+        self.frame.buttons.toggleBags:SetText((cfg.enabled ~= false and cfg.showBags ~= false) and "WoWX Bags: On" or "WoWX Bags: Off")
+    end
     if not self.captureField and self.frame.inputHint then
         if GPX:IsControllerEnabled() then
-            self.frame.inputHint:SetText("Click a mapping button, then press the key sent by your AntiMicroX controller mapping.")
+            self.frame.inputHint:SetText("Controller mode: capture keys to sync displayed labels and optional overrides.")
         else
-            self.frame.inputHint:SetText("Keyboard mode: map Action 1-12 to WoWX bar slots (session override binds).")
+            self.frame.inputHint:SetText("Action 1-12 and Mod 1-3 keys shown below. Caution: changing these also updates your main action bar bindings in-game.")
         end
     end
     self:RefreshUtilityButtons()
+    self:RefreshProfilePanel()
     self:RefreshMappingButtons()
 end
 
