@@ -2869,6 +2869,7 @@ function GPX:ApplyBindings(silent)
     self.appliedBindings = {}
 
     local setup = profile and profile.setup or nil
+    local effectiveModifiers = self:GetEffectiveModifierKeys(setup)
     local ok, fail = 0, 0
     local useModifierPages = self.db and self.db.ui and self.db.ui.visualBar and self.db.ui.visualBar.modifierPages == true
     local numberRowKeys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
@@ -3137,7 +3138,7 @@ function GPX:ApplyBindings(silent)
             return
         end
 
-        local modifiers = effectiveModifiers
+        local modifiers = effectiveModifiers or { "SHIFT", "ALT", "CTRL" }
         local function commandForCell(state)
             if GPX.ClickTransport and GPX.ClickTransport.CommandForCell then
                 return GPX.ClickTransport:CommandForCell(state, slotIndex, useModifierPages)
