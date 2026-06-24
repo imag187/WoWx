@@ -99,7 +99,7 @@ function CT:ConditionalMacroForCommand(command)
         local _, classFile = UnitClass("player")
         local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
 
-        if classFile == "ROGUE" then
+        if GPX and GPX.IsCoAStealthPageClass and GPX:IsCoAStealthPageClass("player") then
             return "/click [stealth] BonusActionButton" .. actionIndex .. "; ActionButton" .. actionIndex
         end
 

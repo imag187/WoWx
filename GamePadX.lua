@@ -147,6 +147,32 @@ GPX.inputStyles = {
     },
 }
 
+local COA_CUSTOM_CLASS_FALLBACKS = {
+    BARBARIAN = "WARRIOR",
+    WITCHDOCTOR = "SHAMAN",
+    DEMONHUNTER = "ROGUE",
+    WITCHHUNTER = "HUNTER",
+    STORMBRINGER = "SHAMAN",
+    FLESHWARDEN = "DEATHKNIGHT",
+    GUARDIAN = "WARRIOR",
+    MONK = "ROGUE",
+    SONOFARUGAL = "DRUID",
+    RANGER = "HUNTER",
+    CHRONOMANCER = "MAGE",
+    NECROMANCER = "WARLOCK",
+    PYROMANCER = "MAGE",
+    CULTIST = "WARLOCK",
+    STARCALLER = "DRUID",
+    SUNCLERIC = "PRIEST",
+    TINKER = "HUNTER",
+    PROPHET = "PRIEST",
+    REAPER = "WARLOCK",
+    TEMPLAR = "PALADIN",
+    WILDWALKER = "DRUID",
+    SPIRITMAGE = "SHAMAN",
+    RUNEMASTER = "MAGE",
+}
+
 -- ============================================================
 -- DEFAULT CONFIGURATION
 -- The bindings table uses WoW's own binding-command strings.
@@ -1117,6 +1143,36 @@ function GPX:IsCoARealm()
     return false
 end
 
+function GPX:GetResolvedClassToken(unit)
+    local localizedClass, englishClass = UnitClass(unit or "player")
+
+    local localizedToken = string.upper(tostring(localizedClass or ""))
+    local englishToken = string.upper(tostring(englishClass or ""))
+
+    if self:IsCoARealm() then
+        if localizedToken ~= "" and COA_CUSTOM_CLASS_FALLBACKS[localizedToken] then
+            return localizedToken
+        end
+        if englishToken ~= "" and COA_CUSTOM_CLASS_FALLBACKS[englishToken] then
+            return englishToken
+        end
+    end
+
+    if englishToken ~= "" then
+        return englishToken
+    end
+    return localizedToken
+end
+
+function GPX:IsCoAStealthPageClass(unit)
+    if not self:IsCoARealm() then
+        return false
+    end
+
+    local classToken = self:GetResolvedClassToken(unit)
+    return classToken == "REAPER"
+end
+
 function GPX:GetControllerConfig()
     self.db.ui = self.db.ui or {}
     self.db.ui.controller = self.db.ui.controller or {}
@@ -1910,6 +1966,7 @@ function GPX:CollectStanceDiagnosticsLines()
     end
 
     local className, classFile = UnitClass("player")
+    local resolvedClassToken = self.GetResolvedClassToken and self:GetResolvedClassToken("player") or tostring(classFile or "")
     local realmName = GetRealmName and GetRealmName() or "unknown"
     local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
     local actionPage = GetActionBarPage and (tonumber(GetActionBarPage()) or 1) or 1
@@ -1920,6 +1977,7 @@ function GPX:CollectStanceDiagnosticsLines()
     add("StanceDiag:")
     add("  Realm: " .. tostring(realmName) .. " coaMode=" .. tostring(isCoA))
     add("  PlayerClass: " .. tostring(className or "") .. " (" .. tostring(classFile or "") .. ")")
+    add("  ResolvedClassToken: " .. tostring(resolvedClassToken or ""))
     add("  BarState: bonusOffset=" .. tostring(bonusOffset)
         .. " actionPage=" .. tostring(actionPage)
         .. " hasBonus=" .. tostring(hasBonus)

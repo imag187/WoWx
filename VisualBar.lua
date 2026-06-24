@@ -2954,7 +2954,7 @@ local function getCurrentMainActionPage()
     local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
     local stealthed = IsStealthed and IsStealthed() or false
 
-    if classFile == "ROGUE" and isCoA then
+    if GPX and GPX.IsCoAStealthPageClass and GPX:IsCoAStealthPageClass("player") then
         return stealthed and 7 or 1
     end
 
@@ -3001,7 +3001,7 @@ function Bar:ResolveCommand(command)
         local page = getCurrentMainActionPage()
         local slot = ((page - 1) * 12) + mainIndex
 
-        if classFile == "ROGUE" and isCoA then
+        if GPX and GPX.IsCoAStealthPageClass and GPX:IsCoAStealthPageClass("player") then
             if stealthed then
                 local bonusButton = _G["BonusActionButton" .. mainIndex]
                 local bonusAction = bonusButton and tonumber(bonusButton.action)
