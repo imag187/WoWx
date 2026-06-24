@@ -2952,11 +2952,16 @@ end
 local function getCurrentMainActionPage()
     local _, classFile = UnitClass("player")
     local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
+    local stealthed = IsStealthed and IsStealthed() or false
+
+    if classFile == "ROGUE" and isCoA then
+        return stealthed and 7 or 1
+    end
+
     if GetBonusBarOffset then
         local bonusOffset = tonumber(GetBonusBarOffset()) or 0
         if bonusOffset > 0 then
             if classFile == "DRUID" and not isCoA then
-                local stealthed = IsStealthed and IsStealthed() or false
                 if bonusOffset == 1 then
                     return stealthed and 8 or 7
                 elseif bonusOffset == 2 then
@@ -2991,9 +2996,29 @@ function Bar:ResolveCommand(command)
         local liveAction = liveButton and liveButton.action or nil
         local _, classFile = UnitClass("player")
         local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
+        local stealthed = IsStealthed and IsStealthed() or false
         local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
         local page = getCurrentMainActionPage()
         local slot = ((page - 1) * 12) + mainIndex
+
+        if classFile == "ROGUE" and isCoA then
+            if stealthed then
+                local bonusButton = _G["BonusActionButton" .. mainIndex]
+                local bonusAction = bonusButton and tonumber(bonusButton.action)
+                if bonusAction and bonusAction > 0 then
+                    return bonusAction
+                end
+                return slot
+            end
+
+            if liveAction and liveAction ~= mainIndex then
+                return liveAction
+            end
+            if HasAction and HasAction(mainIndex) then
+                return mainIndex
+            end
+            return mainIndex
+        end
 
         -- On CoA realms, hasOverride can remain noisy while bonusOffset is the
         -- reliable signal for Runeshroud page routing. Treat bonusOffset as
