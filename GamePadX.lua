@@ -952,6 +952,57 @@ function GPX:BuildModifiedKey(modifiers, key)
     return table.concat(modifiers, "-") .. "-" .. key
 end
 
+local function normalizeModifierToken(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    local token = string.upper(value):gsub("%s+", "")
+    if token == "" then
+        return nil
+    end
+
+    if string.find(token, "SHIFT", 1, true) then
+        return "SHIFT"
+    end
+    if string.find(token, "CTRL", 1, true) or string.find(token, "CONTROL", 1, true) then
+        return "CTRL"
+    end
+    if string.find(token, "ALT", 1, true) or string.find(token, "MENU", 1, true) then
+        return "ALT"
+    end
+
+    return nil
+end
+
+function GPX:GetEffectiveModifierKeys(setup)
+    local defaults = { "SHIFT", "ALT", "CTRL" }
+    local resolved = {}
+    local used = {}
+
+    for index = 1, 3 do
+        local raw = setup and setup.modifiers and setup.modifiers[index] or nil
+        local normalized = normalizeModifierToken(raw)
+        if not normalized or used[normalized] then
+            normalized = defaults[index]
+        end
+
+        if used[normalized] then
+            for _, fallback in ipairs(defaults) do
+                if not used[fallback] then
+                    normalized = fallback
+                    break
+                end
+            end
+        end
+
+        resolved[index] = normalized
+        used[normalized] = true
+    end
+
+    return resolved
+end
+
 function GPX:BuildBindingsFromSetup(setup)
     local bindings = {}
     if not setup then
@@ -965,7 +1016,7 @@ function GPX:BuildBindingsFromSetup(setup)
     local fallbackKeys = controllerEnabled and self:GetControllerFallbackActionKeys(lastActionSlot) or nil
     local resolvedActionKeys = {}
     local usedActionKeys = {}
-    local modifiers = { "SHIFT", "ALT", "CTRL" }
+    local modifiers = self:GetEffectiveModifierKeys(setup)
     local modifierPages = {
         { modifiers = { modifiers[1] }, bar = "MULTIACTIONBAR2BUTTON" },
         { modifiers = { modifiers[2] }, bar = "MULTIACTIONBAR1BUTTON" },
@@ -1606,6 +1657,14 @@ function GPX:CollectDiagnosticsLines()
             .. " claimModifiers=" .. tostring(ecfg.claimModifiers)
             .. " claimCombo=" .. tostring(ecfg.claimCombo))
     end
+    do
+        local profile = self.GetProfile and self:GetProfile() or nil
+        local setup = profile and profile.setup or nil
+        local rawMods = setup and setup.modifiers or nil
+        local effectiveMods = self:GetEffectiveModifierKeys(setup)
+        add("  Modifiers: setup=" .. tostring(rawMods and table.concat(rawMods, ",") or "")
+            .. " effective=" .. tostring(table.concat(effectiveMods, ",")))
+    end
     if self.GetSpecSwapConfig then
         local scfg = self:GetSpecSwapConfig()
         add("  SpecSwap: mode=" .. tostring(scfg.mode)
@@ -1686,6 +1745,7 @@ function GPX:CollectDiagnosticsLines()
     add("  Keybind CTRL-1: " .. tostring(GetBindingAction("CTRL-1") or ""))
     local profile = self:GetProfile()
     local setup = profile and profile.setup or nil
+    local effectiveModifiers = self:GetEffectiveModifierKeys(setup)
     local slot4Key = setup and setup.actionKeys and setup.actionKeys[3] or "4"
     add("  Slot4 keybind: " .. tostring(slot4Key) .. "=" .. tostring(GetBindingAction(slot4Key) or ""))
     add("  Slot4 shift bind: SHIFT-" .. tostring(slot4Key) .. "=" .. tostring(GetBindingAction("SHIFT-" .. slot4Key) or ""))
@@ -3077,7 +3137,7 @@ function GPX:ApplyBindings(silent)
             return
         end
 
-        local modifiers = { "SHIFT", "ALT", "CTRL" }
+        local modifiers = effectiveModifiers
         local function commandForCell(state)
             if GPX.ClickTransport and GPX.ClickTransport.CommandForCell then
                 return GPX.ClickTransport:CommandForCell(state, slotIndex, useModifierPages)
@@ -3183,9 +3243,9 @@ function GPX:ApplyBindings(silent)
         if controllerEnabled and setup and setup.jumpKey and setup.jumpKey ~= "" then
             applyDirectBinding(setup.jumpKey, "JUMP")
 
-            local mod1 = setup.modifiers and setup.modifiers[1] or "SHIFT"
-            local mod2 = setup.modifiers and setup.modifiers[2] or "ALT"
-            local mod3 = setup.modifiers and setup.modifiers[3] or "CTRL"
+            local mod1 = effectiveModifiers[1] or "SHIFT"
+            local mod2 = effectiveModifiers[2] or "ALT"
+            local mod3 = effectiveModifiers[3] or "CTRL"
             if mod1 and mod1 ~= "" then
                 applyDirectBinding(self:BuildModifiedKey({ mod1 }, setup.jumpKey), "TOGGLEWORLDMAP")
             end
