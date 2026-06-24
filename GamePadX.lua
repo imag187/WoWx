@@ -268,6 +268,7 @@ GPX.defaults = {
             autoMouseLookOnMove = true,
             centerCursorOnMove = true,
             mouseLookDelayMs = 0,
+            platformerCursorEscapeMs = 3000,
             mouseLookMode = "move", -- off | move | platformer
         },
         bindingEngine = {
@@ -1190,6 +1191,10 @@ function GPX:GetControllerConfig()
     if tonumber(cfg.mouseLookDelayMs) == nil then
         cfg.mouseLookDelayMs = 0
     end
+    if tonumber(cfg.platformerCursorEscapeMs) == nil then
+        cfg.platformerCursorEscapeMs = 3000
+    end
+    cfg.platformerCursorEscapeMs = math.max(0, tonumber(cfg.platformerCursorEscapeMs) or 3000)
     if cfg.mouseLookMode ~= "platformer" and cfg.mouseLookMode ~= "off" then
         cfg.mouseLookMode = "move"
     end
@@ -1258,6 +1263,7 @@ end
 
 function GPX:SetControllerMouseLookMode(mode)
     local cfg = self:GetControllerConfig()
+    self.controllerMouseLookSuppressedUntil = nil
     if mode == "off" then
         cfg.mouseLookMode = "off"
         cfg.autoMouseLookOnMove = false
@@ -1306,8 +1312,24 @@ function GPX:IsMouseLookActuallyActive()
     return self.controllerMouseLookActive == true
 end
 
+function GPX:BeginControllerCursorEscapeWindow(reason)
+    local cfg = self:GetControllerConfig()
+    local escapeSeconds = math.max(0, tonumber(cfg.platformerCursorEscapeMs) or 3000) / 1000
+    if escapeSeconds <= 0 then
+        self.controllerMouseLookSuppressedUntil = nil
+        return
+    end
+
+    self.controllerMouseLookSuppressedUntil = GetTime() + escapeSeconds
+    self.controllerMouseLookSuppressedReason = reason
+end
+
 function GPX:SyncControllerMouseLookFlag()
     if self.controllerMouseLookActive and not self:IsMouseLookActuallyActive() then
+        local cfg = self:GetControllerConfig()
+        if cfg.mouseLookMode == "platformer" and self:ShouldUseControllerMouseLook() then
+            self:BeginControllerCursorEscapeWindow("manual-release")
+        end
         self.controllerMouseLookActive = nil
     end
 end
@@ -1416,7 +1438,15 @@ do
         if mode == "platformer" then
             if GPX:ShouldUseControllerMouseLook() then
                 GPX:SyncControllerMouseLookFlag()
-                if not GPX.controllerMouseLookActive and not GPX.controllerMovePending then
+                local suppressedUntil = tonumber(GPX.controllerMouseLookSuppressedUntil) or 0
+                local suppressActive = suppressedUntil > GetTime()
+
+                if suppressActive and isMoving then
+                    GPX.controllerMouseLookSuppressedUntil = nil
+                    suppressActive = false
+                end
+
+                if not suppressActive and not GPX.controllerMouseLookActive and not GPX.controllerMovePending then
                     GPX:StartControllerMouseLook()
                 end
             else
