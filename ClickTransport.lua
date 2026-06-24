@@ -96,13 +96,18 @@ function CT:ConditionalMacroForCommand(command)
     if not command then return nil end
     local actionIndex = tonumber(command:match("^ACTIONBUTTON(%d+)$"))
     if actionIndex then
+        local _, classFile = UnitClass("player")
+        local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
+
+        if classFile == "ROGUE" then
+            return "/click [stealth] BonusActionButton" .. actionIndex .. "; ActionButton" .. actionIndex
+        end
+
         local macro = "/click [bonusbar:5] BonusActionButton" .. actionIndex
             .. "; [bonusbar:4] BonusActionButton" .. actionIndex
             .. "; [bonusbar:3] BonusActionButton" .. actionIndex
             .. "; [bonusbar:2] BonusActionButton" .. actionIndex
             .. "; [bonusbar:1] BonusActionButton" .. actionIndex
-        local _, classFile = UnitClass("player")
-        local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
         if classFile == "DRUID" and not isCoA then
             -- Non-CoA fallback: some realms expose bonus offset reliably but do not
             -- always honor [bonusbar] at cast time during form swaps.
