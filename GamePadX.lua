@@ -1296,7 +1296,24 @@ function GPX:CenterControllerCursor()
     return false
 end
 
+function GPX:IsMouseLookActuallyActive()
+    if IsMouselooking then
+        local ok, active = pcall(IsMouselooking)
+        if ok then
+            return active and true or false
+        end
+    end
+    return self.controllerMouseLookActive == true
+end
+
+function GPX:SyncControllerMouseLookFlag()
+    if self.controllerMouseLookActive and not self:IsMouseLookActuallyActive() then
+        self.controllerMouseLookActive = nil
+    end
+end
+
 function GPX:StartControllerMouseLook()
+    self:SyncControllerMouseLookFlag()
     if self.controllerMouseLookActive or not self:ShouldUseControllerMouseLook() then
         return
     end
@@ -1316,7 +1333,9 @@ function GPX:StartControllerMouseLook()
 end
 
 function GPX:StopControllerMouseLook()
-    if not self.controllerMouseLookActive then
+    local active = self.controllerMouseLookActive or self:IsMouseLookActuallyActive()
+    if not active then
+        self.controllerMouseLookActive = nil
         return
     end
 
@@ -1334,6 +1353,8 @@ function GPX:SetControllerMovementState(isMoving)
         if not self:ShouldUseControllerMouseLook() then
             return
         end
+
+        self:SyncControllerMouseLookFlag()
 
         if self.controllerMouseLookActive then
             return
@@ -1394,6 +1415,7 @@ do
 
         if mode == "platformer" then
             if GPX:ShouldUseControllerMouseLook() then
+                GPX:SyncControllerMouseLookFlag()
                 if not GPX.controllerMouseLookActive and not GPX.controllerMovePending then
                     GPX:StartControllerMouseLook()
                 end
@@ -1403,6 +1425,8 @@ do
             wasMoving = isMoving
             return
         end
+
+        GPX:SyncControllerMouseLookFlag()
 
         if isMoving ~= wasMoving then
             wasMoving = isMoving
