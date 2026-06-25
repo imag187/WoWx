@@ -80,9 +80,24 @@ local function ensureGridbookDB()
     end
 
     GPX.db.ui = GPX.db.ui or {}
-    GPX.db.ui.gridbook = GPX.db.ui.gridbook or {}
+    GPX.db.ui.gridbookByMachine = GPX.db.ui.gridbookByMachine or {}
 
-    local db = GPX.db.ui.gridbook
+    local machineKey = "__default"
+    if GPX.GetMachineStateKey then
+        machineKey = GPX:GetMachineStateKey()
+    end
+
+    local db = GPX.db.ui.gridbookByMachine[machineKey]
+    if not db then
+        db = {}
+        -- One-time migration path: preserve existing shared gridbook content into this machine bucket.
+        if type(GPX.db.ui.gridbook) == "table" then
+            db = GPX:DeepCopy(GPX.db.ui.gridbook)
+        end
+        GPX.db.ui.gridbookByMachine[machineKey] = db
+    end
+
+    GPX.db.ui.gridbook = db
     db.version = tonumber(db.version) or 1
     db.pages = db.pages or {}
     db.autoSync = db.autoSync ~= false
@@ -96,6 +111,12 @@ local function ensureGridbookDB()
     end
 
     return db
+end
+
+local function persistMachineState(reason)
+    if GPX and GPX.SaveMachineScopedState then
+        GPX:SaveMachineScopedState(reason or "gridbook", true)
+    end
 end
 
 local function normalizeSpellFamilyKey(name)
@@ -879,6 +900,7 @@ function UI:SaveGridbookEntryForTarget(targetSlot)
     local command = self:GetGridCommandFor(selectedState, selectedIndex)
     local entry = buildEntryFromActionSlot(slot, command)
     db.pages[pageKey][selectedIndex] = entry
+    persistMachineState("gridbook-save-target")
 end
 
 function UI:CaptureGridbookEntryForActionSlot(actionSlot)
@@ -902,6 +924,7 @@ function UI:CaptureGridbookEntryForActionSlot(actionSlot)
                 local mappedSlot = self:GetGridSlotForCommand(command)
                 if mappedSlot == slot then
                     db.pages[pageKey][slotIndex] = buildEntryFromActionSlot(slot, command)
+                    persistMachineState("gridbook-capture-slot")
                     return true
                 end
             end
@@ -941,6 +964,9 @@ function UI:CaptureGridbookFromActionSlots()
         end
     end
 
+    if changedAny then
+        persistMachineState("gridbook-capture-all")
+    end
     return changedAny
 end
 
@@ -1213,6 +1239,7 @@ function UI:SetSpellRankViewMode(mode)
     if db.spellRankView ~= mode then
         db.spellRankView = mode
         self.currentSpellPage = 1
+        persistMachineState("gridbook-rank-mode")
     end
 end
 

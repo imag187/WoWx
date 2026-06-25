@@ -487,6 +487,7 @@ function GPX:InitDB()
     end
 
     self.db = db
+    self:ApplyMachineScopedState(true)
 end
 
 function GPX:DeepCopy(orig)
@@ -496,6 +497,136 @@ function GPX:DeepCopy(orig)
         copy[self:DeepCopy(k)] = self:DeepCopy(v)
     end
     return setmetatable(copy, getmetatable(orig))
+end
+
+function GPX:GetMachineStateKey()
+    if not self.db then
+        return "__default"
+    end
+
+    local note = tostring(self.db.machineNote or "")
+    note = note:gsub("^%s+", "")
+    note = note:gsub("%s+$", "")
+    if note == "" then
+        return "__default"
+    end
+    return note
+end
+
+function GPX:GetMachineStateStore()
+    if not self.db then
+        return nil
+    end
+    self.db.machineState = self.db.machineState or {}
+    return self.db.machineState
+end
+
+function GPX:CaptureMachineScopedState()
+    if not self.db then
+        return nil
+    end
+
+    local profile = self:GetProfile()
+    local engine = self:GetBindingEngineConfig()
+    local setupCopy = nil
+    if profile and profile.setup then
+        setupCopy = self:DeepCopy(profile.setup)
+    end
+
+    local visualButtonCount = nil
+    if self.db.ui and self.db.ui.visualBar and self.db.ui.visualBar.layout and self.db.ui.visualBar.layout.main then
+        visualButtonCount = tonumber(self.db.ui.visualBar.layout.main.buttonCount)
+    end
+
+    local gridbookCopy = nil
+    if self.db.ui and self.db.ui.gridbook then
+        gridbookCopy = self:DeepCopy(self.db.ui.gridbook)
+    end
+
+    return {
+        profile = self.db.profile,
+        controllerEnabled = self:IsControllerEnabled(),
+        useSetupKeys = engine.useSetupKeys == true,
+        setup = setupCopy,
+        visualButtonCount = visualButtonCount,
+        gridbook = gridbookCopy,
+    }
+end
+
+function GPX:SaveMachineScopedState(reason, silent, keyOverride)
+    local store = self:GetMachineStateStore()
+    if not store then
+        return false
+    end
+
+    local key = keyOverride or self:GetMachineStateKey()
+    local state = self:CaptureMachineScopedState()
+    if not state then
+        return false
+    end
+
+    state.savedAt = date("%Y-%m-%d %H:%M:%S")
+    state.reason = reason or "runtime"
+    store[key] = state
+
+    if not silent then
+        self:Print("Machine state saved [" .. key .. "]")
+    end
+    return true
+end
+
+function GPX:ApplyMachineScopedState(silent)
+    local store = self:GetMachineStateStore()
+    if not store then
+        return false
+    end
+
+    local key = self:GetMachineStateKey()
+    local state = store[key]
+    if not state then
+        self:SaveMachineScopedState("seed", true, key)
+        return false
+    end
+
+    if state.profile and self.db.profiles and self.db.profiles[state.profile] then
+        self.db.profile = state.profile
+    end
+
+    local profile = self:GetProfile()
+    if profile and state.setup then
+        profile.setup = self:DeepCopy(state.setup)
+        profile.inputStyle = profile.setup.deviceId or profile.inputStyle or "keyboard"
+        profile.bindings = self:BuildBindingsFromSetup(profile.setup)
+    end
+
+    self.db.ui = self.db.ui or {}
+    self.db.ui.controller = self.db.ui.controller or {}
+    if state.controllerEnabled ~= nil then
+        self.db.ui.controller.enabled = state.controllerEnabled == true
+    end
+
+    local engine = self:GetBindingEngineConfig()
+    if state.useSetupKeys ~= nil then
+        engine.useSetupKeys = state.useSetupKeys == true
+    else
+        engine.useSetupKeys = self:IsControllerEnabled()
+    end
+
+    self.db.ui.visualBar = self.db.ui.visualBar or {}
+    self.db.ui.visualBar.layout = self.db.ui.visualBar.layout or {}
+    self.db.ui.visualBar.layout.main = self.db.ui.visualBar.layout.main or {}
+    if state.visualButtonCount and state.visualButtonCount > 0 then
+        self.db.ui.visualBar.layout.main.buttonCount = math.floor(state.visualButtonCount + 0.5)
+    end
+
+    if state.gridbook then
+        self.db.ui.gridbook = self:DeepCopy(state.gridbook)
+    end
+
+    if not silent then
+        self:Print("Machine state applied [" .. key .. "]")
+    end
+    return true
 end
 
 function GPX:GetActiveTalentGroupSafe()
@@ -1215,6 +1346,50 @@ function GPX:SetControllerEnabled(enabled)
     if self.MinimapButton and self.MinimapButton.Refresh then
         self.MinimapButton:Refresh()
     end
+
+    self:SaveMachineScopedState("controller-toggle", true)
+end
+
+function GPX:NormalizeBindingModeConsistency()
+    if not self.db then
+        return false
+    end
+
+    local changed = false
+    local engine = self:GetBindingEngineConfig()
+    local controllerEnabled = self:IsControllerEnabled()
+    local desiredSetupKeys = controllerEnabled
+
+    if engine.useSetupKeys ~= desiredSetupKeys then
+        engine.useSetupKeys = desiredSetupKeys
+        changed = true
+    end
+
+    local profile = self:GetProfile()
+    local setup = profile and profile.setup or nil
+    if setup then
+        if controllerEnabled then
+            if tonumber(setup.actionKeyBaseSlot) ~= 1 then
+                setup.actionKeyBaseSlot = 1
+                changed = true
+            end
+            if (tonumber(setup.actionButtonCount) or 0) < 9 then
+                setup.actionButtonCount = 9
+                changed = true
+            end
+        else
+            if tonumber(setup.actionKeyBaseSlot) ~= 2 then
+                setup.actionKeyBaseSlot = 2
+                changed = true
+            end
+            if tonumber(setup.actionButtonCount) ~= 12 then
+                setup.actionButtonCount = 12
+                changed = true
+            end
+        end
+    end
+
+    return changed
 end
 
 function GPX:ShouldUseControllerMouseLook()
@@ -1492,6 +1667,8 @@ function GPX:ApplySetup(setup)
     if self.SettingsUI then
         self.SettingsUI:Refresh()
     end
+
+    self:SaveMachineScopedState("apply-setup", true)
 end
 
 function GPX:OpenSetupWizard(mode)
@@ -1624,6 +1801,8 @@ function GPX:ApplySetupFromProfile(profile, opts)
     if self.SettingsUI then
         self.SettingsUI:Refresh()
     end
+
+    self:SaveMachineScopedState("apply-setup-profile", true)
     return true
 end
 
@@ -1651,6 +1830,7 @@ function GPX:EnsureControllerVisibleButtonCount(profile)
     local current = tonumber(self.db.ui.visualBar.layout.main.buttonCount) or 0
     if current < desired then
         self.db.ui.visualBar.layout.main.buttonCount = desired
+        self:SaveMachineScopedState("controller-visible-buttons", true)
     end
 end
 
@@ -3924,7 +4104,14 @@ function GPX:Slash(msg)
 
     elseif cmd == "note" then
         -- /wowx note Gaming PC
+        local oldKey = self:GetMachineStateKey()
+        self:SaveMachineScopedState("machine-note-switch", true, oldKey)
         self.db.machineNote = rest
+        self:ApplyMachineScopedState(true)
+        if self.db and self.db.enabled then
+            self:ClearBindings(true)
+            self:ApplyBindings(true)
+        end
         self:Print("Machine label: " .. rest)
 
     elseif cmd == "profile" then
@@ -4175,15 +4362,57 @@ function GPX:LogError(msg)
 end
 
 function GPX:GetConfiguredBindingCount()
-    local profile = self:GetProfile()
-    local bindings = profile and profile.bindings or nil
-    local count = 0
-    if bindings then
-        for _ in pairs(bindings) do
-            count = count + 1
+    if not self.db or not self.db.enabled then
+        return 0
+    end
+
+    local engine = self:GetBindingEngineConfig()
+    local controllerEnabled = self:IsControllerEnabled()
+    local useSetupKeys = engine.useSetupKeys and controllerEnabled
+    local modifierCount = 0
+    local comboCount = 0
+
+    if engine.claimModifiers then
+        modifierCount = 3
+        if engine.claimCombo then
+            comboCount = 2
         end
     end
-    return count
+
+    local perSlotCount = 1 + modifierCount + comboCount
+
+    if not useSetupKeys then
+        return 12 * perSlotCount
+    end
+
+    local profile = self:GetProfile()
+    local setup = profile and profile.setup or nil
+    local firstActionSlot = self:GetActionKeyBaseSlot(setup)
+    local lastActionSlot = self:GetConfiguredActionButtonCount(setup, profile)
+    if firstActionSlot < 1 then firstActionSlot = 1 end
+    if lastActionSlot > 12 then lastActionSlot = 12 end
+
+    local actionSlotCount = math.max(0, lastActionSlot - firstActionSlot + 1)
+    local total = actionSlotCount * perSlotCount
+
+    if controllerEnabled then
+        if setup and setup.jumpKey and setup.jumpKey ~= "" then
+            total = total + 1 + modifierCount + comboCount
+        elseif firstActionSlot > 1 then
+            total = total + perSlotCount
+        end
+
+        if engine.bindMenu and setup and setup.menuKey and setup.menuKey ~= "" then
+            total = total + 1
+        end
+        if setup and setup.lookKey and setup.lookKey ~= "" then
+            total = total + 1
+        end
+    elseif firstActionSlot > 1 and setup and setup.jumpKey and setup.jumpKey ~= "" then
+        total = total + perSlotCount
+    end
+
+    return total
 end
 
 -- ============================================================
@@ -4241,11 +4470,10 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
     elseif event == "PLAYER_LOGIN" then
         ensureInitialized()
         if GPX.db then
+            GPX:NormalizeBindingModeConsistency()
             GPX.db.specBarLayouts = GPX.db.specBarLayouts or {}
-            -- Always sync to live active group at login; stale persisted values can
-            -- otherwise store a snapshot under the wrong spec and cause bad restores.
+            -- Record active talent group only; avoid startup-time 72-slot snapshot work.
             GPX.db.lastTalentGroup = GPX:GetActiveTalentGroupSafe()
-            GPX:StoreCurrentSpecActionBars(GPX.db.lastTalentGroup)
             if GPX.db.enabled then
                 GPX.pendingStartupBindingApply = true
                 GPX:Print("WoWX spell grid configured for this character. Loading WoWX mode (" .. tostring(GPX:GetConfiguredBindingCount()) .. " bindings).")
@@ -4256,19 +4484,7 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
                 GPX:Print(GPX.brand .. " mode is OFF" .. label ..
                     ".  Type |cff88ccff/wowx enable|r to activate on this machine.")
             end
-            if GPX.VisualBar then
-                GPX.VisualBar:UpdateAll()
-            end
-            if GPX.ActionButtons then
-                GPX.ActionButtons:UpdateAll()
-            end
-            if GPX.SettingsUI then
-                GPX.SettingsUI:Refresh()
-            end
-            if GPX.MinimapButton then
-                GPX.MinimapButton:Refresh()
-            end
-            GPX:RunAutomaticDiagnosticCapture("player_login")
+            -- Defer UI module updates to entering-world/bind apply path to avoid duplicate startup passes.
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
         ensureInitialized()

@@ -1794,12 +1794,24 @@ function Bar:CreateLayoutEditor()
     frame.resetButton = resetButton
     frame.controls = {}
 
+    local function nudgeSlider(slider, direction)
+        if not slider or not slider.control then
+            return
+        end
+        local control = slider.control
+        local minValue, maxValue = slider:GetMinMaxValues()
+        local currentValue = slider:GetValue()
+        local step = control.step or 1
+        local nudged = clamp(roundToStep(currentValue + (step * direction), step), minValue, maxValue)
+        slider:SetValue(nudged)
+    end
+
     for index = 1, 7 do
         local slider = CreateFrame("Slider", nil, frame)
         slider:SetOrientation("HORIZONTAL")
-        slider:SetWidth(240)
+        slider:SetWidth(212)
         slider:SetHeight(18)
-        slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 26, -72 - ((index - 1) * 36))
+        slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 42, -72 - ((index - 1) * 36))
         slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
         slider:SetBackdrop({
             bgFile = "Interface\\TargetingFrame\\UI-StatusBar",
@@ -1821,10 +1833,34 @@ function Bar:CreateLayoutEditor()
         valueText:SetTextColor(1.0, 0.92, 0.58)
         valueText._wowxDisableFrameDrag = true
 
+        local decButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        decButton:SetWidth(18)
+        decButton:SetHeight(18)
+        decButton:SetPoint("LEFT", slider, "LEFT", -24, 0)
+        decButton:SetText("<")
+        decButton._wowxDisableFrameDrag = true
+        decButton:Hide()
+
+        local incButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        incButton:SetWidth(18)
+        incButton:SetHeight(18)
+        incButton:SetPoint("RIGHT", slider, "RIGHT", 24, 0)
+        incButton:SetText(">")
+        incButton._wowxDisableFrameDrag = true
+        incButton:Hide()
+
         slider.label = label
         slider.valueText = valueText
+        slider.decButton = decButton
+        slider.incButton = incButton
         slider._wowxDisableFrameDrag = true
         slider:Hide()
+        decButton:SetScript("OnClick", function()
+            nudgeSlider(slider, -1)
+        end)
+        incButton:SetScript("OnClick", function()
+            nudgeSlider(slider, 1)
+        end)
         slider:SetScript("OnValueChanged", function(self, value)
             if self._suspend or not self.control then
                 return
@@ -2035,9 +2071,21 @@ function Bar:OpenLayoutEditor(kind, anchorFrame)
             slider.valueText:SetText((control.format and control.format(value)) or formatSliderValue(value, control.step))
             slider._suspend = false
             slider:Show()
+            if slider.decButton then
+                slider.decButton:Show()
+            end
+            if slider.incButton then
+                slider.incButton:Show()
+            end
         else
             slider.control = nil
             slider:Hide()
+            if slider.decButton then
+                slider.decButton:Hide()
+            end
+            if slider.incButton then
+                slider.incButton:Hide()
+            end
         end
     end
 
@@ -3587,10 +3635,10 @@ function Bar:CreateFrame()
         local shine = button:CreateTexture(nil, "OVERLAY")
         shine:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
         shine:SetBlendMode("ADD")
-        shine:SetPoint("CENTER", button, "CENTER", 0, 2)
-        shine:SetWidth(72)
-        shine:SetHeight(72)
-        shine:SetVertexColor(0.2, 1.0, 0.42, 0.85)
+        shine:SetPoint("CENTER", button.slotPanel, "CENTER", 0, 0)
+        shine:SetWidth(62)
+        shine:SetHeight(62)
+        shine:SetVertexColor(0.2, 1.0, 0.42, 0.72)
         shine:Hide()
 
         local cooldown = CreateFrame("Cooldown", nil, button, "CooldownFrameTemplate")
@@ -4033,8 +4081,8 @@ function Bar:UpdateButton(index, state)
                 end
             end
             if button.shine then
-                local shineWidth = math.max(((button.slotPanel and button.slotPanel.GetWidth and button.slotPanel:GetWidth()) or iconSize) + 18, 54)
-                local shineHeight = math.max(((button.slotPanel and button.slotPanel.GetHeight and button.slotPanel:GetHeight()) or iconSize) + 18, 54)
+                local shineWidth = math.max(((button.slotPanel and button.slotPanel.GetWidth and button.slotPanel:GetWidth()) or iconSize) + 10, 48)
+                local shineHeight = math.max(((button.slotPanel and button.slotPanel.GetHeight and button.slotPanel:GetHeight()) or iconSize) + 10, 48)
                 button.shine:SetWidth(shineWidth)
                 button.shine:SetHeight(shineHeight)
                 button.shine:ClearAllPoints()

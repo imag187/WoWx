@@ -295,11 +295,36 @@ function UI:CreateFrame()
         frame.profileButtons[spec.key] = button
     end
 
+    local tabHeights = {
+        general = 684,
+        controller = 620,
+        profiles = 520,
+    }
+
     setTab = function(tab)
         frame.activeTab = tab
         local showGeneral = tab == "general"
         local showProfiles = tab == "profiles"
         local showController = tab == "controller"
+
+        if showGeneral then
+            bindingPanel:ClearAllPoints()
+            bindingPanel:SetPoint("TOPLEFT", actionPanel, "BOTTOMLEFT", 0, -16)
+            profilePanel:ClearAllPoints()
+            profilePanel:SetPoint("TOPLEFT", utilityPanel, "BOTTOMLEFT", 0, -14)
+        elseif showController then
+            bindingPanel:ClearAllPoints()
+            bindingPanel:SetPoint("TOPLEFT", inputPanel, "BOTTOMLEFT", 0, -14)
+            profilePanel:ClearAllPoints()
+            profilePanel:SetPoint("TOPLEFT", utilityPanel, "BOTTOMLEFT", 0, -14)
+        elseif showProfiles then
+            profilePanel:ClearAllPoints()
+            profilePanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -76)
+            bindingPanel:ClearAllPoints()
+            bindingPanel:SetPoint("TOPLEFT", actionPanel, "BOTTOMLEFT", 0, -16)
+        end
+
+        frame:SetHeight(tabHeights[tab] or tabHeights.general)
         statusPanel:SetShown(showGeneral)
         actionPanel:SetShown(showGeneral)
         bindingPanel:SetShown(showController)
