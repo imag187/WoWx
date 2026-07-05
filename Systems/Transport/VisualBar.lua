@@ -2959,16 +2959,7 @@ local function buildControllerBadgeText(styleId, slotLabel, index)
         return tostring(index)
     end
 
-    local text = tostring(slotLabel or "")
-    if text == "D-Left" then return "DL" end
-    if text == "D-Up" then return "DU" end
-    if text == "D-Right" then return "DR" end
-    if text == "D-Down" then return "DD" end
-    if text == "Back" then return "BK" end
-    if text == "Start" then return "ST" end
-    if text == "Minus" then return "-" end
-    if text == "Plus" then return "+" end
-    return text
+    return tostring(slotLabel or "")
 end
 
 function Bar:GetCommandForButton(index, state)
