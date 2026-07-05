@@ -401,7 +401,7 @@ function UI:CreateFrame()
 
     local profilePanel = CreateFrame("Frame", nil, frame)
     profilePanel:SetWidth(510)
-    profilePanel:SetHeight(194)
+    profilePanel:SetHeight(250)
     profilePanel:SetPoint("TOPLEFT", utilityPanel, "BOTTOMLEFT", 0, -14)
     createBackdrop(profilePanel, 0.18, 0.3, 0.5, 0.8)
     profilePanel:SetBackdropColor(0.06, 0.08, 0.12, 0.92)
@@ -414,7 +414,7 @@ function UI:CreateFrame()
     profileHint:SetPoint("TOPLEFT", profileTitle, "BOTTOMLEFT", 0, -6)
     profileHint:SetWidth(480)
     profileHint:SetJustifyH("LEFT")
-    profileHint:SetText("These profiles save sizing and placement only. WoWX bindings stay per character.")
+    profileHint:SetText("Layout profiles save sizing/placement. Class profile selection is per character and can be managed below.")
 
     local profileNameLabel = profilePanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     profileNameLabel:SetPoint("TOPLEFT", profileHint, "BOTTOMLEFT", 0, -14)
@@ -432,16 +432,50 @@ function UI:CreateFrame()
     currentProfileText:SetWidth(480)
     currentProfileText:SetJustifyH("LEFT")
 
+    local profileClassText = profilePanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    profileClassText:SetPoint("TOPLEFT", currentProfileText, "BOTTOMLEFT", 0, -10)
+    profileClassText:SetWidth(480)
+    profileClassText:SetJustifyH("LEFT")
+
+    local profileClassPrev = CreateFrame("Button", nil, profilePanel, "UIPanelButtonTemplate")
+    profileClassPrev:SetWidth(64)
+    profileClassPrev:SetHeight(22)
+    profileClassPrev:SetPoint("TOPLEFT", profileClassText, "BOTTOMLEFT", 0, -6)
+    profileClassPrev:SetText("< Prev")
+
+    local profileClassNext = CreateFrame("Button", nil, profilePanel, "UIPanelButtonTemplate")
+    profileClassNext:SetWidth(64)
+    profileClassNext:SetHeight(22)
+    profileClassNext:SetPoint("LEFT", profileClassPrev, "RIGHT", 8, 0)
+    profileClassNext:SetText("Next >")
+
+    local profileClassUsePlayer = CreateFrame("Button", nil, profilePanel, "UIPanelButtonTemplate")
+    profileClassUsePlayer:SetWidth(96)
+    profileClassUsePlayer:SetHeight(22)
+    profileClassUsePlayer:SetPoint("LEFT", profileClassNext, "RIGHT", 8, 0)
+    profileClassUsePlayer:SetText("Use Player")
+
+    local profileClassOpenClasses = CreateFrame("Button", nil, profilePanel, "UIPanelButtonTemplate")
+    profileClassOpenClasses:SetWidth(120)
+    profileClassOpenClasses:SetHeight(22)
+    profileClassOpenClasses:SetPoint("LEFT", profileClassUsePlayer, "RIGHT", 8, 0)
+    profileClassOpenClasses:SetText("Open Classes")
+
     local profileButtons = {
-        { key = "saveProfile", label = "Save", x = 14, y = -130, width = 92 },
-        { key = "loadProfile", label = "Load", x = 114, y = -130, width = 92 },
-        { key = "newProfile", label = "New From Current", x = 214, y = -130, width = 132 },
-        { key = "deleteProfile", label = "Delete", x = 354, y = -130, width = 92 },
+        { key = "saveProfile", label = "Save", x = 14, y = -186, width = 92 },
+        { key = "loadProfile", label = "Load", x = 114, y = -186, width = 92 },
+        { key = "newProfile", label = "New From Current", x = 214, y = -186, width = 132 },
+        { key = "deleteProfile", label = "Delete", x = 354, y = -186, width = 92 },
     }
 
     frame.profilePanel = profilePanel
     frame.profileNameBox = profileNameBox
     frame.currentProfileText = currentProfileText
+    frame.profileClassText = profileClassText
+    frame.profileClassPrev = profileClassPrev
+    frame.profileClassNext = profileClassNext
+    frame.profileClassUsePlayer = profileClassUsePlayer
+    frame.profileClassOpenClasses = profileClassOpenClasses
     frame.profileButtons = {}
 
     local classesPanel = CreateFrame("Frame", nil, frame)
@@ -1014,6 +1048,40 @@ function UI:CreateFrame()
         frame.navOrder[#frame.navOrder + 1] = button
     end
 
+    if frame.profileClassPrev then
+        frame.profileClassPrev:SetScript("OnClick", function()
+            UI:CycleSelectedClassProfile(-1)
+            UI:RefreshProfilePanel()
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.profileClassPrev
+    end
+
+    if frame.profileClassNext then
+        frame.profileClassNext:SetScript("OnClick", function()
+            UI:CycleSelectedClassProfile(1)
+            UI:RefreshProfilePanel()
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.profileClassNext
+    end
+
+    if frame.profileClassUsePlayer then
+        frame.profileClassUsePlayer:SetScript("OnClick", function()
+            UI:SyncSelectedClassProfileToPlayer(true)
+            UI:RefreshProfilePanel()
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.profileClassUsePlayer
+    end
+
+    if frame.profileClassOpenClasses then
+        frame.profileClassOpenClasses:SetScript("OnClick", function()
+            if setTab then
+                setTab("classes")
+            end
+            UI:Refresh()
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.profileClassOpenClasses
+    end
+
     if frame.profileButtons then
         if frame.profileButtons.saveProfile then
             frame.profileButtons.saveProfile:SetScript("OnClick", function()
@@ -1454,6 +1522,30 @@ function UI:RefreshProfilePanel()
         if self.frame.profileButtons.deleteProfile then
             self.frame.profileButtons.deleteProfile:SetEnabled(hasName and self.frame.profileNameBox:GetText() ~= "default")
         end
+    end
+
+    local classToken = GPX:GetResolvedClassToken("player") or "UNKNOWN"
+    local profileId = self:GetSelectedClassProfileId()
+    local classProfile = self:GetSelectedClassProfile()
+    if self.frame.profileClassText then
+        local displayName = classProfile and (classProfile.displayName or profileId) or (profileId or "none")
+        self.frame.profileClassText:SetText(
+            "Class Profile: " .. tostring(displayName)
+            .. " (ID: " .. tostring(profileId or "none") .. ")"
+            .. "   Player Class: " .. tostring(classToken)
+        )
+    end
+
+    local order = self:GetClassProfileOrder()
+    local hasProfiles = #order > 0
+    if self.frame.profileClassPrev then
+        self.frame.profileClassPrev:SetEnabled(hasProfiles and #order > 1)
+    end
+    if self.frame.profileClassNext then
+        self.frame.profileClassNext:SetEnabled(hasProfiles and #order > 1)
+    end
+    if self.frame.profileClassUsePlayer then
+        self.frame.profileClassUsePlayer:SetEnabled(classToken ~= "")
     end
 end
 
