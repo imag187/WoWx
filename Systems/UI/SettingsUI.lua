@@ -47,6 +47,93 @@ local function getActionSlotForField(field)
     return tonumber((field or ""):match("^action(%d+)$") or "")
 end
 
+local function trimText(value)
+    local text = tostring(value or "")
+    return (text:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function toNumberOrNil(value)
+    local text = trimText(value)
+    if text == "" then
+        return nil
+    end
+    return tonumber(text)
+end
+
+local function getAuraStackByID(unit, auraID, filter)
+    local id = tonumber(auraID)
+    if not UnitAura or not id then
+        return 0, nil
+    end
+
+    local unitToken = unit or "player"
+    local function scan(oneFilter)
+        for index = 1, 40 do
+            local name, _, icon, count, _, _, _, _, _, _, spellID = UnitAura(unitToken, index, oneFilter)
+            if not name then
+                break
+            end
+            if tonumber(spellID) == id then
+                local stacks = tonumber(count) or 0
+                if stacks < 1 then
+                    stacks = 1
+                end
+                return stacks, icon
+            end
+        end
+        return 0, nil
+    end
+
+    local auraFilter = trimText(filter):upper()
+    if auraFilter == "HARMFUL_OR_HELPFUL" then
+        local helpfulCount, helpfulIcon = scan("HELPFUL")
+        local harmfulCount, harmfulIcon = scan("HARMFUL")
+        if harmfulCount > helpfulCount then
+            return harmfulCount, harmfulIcon
+        end
+        return helpfulCount, helpfulIcon
+    end
+
+    local mode = auraFilter == "HARMFUL" and "HARMFUL" or "HELPFUL"
+    return scan(mode)
+end
+
+local systemSpecs = {
+    { id = "core", label = "Core Runtime", hint = "Required for all WoWX behavior.", locked = true },
+    { id = "ui", label = "Control Center UI", hint = "Settings and navigation surfaces.", locked = true },
+    { id = "transport", label = "Action Transport", hint = "Click/proxy action execution layer.", locked = true },
+    { id = "gamepad", label = "Gamepad Input", hint = "Controller mappings and mouselook tools." },
+    { id = "keyboard", label = "Keyboard Input", hint = "Keyboard-focused mapping surfaces." },
+    { id = "bags", label = "Bags System", hint = "WoWX bag action button and bag window." },
+    { id = "spellgrid", label = "Spell Grid", hint = "Gridbook and spell-ring assignment surfaces." },
+    { id = "cues", label = "Combat Cues", hint = "Dispel prompts and unit frame cue overlays." },
+    { id = "unitframes", label = "Unit Frames", hint = "WoWX-owned unit frame system foundation." },
+}
+
+function UI:GetSystemSpecs()
+    return systemSpecs
+end
+
+function UI:ApplySystemToggle(systemId, enabled)
+    if not GPX or not GPX.SetSystemEnabled then
+        return
+    end
+
+    local ok = GPX:SetSystemEnabled(systemId, enabled)
+    if not ok then
+        GPX:Print("Unable to apply system toggle: " .. tostring(systemId))
+        return
+    end
+
+    if systemId == "core" or systemId == "ui" or systemId == "transport" then
+        GPX:Print("System setting saved for " .. tostring(systemId) .. ". Reload recommended for full effect.")
+    else
+        GPX:Print("System " .. tostring(systemId) .. ": " .. (enabled and "enabled" or "disabled"))
+    end
+
+    self:Refresh()
+end
+
 function UI:ScheduleBindingRefresh(delaySeconds)
     if not GPX or not GPX.db then
         return
@@ -130,7 +217,7 @@ function UI:CreateFrame()
     local tabProfiles = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     tabProfiles:SetWidth(92)
     tabProfiles:SetHeight(22)
-    tabProfiles:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -324, -14)
+    tabProfiles:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -424, -14)
     tabProfiles:SetText("Profiles")
     tabProfiles:SetScript("OnClick", function()
         if setTab then
@@ -149,10 +236,21 @@ function UI:CreateFrame()
         end
     end)
 
+    local tabClasses = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    tabClasses:SetWidth(92)
+    tabClasses:SetHeight(22)
+    tabClasses:SetPoint("LEFT", tabGeneral, "RIGHT", 8, 0)
+    tabClasses:SetText("Classes")
+    tabClasses:SetScript("OnClick", function()
+        if setTab then
+            setTab("classes")
+        end
+    end)
+
     local tabController = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     tabController:SetWidth(92)
     tabController:SetHeight(22)
-    tabController:SetPoint("LEFT", tabGeneral, "RIGHT", 8, 0)
+    tabController:SetPoint("LEFT", tabClasses, "RIGHT", 8, 0)
     tabController:SetText("Keybinds")
     tabController:SetScript("OnClick", function()
         if setTab then
@@ -162,7 +260,67 @@ function UI:CreateFrame()
 
     frame.tabProfiles = tabProfiles
     frame.tabGeneral = tabGeneral
+    frame.tabClasses = tabClasses
     frame.tabController = tabController
+    frame.navOrder = {}
+
+    local systemsPanel = CreateFrame("Frame", nil, frame)
+    systemsPanel:SetWidth(214)
+    systemsPanel:SetHeight(540)
+    systemsPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 542, -76)
+    createBackdrop(systemsPanel, 0.18, 0.3, 0.5, 0.8)
+    systemsPanel:SetBackdropColor(0.06, 0.08, 0.12, 0.92)
+
+    local systemsTitle = systemsPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    systemsTitle:SetPoint("TOPLEFT", systemsPanel, "TOPLEFT", 12, -12)
+    systemsTitle:SetText("Systems")
+
+    local systemsHint = systemsPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    systemsHint:SetPoint("TOPLEFT", systemsTitle, "BOTTOMLEFT", 0, -6)
+    systemsHint:SetWidth(190)
+    systemsHint:SetJustifyH("LEFT")
+    systemsHint:SetText("Enable or disable WoWX subsystems. Core/UI/Transport are required and locked.")
+
+    local systemsStatus = systemsPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    systemsStatus:SetPoint("BOTTOMLEFT", systemsPanel, "BOTTOMLEFT", 12, 12)
+    systemsStatus:SetWidth(190)
+    systemsStatus:SetJustifyH("LEFT")
+    systemsStatus:SetText("")
+
+    frame.systemsPanel = systemsPanel
+    frame.systemsStatus = systemsStatus
+    frame.systemCheckboxes = {}
+
+    local systemTop = -78
+    for index, spec in ipairs(self:GetSystemSpecs()) do
+        local y = systemTop - ((index - 1) * 48)
+
+        local check = CreateFrame("CheckButton", nil, systemsPanel, "UICheckButtonTemplate")
+        check:SetWidth(22)
+        check:SetHeight(22)
+        check:SetPoint("TOPLEFT", systemsPanel, "TOPLEFT", 10, y)
+        check.systemId = spec.id
+        check.locked = spec.locked == true
+
+        local label = systemsPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        label:SetPoint("LEFT", check, "RIGHT", 6, 0)
+        label:SetText(spec.label)
+        check.label = label
+
+        local hint = systemsPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        hint:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -2)
+        hint:SetWidth(178)
+        hint:SetJustifyH("LEFT")
+        hint:SetText(spec.hint or "")
+        check.hint = hint
+
+        check:SetScript("OnClick", function(btn)
+            UI:ApplySystemToggle(btn.systemId, btn:GetChecked() == 1)
+        end)
+
+        frame.systemCheckboxes[spec.id] = check
+        frame.navOrder[#frame.navOrder + 1] = check
+    end
 
     local statusPanel = CreateFrame("Frame", nil, frame)
     statusPanel:SetWidth(510)
@@ -286,6 +444,427 @@ function UI:CreateFrame()
     frame.currentProfileText = currentProfileText
     frame.profileButtons = {}
 
+    local classesPanel = CreateFrame("Frame", nil, frame)
+    classesPanel:SetWidth(510)
+    classesPanel:SetHeight(650)
+    classesPanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -76)
+    createBackdrop(classesPanel, 0.18, 0.3, 0.5, 0.8)
+    classesPanel:SetBackdropColor(0.06, 0.08, 0.12, 0.92)
+
+    local classesTitle = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    classesTitle:SetPoint("TOPLEFT", classesPanel, "TOPLEFT", 14, -12)
+    classesTitle:SetText("Classes and Resources")
+
+    local classesHint = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    classesHint:SetPoint("TOPLEFT", classesTitle, "BOTTOMLEFT", 0, -6)
+    classesHint:SetWidth(480)
+    classesHint:SetJustifyH("LEFT")
+    classesHint:SetText("Manage class profile naming, resources, reactive spells, and SpellDB sharing. CoA resource IDs are seeded from local XPerl definitions.")
+
+    local classesStateText = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    classesStateText:SetPoint("TOPLEFT", classesHint, "BOTTOMLEFT", 0, -10)
+    classesStateText:SetWidth(480)
+    classesStateText:SetJustifyH("LEFT")
+
+    local classNameLabel = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    classNameLabel:SetPoint("TOPLEFT", classesStateText, "BOTTOMLEFT", 0, -14)
+    classNameLabel:SetText("Display Name")
+
+    local classNameBox = CreateFrame("EditBox", nil, classesPanel, "InputBoxTemplate")
+    classNameBox:SetWidth(172)
+    classNameBox:SetHeight(20)
+    classNameBox:SetPoint("LEFT", classNameLabel, "RIGHT", 10, 0)
+    classNameBox:SetAutoFocus(false)
+    classNameBox:SetTextColor(1.0, 0.92, 0.58)
+
+    local classSaveName = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    classSaveName:SetWidth(92)
+    classSaveName:SetHeight(22)
+    classSaveName:SetPoint("LEFT", classNameBox, "RIGHT", 10, 0)
+    classSaveName:SetText("Save Name")
+
+    local classPrevProfile = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    classPrevProfile:SetWidth(64)
+    classPrevProfile:SetHeight(22)
+    classPrevProfile:SetPoint("TOPLEFT", classNameLabel, "BOTTOMLEFT", 0, -10)
+    classPrevProfile:SetText("< Prev")
+
+    local classNextProfile = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    classNextProfile:SetWidth(64)
+    classNextProfile:SetHeight(22)
+    classNextProfile:SetPoint("LEFT", classPrevProfile, "RIGHT", 8, 0)
+    classNextProfile:SetText("Next >")
+
+    local classProfileLabel = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    classProfileLabel:SetPoint("LEFT", classNextProfile, "RIGHT", 12, 0)
+    classProfileLabel:SetWidth(320)
+    classProfileLabel:SetJustifyH("LEFT")
+
+    local classUsePlayerButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    classUsePlayerButton:SetWidth(96)
+    classUsePlayerButton:SetHeight(22)
+    classUsePlayerButton:SetPoint("TOPLEFT", classPrevProfile, "BOTTOMLEFT", 0, -8)
+    classUsePlayerButton:SetText("Use Player")
+
+    local classNewTokenBox = CreateFrame("EditBox", nil, classesPanel, "InputBoxTemplate")
+    classNewTokenBox:SetWidth(120)
+    classNewTokenBox:SetHeight(20)
+    classNewTokenBox:SetPoint("LEFT", classUsePlayerButton, "RIGHT", 8, 0)
+    classNewTokenBox:SetAutoFocus(false)
+    classNewTokenBox:SetTextColor(1.0, 0.92, 0.58)
+    classNewTokenBox:SetText("")
+
+    local classAddButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    classAddButton:SetWidth(88)
+    classAddButton:SetHeight(22)
+    classAddButton:SetPoint("LEFT", classNewTokenBox, "RIGHT", 8, 0)
+    classAddButton:SetText("Add Class")
+
+    local classAddHint = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    classAddHint:SetPoint("LEFT", classAddButton, "RIGHT", 8, 0)
+    classAddHint:SetWidth(160)
+    classAddHint:SetJustifyH("LEFT")
+    classAddHint:SetText("Token")
+
+    local resourcesHeader = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    resourcesHeader:SetPoint("TOPLEFT", classUsePlayerButton, "BOTTOMLEFT", 0, -14)
+    resourcesHeader:SetText("Resources")
+
+    local resourcesText = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    resourcesText:SetPoint("TOPLEFT", resourcesHeader, "BOTTOMLEFT", 0, -6)
+    resourcesText:SetWidth(236)
+    resourcesText:SetJustifyH("LEFT")
+
+    local resourceEditorBorder = CreateFrame("Frame", nil, classesPanel)
+    resourceEditorBorder:SetPoint("TOPLEFT", resourcesHeader, "TOPLEFT", 244, 0)
+    resourceEditorBorder:SetWidth(236)
+    resourceEditorBorder:SetHeight(148)
+    createBackdrop(resourceEditorBorder, 0.18, 0.3, 0.5, 0.8)
+    resourceEditorBorder:SetBackdropColor(0.05, 0.08, 0.14, 0.9)
+
+    local resourceEditorTitle = resourceEditorBorder:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    resourceEditorTitle:SetPoint("TOPLEFT", resourceEditorBorder, "TOPLEFT", 8, -8)
+    resourceEditorTitle:SetText("Resource Inspector")
+
+    local resourceIcon = resourceEditorBorder:CreateTexture(nil, "ARTWORK")
+    resourceIcon:SetWidth(20)
+    resourceIcon:SetHeight(20)
+    resourceIcon:SetPoint("TOPLEFT", resourceEditorTitle, "BOTTOMLEFT", 0, -4)
+    resourceIcon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+    resourceIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    local resourcePickText = resourceEditorBorder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    resourcePickText:SetPoint("LEFT", resourceIcon, "RIGHT", 6, 0)
+    resourcePickText:SetWidth(132)
+    resourcePickText:SetJustifyH("LEFT")
+
+    local resourcePrevButton = CreateFrame("Button", nil, resourceEditorBorder, "UIPanelButtonTemplate")
+    resourcePrevButton:SetWidth(28)
+    resourcePrevButton:SetHeight(18)
+    resourcePrevButton:SetPoint("LEFT", resourcePickText, "RIGHT", 2, 0)
+    resourcePrevButton:SetText("<")
+
+    local resourceNextButton = CreateFrame("Button", nil, resourceEditorBorder, "UIPanelButtonTemplate")
+    resourceNextButton:SetWidth(28)
+    resourceNextButton:SetHeight(18)
+    resourceNextButton:SetPoint("LEFT", resourcePrevButton, "RIGHT", 2, 0)
+    resourceNextButton:SetText(">")
+
+    local resourceIdBox = CreateFrame("EditBox", nil, resourceEditorBorder, "InputBoxTemplate")
+    resourceIdBox:SetWidth(108)
+    resourceIdBox:SetHeight(18)
+    resourceIdBox:SetPoint("TOPLEFT", resourceIcon, "BOTTOMLEFT", 0, -6)
+    resourceIdBox:SetAutoFocus(false)
+
+    local resourceAuraBox = CreateFrame("EditBox", nil, resourceEditorBorder, "InputBoxTemplate")
+    resourceAuraBox:SetWidth(58)
+    resourceAuraBox:SetHeight(18)
+    resourceAuraBox:SetPoint("LEFT", resourceIdBox, "RIGHT", 6, 0)
+    resourceAuraBox:SetAutoFocus(false)
+
+    local resourceMaxBox = CreateFrame("EditBox", nil, resourceEditorBorder, "InputBoxTemplate")
+    resourceMaxBox:SetWidth(38)
+    resourceMaxBox:SetHeight(18)
+    resourceMaxBox:SetPoint("LEFT", resourceAuraBox, "RIGHT", 6, 0)
+    resourceMaxBox:SetAutoFocus(false)
+
+    local resourceFragmentBox = CreateFrame("EditBox", nil, resourceEditorBorder, "InputBoxTemplate")
+    resourceFragmentBox:SetWidth(58)
+    resourceFragmentBox:SetHeight(18)
+    resourceFragmentBox:SetPoint("TOPLEFT", resourceIdBox, "BOTTOMLEFT", 0, -6)
+    resourceFragmentBox:SetAutoFocus(false)
+
+    local resourceInfusionBox = CreateFrame("EditBox", nil, resourceEditorBorder, "InputBoxTemplate")
+    resourceInfusionBox:SetWidth(58)
+    resourceInfusionBox:SetHeight(18)
+    resourceInfusionBox:SetPoint("LEFT", resourceFragmentBox, "RIGHT", 6, 0)
+    resourceInfusionBox:SetAutoFocus(false)
+
+    local resourceDivideBox = CreateFrame("EditBox", nil, resourceEditorBorder, "InputBoxTemplate")
+    resourceDivideBox:SetWidth(38)
+    resourceDivideBox:SetHeight(18)
+    resourceDivideBox:SetPoint("LEFT", resourceInfusionBox, "RIGHT", 6, 0)
+    resourceDivideBox:SetAutoFocus(false)
+
+    local resourceUseCountCheck = CreateFrame("CheckButton", nil, resourceEditorBorder, "UICheckButtonTemplate")
+    resourceUseCountCheck:SetPoint("TOPLEFT", resourceFragmentBox, "BOTTOMLEFT", -2, -4)
+    if resourceUseCountCheck.text then
+        resourceUseCountCheck.text:SetText("Count")
+    end
+
+    local resourcePipCheck = CreateFrame("CheckButton", nil, resourceEditorBorder, "UICheckButtonTemplate")
+    resourcePipCheck:SetPoint("LEFT", resourceUseCountCheck, "RIGHT", 54, 0)
+    if resourcePipCheck.text then
+        resourcePipCheck.text:SetText("Pips")
+    end
+
+    local resourceFragmentsCheck = CreateFrame("CheckButton", nil, resourceEditorBorder, "UICheckButtonTemplate")
+    resourceFragmentsCheck:SetPoint("LEFT", resourcePipCheck, "RIGHT", 52, 0)
+    if resourceFragmentsCheck.text then
+        resourceFragmentsCheck.text:SetText("Fragments")
+    end
+
+    local resourceSaveButton = CreateFrame("Button", nil, resourceEditorBorder, "UIPanelButtonTemplate")
+    resourceSaveButton:SetWidth(64)
+    resourceSaveButton:SetHeight(18)
+    resourceSaveButton:SetPoint("TOPRIGHT", resourceEditorBorder, "TOPRIGHT", -8, -8)
+    resourceSaveButton:SetText("Save")
+
+    local resourceEditorLegend = resourceEditorBorder:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    resourceEditorLegend:SetPoint("TOPLEFT", resourceUseCountCheck, "BOTTOMLEFT", 2, -2)
+    resourceEditorLegend:SetWidth(220)
+    resourceEditorLegend:SetJustifyH("LEFT")
+    resourceEditorLegend:SetText("ID | Aura | Max | Frag | Infuse | /")
+
+    local resourcePreviewText = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    resourcePreviewText:SetPoint("TOPLEFT", resourcesText, "BOTTOMLEFT", 0, -40)
+    resourcePreviewText:SetWidth(480)
+    resourcePreviewText:SetJustifyH("LEFT")
+
+    local addManaButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    addManaButton:SetWidth(74)
+    addManaButton:SetHeight(22)
+    addManaButton:SetPoint("TOPLEFT", resourcesText, "BOTTOMLEFT", 0, -8)
+    addManaButton:SetText("+ Mana")
+
+    local addRageButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    addRageButton:SetWidth(74)
+    addRageButton:SetHeight(22)
+    addRageButton:SetPoint("LEFT", addManaButton, "RIGHT", 6, 0)
+    addRageButton:SetText("+ Rage")
+
+    local addEnergyButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    addEnergyButton:SetWidth(74)
+    addEnergyButton:SetHeight(22)
+    addEnergyButton:SetPoint("LEFT", addRageButton, "RIGHT", 6, 0)
+    addEnergyButton:SetText("+ Energy")
+
+    local addRunicButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    addRunicButton:SetWidth(84)
+    addRunicButton:SetHeight(22)
+    addRunicButton:SetPoint("LEFT", addEnergyButton, "RIGHT", 6, 0)
+    addRunicButton:SetText("+ Runic")
+
+    local removeResourceButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    removeResourceButton:SetWidth(110)
+    removeResourceButton:SetHeight(22)
+    removeResourceButton:SetPoint("LEFT", addRunicButton, "RIGHT", 6, 0)
+    removeResourceButton:SetText("Remove Last")
+
+    local reactivesHeader = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    reactivesHeader:SetPoint("TOPLEFT", resourcePreviewText, "BOTTOMLEFT", 0, -16)
+    reactivesHeader:SetText("Reactive Spells")
+
+    local reactiveInput = CreateFrame("EditBox", nil, classesPanel, "InputBoxTemplate")
+    reactiveInput:SetWidth(124)
+    reactiveInput:SetHeight(20)
+    reactiveInput:SetPoint("TOPLEFT", reactivesHeader, "BOTTOMLEFT", 0, -8)
+    reactiveInput:SetAutoFocus(false)
+    reactiveInput:SetTextColor(1.0, 0.92, 0.58)
+
+    local reactiveAddButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    reactiveAddButton:SetWidth(94)
+    reactiveAddButton:SetHeight(22)
+    reactiveAddButton:SetPoint("LEFT", reactiveInput, "RIGHT", 8, 0)
+    reactiveAddButton:SetText("Add Reactive")
+
+    local reactiveEditHint = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    reactiveEditHint:SetPoint("LEFT", reactiveAddButton, "RIGHT", 10, 0)
+    reactiveEditHint:SetWidth(250)
+    reactiveEditHint:SetJustifyH("LEFT")
+    reactiveEditHint:SetText("")
+
+    local reactiveRows = {}
+    for row = 1, 4 do
+        local rowFrame = CreateFrame("Frame", nil, classesPanel)
+        rowFrame:SetWidth(480)
+        rowFrame:SetHeight(24)
+        rowFrame:SetPoint("TOPLEFT", reactiveInput, "BOTTOMLEFT", 0, -8 - ((row - 1) * 26))
+
+        local iconButton = CreateFrame("Button", nil, rowFrame)
+        iconButton:SetWidth(20)
+        iconButton:SetHeight(20)
+        iconButton:SetPoint("LEFT", rowFrame, "LEFT", 0, 0)
+        local icon = iconButton:CreateTexture(nil, "ARTWORK")
+        icon:SetAllPoints(iconButton)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+        rowFrame.iconButton = iconButton
+        rowFrame.icon = icon
+
+        local spellText = rowFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        spellText:SetPoint("LEFT", iconButton, "RIGHT", 8, 0)
+        spellText:SetWidth(250)
+        spellText:SetJustifyH("LEFT")
+        rowFrame.spellText = spellText
+
+        local editButton = CreateFrame("Button", nil, rowFrame, "UIPanelButtonTemplate")
+        editButton:SetWidth(54)
+        editButton:SetHeight(20)
+        editButton:SetPoint("LEFT", spellText, "RIGHT", 6, 0)
+        editButton:SetText("Edit")
+        rowFrame.editButton = editButton
+
+        local deleteButton = CreateFrame("Button", nil, rowFrame, "UIPanelButtonTemplate")
+        deleteButton:SetWidth(54)
+        deleteButton:SetHeight(20)
+        deleteButton:SetPoint("LEFT", editButton, "RIGHT", 6, 0)
+        deleteButton:SetText("Delete")
+        rowFrame.deleteButton = deleteButton
+
+        reactiveRows[row] = rowFrame
+    end
+
+    local spellDBHeader = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    spellDBHeader:SetPoint("TOPLEFT", reactiveRows[4], "BOTTOMLEFT", 0, -14)
+    spellDBHeader:SetText("SpellDB Share")
+
+    local spellDBHint = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    spellDBHint:SetPoint("TOPLEFT", spellDBHeader, "BOTTOMLEFT", 0, -6)
+    spellDBHint:SetWidth(480)
+    spellDBHint:SetJustifyH("LEFT")
+    spellDBHint:SetText("Use this box for copy/paste export/import in-game. Slash commands remain optional.")
+
+    local spellDBExportButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    spellDBExportButton:SetWidth(92)
+    spellDBExportButton:SetHeight(22)
+    spellDBExportButton:SetPoint("TOPLEFT", spellDBHint, "BOTTOMLEFT", 0, -8)
+    spellDBExportButton:SetText("Export")
+
+    local spellDBImportMergeButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    spellDBImportMergeButton:SetWidth(110)
+    spellDBImportMergeButton:SetHeight(22)
+    spellDBImportMergeButton:SetPoint("LEFT", spellDBExportButton, "RIGHT", 6, 0)
+    spellDBImportMergeButton:SetText("Import Merge")
+
+    local spellDBImportReplaceButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    spellDBImportReplaceButton:SetWidth(114)
+    spellDBImportReplaceButton:SetHeight(22)
+    spellDBImportReplaceButton:SetPoint("LEFT", spellDBImportMergeButton, "RIGHT", 6, 0)
+    spellDBImportReplaceButton:SetText("Import Replace")
+
+    local spellDBOutputButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    spellDBOutputButton:SetWidth(66)
+    spellDBOutputButton:SetHeight(22)
+    spellDBOutputButton:SetPoint("LEFT", spellDBImportReplaceButton, "RIGHT", 6, 0)
+    spellDBOutputButton:SetText("Output")
+
+    local spellDBLoadButton = CreateFrame("Button", nil, classesPanel, "UIPanelButtonTemplate")
+    spellDBLoadButton:SetWidth(76)
+    spellDBLoadButton:SetHeight(22)
+    spellDBLoadButton:SetPoint("LEFT", spellDBOutputButton, "RIGHT", 6, 0)
+    spellDBLoadButton:SetText("Load Out")
+
+    local spellDBStatus = classesPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    spellDBStatus:SetPoint("TOPLEFT", spellDBExportButton, "BOTTOMLEFT", 0, -4)
+    spellDBStatus:SetWidth(480)
+    spellDBStatus:SetJustifyH("LEFT")
+    spellDBStatus:SetText("")
+
+    local spellDBBorder = CreateFrame("Frame", nil, classesPanel)
+    spellDBBorder:SetPoint("TOPLEFT", spellDBStatus, "BOTTOMLEFT", 0, -4)
+    spellDBBorder:SetWidth(480)
+    spellDBBorder:SetHeight(92)
+    createBackdrop(spellDBBorder, 0.18, 0.3, 0.5, 0.8)
+    spellDBBorder:SetBackdropColor(0.04, 0.06, 0.1, 0.92)
+
+    local spellDBScroll = CreateFrame("ScrollFrame", nil, spellDBBorder, "UIPanelScrollFrameTemplate")
+    spellDBScroll:SetPoint("TOPLEFT", spellDBBorder, "TOPLEFT", 8, -8)
+    spellDBScroll:SetPoint("BOTTOMRIGHT", spellDBBorder, "BOTTOMRIGHT", -28, 8)
+
+    local spellDBEdit = CreateFrame("EditBox", nil, spellDBScroll)
+    spellDBEdit:SetMultiLine(true)
+    spellDBEdit:SetAutoFocus(false)
+    spellDBEdit:EnableMouse(true)
+    spellDBEdit:SetFontObject(ChatFontNormal)
+    spellDBEdit:SetWidth(440)
+    spellDBEdit:SetTextInsets(4, 4, 4, 4)
+    spellDBEdit:SetText("")
+    spellDBEdit:SetScript("OnEscapePressed", function(selfEdit)
+        selfEdit:ClearFocus()
+    end)
+    spellDBEdit:SetScript("OnTextChanged", function(selfEdit)
+        local text = selfEdit:GetText() or ""
+        local lineCount = 1
+        for _ in string.gmatch(text, "\n") do
+            lineCount = lineCount + 1
+        end
+        local _, fontHeight = selfEdit:GetFont()
+        local rowHeight = tonumber(fontHeight) or 12
+        selfEdit:SetHeight((lineCount * rowHeight) + 24)
+    end)
+    spellDBScroll:SetScrollChild(spellDBEdit)
+
+    frame.classesPanel = classesPanel
+    frame.classesStateText = classesStateText
+    frame.classNameBox = classNameBox
+    frame.classSaveName = classSaveName
+    frame.classPrevProfile = classPrevProfile
+    frame.classNextProfile = classNextProfile
+    frame.classProfileLabel = classProfileLabel
+    frame.classUsePlayerButton = classUsePlayerButton
+    frame.classNewTokenBox = classNewTokenBox
+    frame.classAddButton = classAddButton
+    frame.classAddHint = classAddHint
+    frame.resourcesText = resourcesText
+    frame.resourceInspector = {
+        icon = resourceIcon,
+        pickText = resourcePickText,
+        prev = resourcePrevButton,
+        next = resourceNextButton,
+        idBox = resourceIdBox,
+        auraBox = resourceAuraBox,
+        maxBox = resourceMaxBox,
+        fragmentBox = resourceFragmentBox,
+        infusionBox = resourceInfusionBox,
+        divideBox = resourceDivideBox,
+        useCountCheck = resourceUseCountCheck,
+        pipCheck = resourcePipCheck,
+        fragmentsCheck = resourceFragmentsCheck,
+        saveButton = resourceSaveButton,
+        previewText = resourcePreviewText,
+    }
+    frame.resourceButtons = {
+        addMana = addManaButton,
+        addRage = addRageButton,
+        addEnergy = addEnergyButton,
+        addRunic = addRunicButton,
+        removeLast = removeResourceButton,
+    }
+    frame.reactiveInput = reactiveInput
+    frame.reactiveAddButton = reactiveAddButton
+    frame.reactiveEditHint = reactiveEditHint
+    frame.reactiveRows = reactiveRows
+    frame.spellDBShareButtons = {
+        export = spellDBExportButton,
+        importMerge = spellDBImportMergeButton,
+        importReplace = spellDBImportReplaceButton,
+        output = spellDBOutputButton,
+        loadOutput = spellDBLoadButton,
+    }
+    frame.spellDBShareEdit = spellDBEdit
+    frame.spellDBShareStatus = spellDBStatus
+
     for _, spec in ipairs(profileButtons) do
         local button = CreateFrame("Button", nil, profilePanel, "UIPanelButtonTemplate")
         button:SetWidth(spec.width)
@@ -299,12 +878,14 @@ function UI:CreateFrame()
         general = 684,
         controller = 620,
         profiles = 520,
+        classes = 780,
     }
 
     setTab = function(tab)
         frame.activeTab = tab
         local showGeneral = tab == "general"
         local showProfiles = tab == "profiles"
+        local showClasses = tab == "classes"
         local showController = tab == "controller"
 
         if showGeneral then
@@ -322,6 +903,9 @@ function UI:CreateFrame()
             profilePanel:SetPoint("TOPLEFT", frame, "TOPLEFT", 24, -76)
             bindingPanel:ClearAllPoints()
             bindingPanel:SetPoint("TOPLEFT", actionPanel, "BOTTOMLEFT", 0, -16)
+        elseif showClasses then
+            bindingPanel:ClearAllPoints()
+            bindingPanel:SetPoint("TOPLEFT", actionPanel, "BOTTOMLEFT", 0, -16)
         end
 
         frame:SetHeight(tabHeights[tab] or tabHeights.general)
@@ -331,9 +915,15 @@ function UI:CreateFrame()
         utilityPanel:SetShown(showController)
         inputPanel:SetShown(showController)
         profilePanel:SetShown(showProfiles)
-        if frame.tabProfiles and frame.tabGeneral and frame.tabController then
+        classesPanel:SetShown(showClasses)
+        systemsPanel:SetShown(true)
+        if showClasses then
+            UI:SyncSelectedClassProfileToPlayer(true)
+        end
+        if frame.tabProfiles and frame.tabGeneral and frame.tabClasses and frame.tabController then
             frame.tabProfiles:SetText(showProfiles and "Profiles *" or "Profiles")
             frame.tabGeneral:SetText(showGeneral and "General *" or "General")
+            frame.tabClasses:SetText(showClasses and "Classes *" or "Classes")
             frame.tabController:SetText(showController and "Keybinds *" or "Keybinds")
         end
     end
@@ -357,8 +947,6 @@ function UI:CreateFrame()
         { key = "layoutProfiles", label = "Layout Profiles", x = 266, y = -202, width = 140, click = function() if setTab then setTab("profiles") end end },
         { key = "close", label = "Close", x = 290, y = -242, width = 116, click = function() frame:Hide() end },
     }
-
-    frame.navOrder = {}
 
     for _, spec in ipairs(specs) do
         local button = CreateFrame("Button", nil, actionPanel, "UIPanelButtonTemplate")
@@ -465,6 +1053,129 @@ function UI:CreateFrame()
         end
     end
 
+    if frame.classSaveName then
+        frame.classSaveName:SetScript("OnClick", function()
+            UI:SaveSelectedClassDisplayName()
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.classSaveName
+    end
+
+    if frame.classPrevProfile then
+        frame.classPrevProfile:SetScript("OnClick", function()
+            UI:CycleSelectedClassProfile(-1)
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.classPrevProfile
+    end
+
+    if frame.classNextProfile then
+        frame.classNextProfile:SetScript("OnClick", function()
+            UI:CycleSelectedClassProfile(1)
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.classNextProfile
+    end
+
+    if frame.classUsePlayerButton then
+        frame.classUsePlayerButton:SetScript("OnClick", function()
+            UI:SyncSelectedClassProfileToPlayer(true)
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.classUsePlayerButton
+    end
+
+    if frame.classAddButton and frame.classNewTokenBox then
+        frame.classAddButton:SetScript("OnClick", function()
+            UI:CreateClassProfileFromInput()
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.classAddButton
+    end
+
+    if frame.resourceButtons then
+        frame.resourceButtons.addMana:SetScript("OnClick", function()
+            UI:AddCoreResourceToSelected("mana", "Mana", { r = 0.18, g = 0.48, b = 1.0 })
+        end)
+        frame.resourceButtons.addRage:SetScript("OnClick", function()
+            UI:AddCoreResourceToSelected("rage", "Rage", { r = 0.88, g = 0.22, b = 0.18 })
+        end)
+        frame.resourceButtons.addEnergy:SetScript("OnClick", function()
+            UI:AddCoreResourceToSelected("energy", "Energy", { r = 0.98, g = 0.86, b = 0.18 })
+        end)
+        frame.resourceButtons.addRunic:SetScript("OnClick", function()
+            UI:AddCoreResourceToSelected("runic_power", "Runic Power", { r = 0.32, g = 0.9, b = 1.0 })
+        end)
+        frame.resourceButtons.removeLast:SetScript("OnClick", function()
+            UI:RemoveLastResourceFromSelected()
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.resourceButtons.addMana
+        frame.navOrder[#frame.navOrder + 1] = frame.resourceButtons.addRage
+        frame.navOrder[#frame.navOrder + 1] = frame.resourceButtons.addEnergy
+        frame.navOrder[#frame.navOrder + 1] = frame.resourceButtons.addRunic
+        frame.navOrder[#frame.navOrder + 1] = frame.resourceButtons.removeLast
+    end
+
+    if frame.resourceInspector then
+        frame.resourceInspector.prev:SetScript("OnClick", function()
+            UI:CycleSelectedResource(-1)
+        end)
+        frame.resourceInspector.next:SetScript("OnClick", function()
+            UI:CycleSelectedResource(1)
+        end)
+        frame.resourceInspector.saveButton:SetScript("OnClick", function()
+            UI:SaveSelectedResourceEdit()
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.resourceInspector.prev
+        frame.navOrder[#frame.navOrder + 1] = frame.resourceInspector.next
+        frame.navOrder[#frame.navOrder + 1] = frame.resourceInspector.saveButton
+    end
+
+    if frame.reactiveAddButton then
+        frame.reactiveAddButton:SetScript("OnClick", function()
+            UI:CommitReactiveEdit()
+        end)
+        frame.navOrder[#frame.navOrder + 1] = frame.reactiveAddButton
+    end
+
+    if frame.reactiveRows then
+        for index, row in ipairs(frame.reactiveRows) do
+            row.editButton:SetScript("OnClick", function()
+                UI:BeginReactiveEdit(index)
+            end)
+            row.deleteButton:SetScript("OnClick", function()
+                UI:DeleteReactiveSpell(index)
+            end)
+            row.iconButton:SetScript("OnEnter", function()
+                UI:ShowReactiveTooltip(index, row.iconButton)
+            end)
+            row.iconButton:SetScript("OnLeave", function()
+                GameTooltip:Hide()
+            end)
+            frame.navOrder[#frame.navOrder + 1] = row.editButton
+            frame.navOrder[#frame.navOrder + 1] = row.deleteButton
+        end
+    end
+
+    if frame.spellDBShareButtons then
+        frame.spellDBShareButtons.export:SetScript("OnClick", function()
+            UI:ExportSpellDBToShareText()
+        end)
+        frame.spellDBShareButtons.importMerge:SetScript("OnClick", function()
+            UI:ImportSpellDBFromShareText("merge")
+        end)
+        frame.spellDBShareButtons.importReplace:SetScript("OnClick", function()
+            UI:ImportSpellDBFromShareText("replace")
+        end)
+        frame.spellDBShareButtons.output:SetScript("OnClick", function()
+            UI:OpenSpellDBShareInOutputWindow()
+        end)
+        frame.spellDBShareButtons.loadOutput:SetScript("OnClick", function()
+            UI:LoadSpellDBShareFromOutputWindow()
+        end)
+
+        frame.navOrder[#frame.navOrder + 1] = frame.spellDBShareButtons.export
+        frame.navOrder[#frame.navOrder + 1] = frame.spellDBShareButtons.importMerge
+        frame.navOrder[#frame.navOrder + 1] = frame.spellDBShareButtons.importReplace
+        frame.navOrder[#frame.navOrder + 1] = frame.spellDBShareButtons.output
+        frame.navOrder[#frame.navOrder + 1] = frame.spellDBShareButtons.loadOutput
+    end
+
     frame.barOptions = {}
     local optionSpecs = {
         { key = "toggleProgress", label = "XP/Rep Bar", x = 266, y = -202, width = 140, click = function() if GPX.VisualBar then GPX.VisualBar:Slash("progress") end UI:Refresh() end },
@@ -567,6 +1278,7 @@ function UI:CreateFrame()
     self.frame.currentProfileText = currentProfileText
     self.frame.navOrder[#self.frame.navOrder + 1] = tabGeneral
     self.frame.navOrder[#self.frame.navOrder + 1] = tabProfiles
+    self.frame.navOrder[#self.frame.navOrder + 1] = tabClasses
     self.frame.navOrder[#self.frame.navOrder + 1] = tabController
     setTab("general")
 
@@ -667,6 +1379,46 @@ function UI:RefreshUtilityButtons()
     end
 end
 
+function UI:RefreshSystemsPanel()
+    if not self.frame or not self.frame.systemCheckboxes then
+        return
+    end
+
+    local enabledCount = 0
+    local totalCount = 0
+
+    for _, spec in ipairs(self:GetSystemSpecs()) do
+        local check = self.frame.systemCheckboxes[spec.id]
+        if check then
+            local enabled = GPX:IsSystemEnabled(spec.id)
+            check:SetChecked(enabled and 1 or nil)
+
+            totalCount = totalCount + 1
+            if enabled then
+                enabledCount = enabledCount + 1
+            end
+
+            if check.locked then
+                check:Disable()
+                check:SetAlpha(0.75)
+                if check.label then
+                    check.label:SetText(spec.label .. " (required)")
+                end
+            else
+                check:Enable()
+                check:SetAlpha(1.0)
+                if check.label then
+                    check.label:SetText(spec.label)
+                end
+            end
+        end
+    end
+
+    if self.frame.systemsStatus then
+        self.frame.systemsStatus:SetText("Enabled systems: " .. tostring(enabledCount) .. "/" .. tostring(totalCount))
+    end
+end
+
 function UI:RefreshProfilePanel()
     if not self.frame then
         return
@@ -701,6 +1453,697 @@ function UI:RefreshProfilePanel()
         end
         if self.frame.profileButtons.deleteProfile then
             self.frame.profileButtons.deleteProfile:SetEnabled(hasName and self.frame.profileNameBox:GetText() ~= "default")
+        end
+    end
+end
+
+function UI:GetClassProfileOrder()
+    local profiles = GPX:GetClassProfiles() or {}
+    local order = {}
+    for token in pairs(profiles) do
+        order[#order + 1] = token
+    end
+    table.sort(order)
+    return order
+end
+
+function UI:GetSelectedClassProfileId()
+    local active = self.selectedClassProfileId
+    local profiles = GPX:GetClassProfiles() or {}
+    if active and profiles[active] then
+        return active
+    end
+
+    local fromDB = GPX:GetActiveClassProfileId()
+    if fromDB and profiles[fromDB] then
+        self.selectedClassProfileId = fromDB
+        return fromDB
+    end
+
+    local classToken = GPX:GetResolvedClassToken("player")
+    if classToken and profiles[classToken] then
+        self.selectedClassProfileId = classToken
+        GPX:SetActiveClassProfileId(classToken)
+        return classToken
+    end
+
+    local order = self:GetClassProfileOrder()
+    self.selectedClassProfileId = order[1]
+    if self.selectedClassProfileId then
+        GPX:SetActiveClassProfileId(self.selectedClassProfileId)
+    end
+    return self.selectedClassProfileId
+end
+
+function UI:GetSelectedClassProfile()
+    local id = self:GetSelectedClassProfileId()
+    local profiles = GPX:GetClassProfiles() or {}
+    return id and profiles[id] or nil
+end
+
+function UI:SelectClassProfile(profileId)
+    local key = string.upper(trimText(profileId))
+    if key == "" then
+        return false
+    end
+
+    local profiles = GPX:GetClassProfiles() or {}
+    if not profiles[key] then
+        return false
+    end
+
+    self.selectedClassProfileId = key
+    GPX:SetActiveClassProfileId(key)
+    self.selectedReactiveRow = nil
+    self.selectedResourceIndex = nil
+    self:RefreshClassesPanel()
+    return true
+end
+
+function UI:SyncSelectedClassProfileToPlayer(shouldCreate)
+    local classToken = string.upper(trimText(GPX:GetResolvedClassToken("player") or ""))
+    if classToken == "" then
+        return false
+    end
+
+    local profiles = GPX:GetClassProfiles() or {}
+    if not profiles[classToken] and shouldCreate then
+        GPX:EnsureClassProfile(classToken, classToken, classToken)
+        profiles = GPX:GetClassProfiles() or {}
+    end
+
+    if not profiles[classToken] then
+        return false
+    end
+
+    return self:SelectClassProfile(classToken)
+end
+
+function UI:CreateClassProfileFromInput()
+    if not self.frame or not self.frame.classNewTokenBox then
+        return
+    end
+
+    local token = string.upper(trimText(self.frame.classNewTokenBox:GetText()))
+    if token == "" then
+        GPX:Print("Enter a class token first, e.g. REAPER.")
+        return
+    end
+
+    local ok = GPX:EnsureClassProfile(token, token, token)
+    if not ok then
+        GPX:Print("Unable to add class profile: " .. tostring(token))
+        return
+    end
+
+    self.frame.classNewTokenBox:SetText("")
+    self:SelectClassProfile(token)
+    GPX:Print("Class profile ready: " .. tostring(token))
+end
+
+function UI:GetSelectedResourceIndex()
+    local profile = self:GetSelectedClassProfile()
+    local resources = profile and profile.resources or nil
+    if type(resources) ~= "table" or #resources < 1 then
+        self.selectedResourceIndex = nil
+        return nil
+    end
+
+    local index = tonumber(self.selectedResourceIndex)
+    if not index or index < 1 or index > #resources then
+        index = 1
+    end
+    self.selectedResourceIndex = index
+    return index
+end
+
+function UI:GetSelectedResource()
+    local profile = self:GetSelectedClassProfile()
+    local resources = profile and profile.resources or nil
+    local index = self:GetSelectedResourceIndex()
+    if not resources or not index then
+        return nil, nil
+    end
+    return resources[index], index
+end
+
+function UI:CycleSelectedResource(delta)
+    local profile = self:GetSelectedClassProfile()
+    local resources = profile and profile.resources or nil
+    if type(resources) ~= "table" or #resources < 1 then
+        self.selectedResourceIndex = nil
+        self:RefreshClassesPanel()
+        return
+    end
+
+    local index = self:GetSelectedResourceIndex() or 1
+    local nextIndex = index + (tonumber(delta) or 0)
+    if nextIndex < 1 then
+        nextIndex = #resources
+    elseif nextIndex > #resources then
+        nextIndex = 1
+    end
+
+    self.selectedResourceIndex = nextIndex
+    self:RefreshClassesPanel()
+end
+
+function UI:BuildResourcePreviewLines(resource)
+    if type(resource) ~= "table" then
+        return {
+            "Preview: no resource selected.",
+        }, nil
+    end
+
+    local lines = {}
+    local auraStacks, auraIcon = getAuraStackByID("player", resource.auraID, resource.filter)
+    local maxValue = tonumber(resource.maxValue) or 0
+    local useCount = resource.useCount == true
+    local displayType = tostring(resource.displayType or "bar")
+
+    lines[#lines + 1] = "Preview: " .. tostring(resource.label or resource.id or "Resource")
+    lines[#lines + 1] = "Type=" .. displayType .. "  AuraID=" .. tostring(resource.auraID or "-") .. "  Stacks=" .. tostring(auraStacks)
+
+    if displayType == "fragments" then
+        local divideBy = tonumber(resource.fragmentDivideBy or resource.fragmentCount or 3) or 3
+        if divideBy < 1 then
+            divideBy = 1
+        end
+        local raw = useCount and auraStacks or math.min(1, auraStacks)
+        local full = math.floor(raw / divideBy)
+        local partial = raw % divideBy
+        lines[#lines + 1] = "Souls=" .. tostring(full) .. "/" .. tostring(maxValue) .. "  Fragments=" .. tostring(partial) .. "/" .. tostring(divideBy)
+        lines[#lines + 1] = "Math: totalFragments=" .. tostring(raw) .. " = (souls * " .. tostring(divideBy) .. ") + partial"
+    elseif displayType == "pips" then
+        local current = useCount and auraStacks or math.min(1, auraStacks)
+        lines[#lines + 1] = "Pips=" .. tostring(current) .. "/" .. tostring(maxValue)
+    else
+        local current = useCount and auraStacks or math.min(1, auraStacks)
+        lines[#lines + 1] = "BarValue=" .. tostring(current) .. "  Max=" .. tostring(maxValue)
+    end
+
+    if resource.fragmentSpellID then
+        lines[#lines + 1] = "FragmentSpellID=" .. tostring(resource.fragmentSpellID)
+    end
+    if resource.infusionSpellID then
+        lines[#lines + 1] = "InfusionSpellID=" .. tostring(resource.infusionSpellID)
+    end
+
+    return lines, auraIcon
+end
+
+function UI:SaveSelectedResourceEdit()
+    local profileId = self:GetSelectedClassProfileId()
+    local resource, index = self:GetSelectedResource()
+    local inspector = self.frame and self.frame.resourceInspector or nil
+    if not profileId or not resource or not index or not inspector then
+        return
+    end
+
+    local nextValue = GPX.DeepCopy and GPX:DeepCopy(resource) or {}
+    if not GPX.DeepCopy then
+        for key, value in pairs(resource) do
+            nextValue[key] = value
+        end
+    end
+
+    local nextID = trimText(inspector.idBox:GetText())
+    if nextID ~= "" then
+        nextValue.id = nextID
+    end
+
+    local nextAuraID = toNumberOrNil(inspector.auraBox:GetText())
+    nextValue.auraID = nextAuraID
+    if nextAuraID then
+        nextValue.sourceType = "aura"
+    end
+
+    local nextMax = toNumberOrNil(inspector.maxBox:GetText())
+    nextValue.maxValue = nextMax
+    nextValue.fragmentSpellID = toNumberOrNil(inspector.fragmentBox:GetText())
+    nextValue.infusionSpellID = toNumberOrNil(inspector.infusionBox:GetText())
+    nextValue.fragmentDivideBy = toNumberOrNil(inspector.divideBox:GetText())
+    nextValue.useCount = inspector.useCountCheck:GetChecked() and true or false
+
+    local fragmentsChecked = inspector.fragmentsCheck:GetChecked() and true or false
+    local pipChecked = inspector.pipCheck:GetChecked() and true or false
+    if fragmentsChecked then
+        nextValue.displayType = "fragments"
+    elseif pipChecked then
+        nextValue.displayType = "pips"
+    else
+        nextValue.displayType = "bar"
+    end
+
+    if trimText(nextValue.label or "") == "" then
+        nextValue.label = nextValue.id or "Resource"
+    end
+
+    local ok = GPX:UpdateClassProfileResource(profileId, index, nextValue)
+    if not ok then
+        GPX:Print("Unable to save resource row " .. tostring(index) .. ".")
+        return
+    end
+
+    GPX:Print("Saved resource: " .. tostring(nextValue.label or nextValue.id or index))
+    self:RefreshClassesPanel()
+end
+
+function UI:CycleSelectedClassProfile(delta)
+    local order = self:GetClassProfileOrder()
+    if #order == 0 then
+        return
+    end
+
+    local current = self:GetSelectedClassProfileId()
+    local index = 1
+    for i, token in ipairs(order) do
+        if token == current then
+            index = i
+            break
+        end
+    end
+
+    local nextIndex = index + (tonumber(delta) or 0)
+    if nextIndex < 1 then
+        nextIndex = #order
+    elseif nextIndex > #order then
+        nextIndex = 1
+    end
+
+    self.selectedClassProfileId = order[nextIndex]
+    GPX:SetActiveClassProfileId(self.selectedClassProfileId)
+    self.selectedReactiveRow = nil
+    self.selectedResourceIndex = nil
+    self:RefreshClassesPanel()
+end
+
+function UI:SaveSelectedClassDisplayName()
+    local profileId = self:GetSelectedClassProfileId()
+    if not profileId or not self.frame or not self.frame.classNameBox then
+        return
+    end
+
+    local text = trimText(self.frame.classNameBox:GetText())
+    if text == "" then
+        text = profileId
+    end
+
+    if GPX:SetClassProfileDisplayName(profileId, text) then
+        GPX:Print("Class profile renamed: " .. tostring(text))
+    end
+    self:RefreshClassesPanel()
+end
+
+function UI:AddCoreResourceToSelected(engineResource, label, color)
+    local profileId = self:GetSelectedClassProfileId()
+    if not profileId then
+        return
+    end
+
+    local definition = {
+        id = string.lower(tostring(profileId)) .. "_" .. tostring(engineResource),
+        label = tostring(label),
+        displayType = "bar",
+        sourceType = "engine",
+        engineResource = tostring(engineResource),
+        minValue = 0,
+        startsAtZero = true,
+        color = color,
+    }
+
+    if GPX:AddClassProfileResource(profileId, definition) then
+        GPX:Print("Added resource: " .. tostring(label))
+    end
+    self:RefreshClassesPanel()
+end
+
+function UI:RemoveLastResourceFromSelected()
+    local profileId = self:GetSelectedClassProfileId()
+    local profile = self:GetSelectedClassProfile()
+    if not profileId or not profile or type(profile.resources) ~= "table" then
+        return
+    end
+
+    if #profile.resources < 1 then
+        return
+    end
+    GPX:RemoveClassProfileResource(profileId, #profile.resources)
+    self:RefreshClassesPanel()
+end
+
+function UI:BeginReactiveEdit(index)
+    local profile = self:GetSelectedClassProfile()
+    if not profile or type(profile.reactiveSpells) ~= "table" then
+        return
+    end
+    local row = profile.reactiveSpells[index]
+    if not row or not self.frame or not self.frame.reactiveInput then
+        return
+    end
+    self.selectedReactiveRow = index
+    self.frame.reactiveInput:SetText(tostring(row.spellID or ""))
+    self:RefreshClassesPanel()
+end
+
+function UI:CommitReactiveEdit()
+    local profileId = self:GetSelectedClassProfileId()
+    if not profileId or not self.frame or not self.frame.reactiveInput then
+        return
+    end
+
+    local spellID = tonumber(trimText(self.frame.reactiveInput:GetText()))
+    if not spellID then
+        GPX:Print("Reactive spell requires a numeric spell ID.")
+        return
+    end
+
+    if self.selectedReactiveRow then
+        GPX:UpdateClassProfileReactiveSpell(profileId, self.selectedReactiveRow, spellID)
+    else
+        GPX:AddClassProfileReactiveSpell(profileId, spellID)
+    end
+
+    self.selectedReactiveRow = nil
+    self.frame.reactiveInput:SetText("")
+    self:RefreshClassesPanel()
+end
+
+function UI:DeleteReactiveSpell(index)
+    local profileId = self:GetSelectedClassProfileId()
+    if not profileId then
+        return
+    end
+
+    GPX:RemoveClassProfileReactiveSpell(profileId, index)
+    if self.selectedReactiveRow == index then
+        self.selectedReactiveRow = nil
+        if self.frame and self.frame.reactiveInput then
+            self.frame.reactiveInput:SetText("")
+        end
+    end
+    self:RefreshClassesPanel()
+end
+
+function UI:ShowReactiveTooltip(index, anchor)
+    local profile = self:GetSelectedClassProfile()
+    if not profile or type(profile.reactiveSpells) ~= "table" then
+        return
+    end
+    local row = profile.reactiveSpells[index]
+    if not row then
+        return
+    end
+
+    local spellID = tonumber(row.spellID)
+    local spellName = spellID and GetSpellInfo(spellID) or nil
+    GameTooltip:SetOwner(anchor, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(spellName or "Reactive Spell")
+    GameTooltip:AddLine("Spell ID: " .. tostring(spellID or "?"), 0.85, 0.85, 0.95)
+    GameTooltip:Show()
+end
+
+function UI:GetSpellDBShareText()
+    if not self.frame or not self.frame.spellDBShareEdit then
+        return ""
+    end
+    return tostring(self.frame.spellDBShareEdit:GetText() or "")
+end
+
+function UI:SetSpellDBShareText(text)
+    if not self.frame or not self.frame.spellDBShareEdit then
+        return
+    end
+    self.frame.spellDBShareEdit:SetText(tostring(text or ""))
+    self.frame.spellDBShareEdit:SetCursorPosition(0)
+end
+
+function UI:ExportSpellDBToShareText()
+    if not GPX or not GPX.ExportSpellDBText then
+        GPX:Print("SpellDB export is unavailable.")
+        return
+    end
+
+    local text = GPX:ExportSpellDBText()
+    if not text or text == "" then
+        GPX:Print("SpellDB export is empty.")
+        return
+    end
+
+    self:SetSpellDBShareText(text)
+    if self.frame and self.frame.spellDBShareStatus then
+        self.frame.spellDBShareStatus:SetText("SpellDB exported to share box. Copy with Ctrl+C.")
+    end
+end
+
+function UI:ImportSpellDBFromShareText(mode)
+    local text = self:GetSpellDBShareText()
+    if trimText(text) == "" then
+        GPX:Print("Share box is empty. Paste SpellDB text first.")
+        return
+    end
+
+    local importMode = tostring(mode or "merge")
+    local ok, result = GPX:ImportSpellDBText(text, importMode)
+    if not ok then
+        GPX:Print("SpellDB import failed: " .. tostring(result))
+        if self.frame and self.frame.spellDBShareStatus then
+            self.frame.spellDBShareStatus:SetText("Import failed: " .. tostring(result))
+        end
+        return
+    end
+
+    if self.frame and self.frame.spellDBShareStatus then
+        self.frame.spellDBShareStatus:SetText("Import complete: " .. tostring(result.importedProfiles or 0) .. " profile(s), mode=" .. tostring(result.mode or importMode))
+    end
+    GPX:Print("SpellDB import complete: " .. tostring(result.importedProfiles or 0) .. " profile(s).")
+    self.selectedReactiveRow = nil
+    self:RefreshClassesPanel()
+end
+
+function UI:OpenSpellDBShareInOutputWindow()
+    local text = self:GetSpellDBShareText()
+    if trimText(text) == "" then
+        GPX:Print("Share box is empty. Export or paste text first.")
+        return
+    end
+
+    local lines = {}
+    for line in string.gmatch(text, "[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    GPX:SetOutputWindowLines(lines, "SpellDB Share", true)
+    if self.frame and self.frame.spellDBShareStatus then
+        self.frame.spellDBShareStatus:SetText("Sent share text to output window.")
+    end
+end
+
+function UI:LoadSpellDBShareFromOutputWindow()
+    if not GPX or not GPX.GetOutputWindowText then
+        GPX:Print("Output window bridge is unavailable.")
+        return
+    end
+
+    local text = GPX:GetOutputWindowText()
+    if trimText(text) == "" then
+        GPX:Print("Output window is empty.")
+        return
+    end
+
+    local headerPos = string.find(text, "WOWX_SPELLDB_V1", 1, true)
+    if headerPos then
+        text = string.sub(text, headerPos)
+    end
+
+    self:SetSpellDBShareText(text)
+    if self.frame and self.frame.spellDBShareStatus then
+        self.frame.spellDBShareStatus:SetText("Loaded SpellDB text from output window.")
+    end
+end
+
+function UI:GetCurrentSpecText()
+    if not GetNumTalentTabs or not GetTalentTabInfo then
+        return "Unknown"
+    end
+
+    local bestName = nil
+    local bestPoints = -1
+    for tab = 1, (GetNumTalentTabs() or 0) do
+        local name, _, points = GetTalentTabInfo(tab)
+        local score = tonumber(points) or 0
+        if score > bestPoints then
+            bestPoints = score
+            bestName = name
+        end
+    end
+
+    return bestName or "Unknown"
+end
+
+function UI:RefreshClassesPanel()
+    if not self.frame or not self.frame.classesPanel then
+        return
+    end
+
+    local descriptor = GPX:GetGameTypeDescriptor()
+    local classToken = GPX:GetResolvedClassToken("player") or "UNKNOWN"
+    local specText = self:GetCurrentSpecText()
+    local profileId = self:GetSelectedClassProfileId()
+    local profile = self:GetSelectedClassProfile()
+
+    if self.frame.classesStateText then
+        self.frame.classesStateText:SetText(
+            "Class: " .. tostring(classToken)
+            .. "\nSpec: " .. tostring(specText)
+            .. "\nGame Type: " .. tostring(descriptor and descriptor.gameType or "classic")
+            .. "\nActive Profile: " .. tostring(profileId or "none")
+        )
+    end
+
+    if self.frame.classProfileLabel then
+        local displayName = profile and profile.displayName or profileId or "none"
+        local lockText = (profile and profile.lockedResourceIDs) and " (resource IDs locked)" or ""
+        self.frame.classProfileLabel:SetText("Profile: " .. tostring(displayName) .. lockText)
+    end
+
+    if self.frame.classNameBox then
+        local desired = profile and (profile.displayName or profileId) or ""
+        if trimText(self.frame.classNameBox:GetText()) == "" or not self.frame.classNameBox:HasFocus() then
+            self.frame.classNameBox:SetText(desired)
+        end
+    end
+
+    if self.frame.classAddHint then
+        self.frame.classAddHint:SetText("Player: " .. tostring(classToken))
+    end
+
+    if self.frame.resourcesText then
+        local lines = {}
+        local resources = (profile and profile.resources) or {}
+        if #resources == 0 then
+            lines[#lines + 1] = "No resources configured. Add core resources or custom aura resources."
+        else
+            for i, resource in ipairs(resources) do
+                local marker = (self:GetSelectedResourceIndex() == i) and "*" or " "
+                local source = resource.engineResource or resource.auraID or resource.spellID or "custom"
+                local mode = tostring(resource.displayType or "bar")
+                lines[#lines + 1] = marker .. i .. ". " .. tostring(resource.label or resource.id or "Resource") .. " [" .. mode .. "] [" .. tostring(source) .. "]"
+            end
+        end
+        self.frame.resourcesText:SetText(table.concat(lines, "\n"))
+    end
+
+    if self.frame.resourceInspector then
+        local inspector = self.frame.resourceInspector
+        local resource, selectedIndex = self:GetSelectedResource()
+        local resources = (profile and profile.resources) or {}
+
+        if not resource then
+            inspector.pickText:SetText("No resource")
+            inspector.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+            inspector.idBox:SetText("")
+            inspector.auraBox:SetText("")
+            inspector.maxBox:SetText("")
+            inspector.fragmentBox:SetText("")
+            inspector.infusionBox:SetText("")
+            inspector.divideBox:SetText("")
+            inspector.useCountCheck:SetChecked(nil)
+            inspector.pipCheck:SetChecked(nil)
+            inspector.fragmentsCheck:SetChecked(nil)
+            inspector.previewText:SetText("Preview: add/select a resource to inspect pips and fragment math.")
+            inspector.prev:SetEnabled(false)
+            inspector.next:SetEnabled(false)
+            inspector.saveButton:SetEnabled(false)
+        else
+            local auraIcon = nil
+            if resource.auraID then
+                local _, icon = getAuraStackByID("player", resource.auraID, resource.filter)
+                auraIcon = icon
+            end
+            if not auraIcon then
+                local iconID = tonumber(resource.fragmentSpellID) or tonumber(resource.spellID) or tonumber(resource.infusionSpellID)
+                if iconID and GetSpellTexture then
+                    auraIcon = GetSpellTexture(iconID)
+                end
+            end
+            inspector.icon:SetTexture(auraIcon or "Interface\\Icons\\INV_Misc_QuestionMark")
+            inspector.pickText:SetText("#" .. tostring(selectedIndex) .. "/" .. tostring(#resources))
+
+            if not inspector.idBox:HasFocus() then
+                inspector.idBox:SetText(tostring(resource.id or ""))
+            end
+            if not inspector.auraBox:HasFocus() then
+                inspector.auraBox:SetText(resource.auraID and tostring(resource.auraID) or "")
+            end
+            if not inspector.maxBox:HasFocus() then
+                inspector.maxBox:SetText(resource.maxValue and tostring(resource.maxValue) or "")
+            end
+            if not inspector.fragmentBox:HasFocus() then
+                inspector.fragmentBox:SetText(resource.fragmentSpellID and tostring(resource.fragmentSpellID) or "")
+            end
+            if not inspector.infusionBox:HasFocus() then
+                inspector.infusionBox:SetText(resource.infusionSpellID and tostring(resource.infusionSpellID) or "")
+            end
+            if not inspector.divideBox:HasFocus() then
+                inspector.divideBox:SetText(resource.fragmentDivideBy and tostring(resource.fragmentDivideBy) or "")
+            end
+
+            local displayType = tostring(resource.displayType or "bar")
+            inspector.useCountCheck:SetChecked(resource.useCount and 1 or nil)
+            inspector.pipCheck:SetChecked((displayType == "pips" or displayType == "fragments") and 1 or nil)
+            inspector.fragmentsCheck:SetChecked(displayType == "fragments" and 1 or nil)
+
+            local previewLines = self:BuildResourcePreviewLines(resource)
+            inspector.previewText:SetText(table.concat(previewLines, "\n"))
+            inspector.prev:SetEnabled(#resources > 1)
+            inspector.next:SetEnabled(#resources > 1)
+            inspector.saveButton:SetEnabled(true)
+        end
+    end
+
+    if self.frame.reactiveRows then
+        local reactive = (profile and profile.reactiveSpells) or {}
+        for rowIndex, rowFrame in ipairs(self.frame.reactiveRows) do
+            local entry = reactive[rowIndex]
+            if entry then
+                local spellID = tonumber(entry.spellID)
+                local spellName, _, icon = spellID and GetSpellInfo(spellID) or nil
+                rowFrame.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+                rowFrame.spellText:SetText((spellName or "Unknown") .. " (" .. tostring(spellID or "?") .. ")")
+                rowFrame.editButton:Enable()
+                rowFrame.deleteButton:Enable()
+                rowFrame:Show()
+            else
+                rowFrame.icon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark")
+                rowFrame.spellText:SetText("-")
+                rowFrame.editButton:Disable()
+                rowFrame.deleteButton:Disable()
+                rowFrame:Show()
+            end
+        end
+    end
+
+    if self.frame.reactiveAddButton and self.frame.reactiveEditHint then
+        if self.selectedReactiveRow then
+            self.frame.reactiveAddButton:SetText("Save Edit")
+            self.frame.reactiveEditHint:SetText("Editing row " .. tostring(self.selectedReactiveRow) .. ".")
+        else
+            self.frame.reactiveAddButton:SetText("Add Reactive")
+            self.frame.reactiveEditHint:SetText("Use this panel to build reactives in-game, then share/import via SpellDB Share.")
+        end
+    end
+
+    if self.frame.spellDBShareStatus then
+        local text = self:GetSpellDBShareText()
+        local lineCount = 0
+        if text ~= "" then
+            lineCount = 1
+            for _ in string.gmatch(text, "\n") do
+                lineCount = lineCount + 1
+            end
+        end
+        if trimText(self.frame.spellDBShareStatus:GetText() or "") == "" then
+            self.frame.spellDBShareStatus:SetText("Share box lines: " .. tostring(lineCount) .. "")
         end
     end
 end
@@ -956,6 +2399,7 @@ end
 function UI:BuildStatusText()
     local profile = GPX:GetProfile()
     local setup = profile and profile.setup or nil
+    local descriptor = GPX.GetGameTypeDescriptor and GPX:GetGameTypeDescriptor() or nil
     local mode = GPX.db and GPX.db.enabled and "Enabled" or "Disabled"
     local profileName = profile and (profile.name or GPX.db.profile or "default") or "default"
     local styleId = setup and (setup.inputStyle or setup.deviceId)
@@ -975,11 +2419,17 @@ function UI:BuildStatusText()
     local bagsCfg = GPX.db and GPX.db.ui and GPX.db.ui.actionButtons
     local wowxBags = (bagsCfg and bagsCfg.enabled ~= false and bagsCfg.showBags ~= false) and "On" or "Off"
     local lastError = GPX.db and GPX.db.lastError and GPX.db.lastError ~= "" and GPX.db.lastError or "None"
+    local gameType = descriptor and descriptor.gameType or "classic"
+    local realmType = descriptor and descriptor.realmType or "unknown"
+    local expansionType = descriptor and descriptor.expansionType or "wotlk_full"
 
     return string.format(
-        "Mode: %s\nProfile: %s\nInput Style: %s\nController Mode: %s\nMouselook Mode: %s\nVisual Bar: %s\nWoWX Bags: %s\nLayout Edit: %s\nButton Edit: %s\nMinimap Button: %s\nLast Error: %s",
+        "Mode: %s\nProfile: %s\nGame Type: %s\nRealm Type: %s\nExpansion Type: %s\nInput Style: %s\nController Mode: %s\nMouselook Mode: %s\nVisual Bar: %s\nWoWX Bags: %s\nLayout Edit: %s\nButton Edit: %s\nMinimap Button: %s\nLast Error: %s",
         mode,
         profileName,
+        gameType,
+        realmType,
+        expansionType,
         inputStyle,
         controllerMode,
         mouseLookMode,
@@ -1017,7 +2467,9 @@ function UI:Refresh()
         end
     end
     self:RefreshUtilityButtons()
+    self:RefreshSystemsPanel()
     self:RefreshProfilePanel()
+    self:RefreshClassesPanel()
     self:RefreshMappingButtons()
 end
 

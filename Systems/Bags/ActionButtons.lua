@@ -29,6 +29,7 @@ local ITEM_BUTTON_SIZE = 42
 local ITEM_BUTTON_GAP = 4
 local ITEM_BUTTON_COLUMNS = 8
 local ITEM_GRID_PADDING = 8
+local ITEM_GRID_SCROLL_STEP = ITEM_BUTTON_SIZE + ITEM_BUTTON_GAP
 local SLOT_ICON_INSET = 2
 local BAG_BUTTON_SIZE = 40
 local BAG_ICON_INSET = 4
@@ -1429,10 +1430,29 @@ function Buttons:EnsureBagWindow()
         keyLabel:SetText(getBagShortLabel(KEYRING_BAG_ID))
     end
 
-    local grid = CreateFrame("Frame", nil, frame)
+    local grid = CreateFrame("ScrollFrame", nil, frame)
     grid:SetPoint("TOPLEFT", controls, "BOTTOMLEFT", 0, -8)
-    grid:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 20)
+    grid:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -20, -110)
+    grid:SetHeight(330)
+    grid:EnableMouseWheel(true)
     applyBlueChromeBackdrop(grid, DIM_BORDER)
+
+    local gridContent = CreateFrame("Frame", nil, grid)
+    gridContent:SetWidth(contentWidth + (ITEM_GRID_PADDING * 2))
+    gridContent:SetHeight(ITEM_GRID_PADDING * 2 + ITEM_BUTTON_SIZE)
+    grid:SetScrollChild(gridContent)
+    grid._content = gridContent
+    grid:SetScript("OnMouseWheel", function(selfScroll, delta)
+        local current = selfScroll:GetVerticalScroll() or 0
+        local maxScroll = math.max(0, (selfScroll._contentHeight or 0) - (selfScroll._visibleHeight or 0))
+        local nextScroll = current - (delta * ITEM_GRID_SCROLL_STEP * 2)
+        if nextScroll < 0 then
+            nextScroll = 0
+        elseif nextScroll > maxScroll then
+            nextScroll = maxScroll
+        end
+        selfScroll:SetVerticalScroll(nextScroll)
+    end)
 
     self.itemButtons = self.itemButtons or {}
 
@@ -1443,6 +1463,7 @@ function Buttons:EnsureBagWindow()
     frame._wowxSellJunkButton = sellJunkButton
     frame._wowxBagSlotRow = bagSlotRow
     frame._wowxGrid = grid
+    frame._wowxGridContent = gridContent
 
     self.bagWindow = frame
     registerAsEscapeClosable("WoWXCombinedBagWindow")
@@ -1561,7 +1582,7 @@ function Buttons:RefreshBagWindow()
         else
             frame._wowxGrid:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -66)
         end
-        frame._wowxGrid:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 20)
+        frame._wowxGrid:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -20, (bagSlotsExpanded and -166 or -110))
     end
 
     local rows = math.ceil((#entries > 0 and #entries or 1) / ITEM_BUTTON_COLUMNS)
@@ -1569,7 +1590,7 @@ function Buttons:RefreshBagWindow()
     if rows < minRows then
         rows = minRows
     end
-    local gridHeight = ITEM_GRID_PADDING * 2 + (rows * ITEM_BUTTON_SIZE) + ((rows - 1) * ITEM_BUTTON_GAP)
+    local contentGridHeight = ITEM_GRID_PADDING * 2 + (rows * ITEM_BUTTON_SIZE) + ((rows - 1) * ITEM_BUTTON_GAP)
     -- topInset must match actual anchored offsets used by controls/grid points.
     -- Collapsed: grid top at -110 and bottom inset is 20 => 130.
     -- Expanded:  grid top at -166 and bottom inset is 20 => 186.
@@ -1580,14 +1601,20 @@ function Buttons:RefreshBagWindow()
     if maxWindowHeight < minWindowHeight then
         maxWindowHeight = minWindowHeight
     end
-    local windowHeight = clamp(topInset + gridHeight, minWindowHeight, maxWindowHeight)
-    -- Clamp grid to actual available space so it never escapes the window
-    local availableGridHeight = windowHeight - topInset
-    if gridHeight > availableGridHeight then
-        gridHeight = availableGridHeight
-    end
+    local windowHeight = clamp(topInset + contentGridHeight, minWindowHeight, maxWindowHeight)
+    local visibleGridHeight = windowHeight - topInset
     if frame._wowxGrid then
-        frame._wowxGrid:SetHeight(gridHeight)
+        frame._wowxGrid._visibleHeight = visibleGridHeight
+        frame._wowxGrid._contentHeight = contentGridHeight
+        frame._wowxGrid:SetHeight(visibleGridHeight)
+        if frame._wowxGridContent then
+            frame._wowxGridContent:SetHeight(contentGridHeight)
+        end
+        local currentScroll = frame._wowxGrid:GetVerticalScroll() or 0
+        local maxScroll = math.max(0, contentGridHeight - visibleGridHeight)
+        if currentScroll > maxScroll then
+            frame._wowxGrid:SetVerticalScroll(maxScroll)
+        end
     end
     frame:SetHeight(windowHeight)
 
@@ -1633,7 +1660,7 @@ function Buttons:RefreshBagWindow()
         local info = entries[i]
         local button = self.itemButtons[i]
         if not button then
-            button = self:CreateItemButton(frame._wowxGrid)
+            button = self:CreateItemButton(frame._wowxGridContent or frame._wowxGrid)
             self.itemButtons[i] = button
         end
 
@@ -1642,13 +1669,13 @@ function Buttons:RefreshBagWindow()
         local x = ITEM_GRID_PADDING + col * (ITEM_BUTTON_SIZE + ITEM_BUTTON_GAP)
         local y = -(ITEM_GRID_PADDING + row * (ITEM_BUTTON_SIZE + ITEM_BUTTON_GAP))
         button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", frame._wowxGrid, "TOPLEFT", x, y)
+        button:SetPoint("TOPLEFT", frame._wowxGridContent or frame._wowxGrid, "TOPLEFT", x, y)
 
         -- Set bag/slot for ContainerFrameItemButtonTemplate
         -- Template needs parent's ID = bag, button's ID = slot
         if info.bagID and info.slot then
             if not button._dummyParent then
-                button._dummyParent = CreateFrame("Frame", nil, frame._wowxGrid)
+                button._dummyParent = CreateFrame("Frame", nil, frame._wowxGridContent or frame._wowxGrid)
                 button:SetParent(button._dummyParent)
             end
             button._dummyParent:SetID(info.bagID)
@@ -1860,10 +1887,29 @@ function Buttons:EnsureBankWindow()
         label:SetText(getBagShortLabel(bagID))
     end
 
-    local grid = CreateFrame("Frame", nil, frame)
+    local grid = CreateFrame("ScrollFrame", nil, frame)
     grid:SetPoint("TOPLEFT", controls, "BOTTOMLEFT", 0, -8)
-    grid:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 20)
+    grid:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -20, -110)
+    grid:SetHeight(330)
+    grid:EnableMouseWheel(true)
     applyBlueChromeBackdrop(grid, DIM_BORDER)
+
+    local gridContent = CreateFrame("Frame", nil, grid)
+    gridContent:SetWidth(contentWidth + (ITEM_GRID_PADDING * 2))
+    gridContent:SetHeight(ITEM_GRID_PADDING * 2 + ITEM_BUTTON_SIZE)
+    grid:SetScrollChild(gridContent)
+    grid._content = gridContent
+    grid:SetScript("OnMouseWheel", function(selfScroll, delta)
+        local current = selfScroll:GetVerticalScroll() or 0
+        local maxScroll = math.max(0, (selfScroll._contentHeight or 0) - (selfScroll._visibleHeight or 0))
+        local nextScroll = current - (delta * ITEM_GRID_SCROLL_STEP * 2)
+        if nextScroll < 0 then
+            nextScroll = 0
+        elseif nextScroll > maxScroll then
+            nextScroll = maxScroll
+        end
+        selfScroll:SetVerticalScroll(nextScroll)
+    end)
 
     self.bankItemButtons = self.bankItemButtons or {}
 
@@ -1873,6 +1919,7 @@ function Buttons:EnsureBankWindow()
     frame._wowxBuySlotCost = buySlotCost
     frame._wowxBagSlotRow = bagSlotRow
     frame._wowxGrid = grid
+    frame._wowxGridContent = gridContent
 
     self.bankWindow = frame
     registerAsEscapeClosable("WoWXBankWindow")
@@ -1944,7 +1991,7 @@ function Buttons:RefreshBankWindow()
         else
             frame._wowxGrid:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -66)
         end
-        frame._wowxGrid:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -20, 20)
+        frame._wowxGrid:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -20, (bagSlotsExpanded and -166 or -110))
     end
 
     local rows = math.ceil((#entries > 0 and #entries or 1) / ITEM_BUTTON_COLUMNS)
@@ -1952,7 +1999,7 @@ function Buttons:RefreshBankWindow()
     if rows < minRows then
         rows = minRows
     end
-    local gridHeight = ITEM_GRID_PADDING * 2 + (rows * ITEM_BUTTON_SIZE) + ((rows - 1) * ITEM_BUTTON_GAP)
+    local contentGridHeight = ITEM_GRID_PADDING * 2 + (rows * ITEM_BUTTON_SIZE) + ((rows - 1) * ITEM_BUTTON_GAP)
     -- Keep bank window sizing in sync with bag window anchor math.
     local topInset = bagSlotsExpanded and 186 or 130
     local minWindowHeight = 320
@@ -1961,13 +2008,20 @@ function Buttons:RefreshBankWindow()
     if maxWindowHeight < minWindowHeight then
         maxWindowHeight = minWindowHeight
     end
-    local windowHeight = clamp(topInset + gridHeight, minWindowHeight, maxWindowHeight)
-    local availableGridHeight = windowHeight - topInset
-    if gridHeight > availableGridHeight then
-        gridHeight = availableGridHeight
-    end
+    local windowHeight = clamp(topInset + contentGridHeight, minWindowHeight, maxWindowHeight)
+    local visibleGridHeight = windowHeight - topInset
     if frame._wowxGrid then
-        frame._wowxGrid:SetHeight(gridHeight)
+        frame._wowxGrid._visibleHeight = visibleGridHeight
+        frame._wowxGrid._contentHeight = contentGridHeight
+        frame._wowxGrid:SetHeight(visibleGridHeight)
+        if frame._wowxGridContent then
+            frame._wowxGridContent:SetHeight(contentGridHeight)
+        end
+        local currentScroll = frame._wowxGrid:GetVerticalScroll() or 0
+        local maxScroll = math.max(0, contentGridHeight - visibleGridHeight)
+        if currentScroll > maxScroll then
+            frame._wowxGrid:SetVerticalScroll(maxScroll)
+        end
     end
     frame:SetHeight(windowHeight)
 
@@ -2017,7 +2071,7 @@ function Buttons:RefreshBankWindow()
         local info = entries[i]
         local button = self.bankItemButtons[i]
         if not button then
-            button = self:CreateItemButton(frame._wowxGrid)
+            button = self:CreateItemButton(frame._wowxGridContent or frame._wowxGrid)
             self.bankItemButtons[i] = button
         end
 
@@ -2026,11 +2080,11 @@ function Buttons:RefreshBankWindow()
         local x = ITEM_GRID_PADDING + col * (ITEM_BUTTON_SIZE + ITEM_BUTTON_GAP)
         local y = -(ITEM_GRID_PADDING + row * (ITEM_BUTTON_SIZE + ITEM_BUTTON_GAP))
         button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", frame._wowxGrid, "TOPLEFT", x, y)
+        button:SetPoint("TOPLEFT", frame._wowxGridContent or frame._wowxGrid, "TOPLEFT", x, y)
 
         if info.bagID and info.slot then
             if not button._dummyParent then
-                button._dummyParent = CreateFrame("Frame", nil, frame._wowxGrid)
+                button._dummyParent = CreateFrame("Frame", nil, frame._wowxGridContent or frame._wowxGrid)
                 button:SetParent(button._dummyParent)
             end
             button._dummyParent:SetID(info.bagID)

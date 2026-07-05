@@ -324,6 +324,13 @@ function Prompt:Update()
         self:HidePrompt()
         return
     end
+    if GPX.IsSystemEnabled and not GPX:IsSystemEnabled("cues") then
+        if self.frame then
+            self.frame:Hide()
+        end
+        self.currentButton = nil
+        return
+    end
 
     local state = self:FindUnitNeedingDispel()
     if state then

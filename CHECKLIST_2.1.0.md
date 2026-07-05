@@ -19,7 +19,7 @@ Focus: keyboard play stability after settings/tab/layout-editor/glow polish.
 - Verify diag includes: EngineCfg: transport=click
 
 ## A. Control Center Tab Layout
-1. Open: /wowx settings
+1. Open: /wowx config
 2. Switch tabs in this order: General -> Keybinds -> Profiles -> Keybinds -> General
 3. Pass if:
 - No panels render off-screen.

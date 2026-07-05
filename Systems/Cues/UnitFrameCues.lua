@@ -129,6 +129,11 @@ function Cues:UpdateUnit(unit, frameName)
         return
     end
 
+    if GPX.IsSystemEnabled and not GPX:IsSystemEnabled("cues") then
+        indicator:Hide()
+        return
+    end
+
     if not GPX.db or not GPX.db.enabled or not UnitExists(unit) or UnitIsDeadOrGhost(unit) then
         indicator:Hide()
         return

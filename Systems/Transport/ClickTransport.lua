@@ -96,12 +96,23 @@ function CT:ConditionalMacroForCommand(command)
     if not command then return nil end
     local actionIndex = tonumber(command:match("^ACTIONBUTTON(%d+)$"))
     if actionIndex then
-        local _, classFile = UnitClass("player")
-        local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
-
         if GPX and GPX.IsCoAStealthPageClass and GPX:IsCoAStealthPageClass("player") then
             return "/click [stealth] BonusActionButton" .. actionIndex .. "; ActionButton" .. actionIndex
         end
+
+        if GPX and GPX.IsDruidDualStealthPagerClass and GPX:IsDruidDualStealthPagerClass("player") then
+            return "/click [stealth] BonusActionButton" .. actionIndex
+                .. "; [bonusbar:5] BonusActionButton" .. actionIndex
+                .. "; [bonusbar:4] BonusActionButton" .. actionIndex
+                .. "; [bonusbar:3] BonusActionButton" .. actionIndex
+                .. "; [bonusbar:2] BonusActionButton" .. actionIndex
+                .. "; [bonusbar:1] BonusActionButton" .. actionIndex
+                .. "; [stance] BonusActionButton" .. actionIndex
+                .. "; ActionButton" .. actionIndex
+        end
+
+        local _, classFile = UnitClass("player")
+        local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
 
         local macro = "/click [bonusbar:5] BonusActionButton" .. actionIndex
             .. "; [bonusbar:4] BonusActionButton" .. actionIndex
@@ -239,6 +250,14 @@ end
 -- GamePadX binds keys to these frames; they are never visible.
 -- ---------------------------------------------------------------------------
 CT.proxyButtons = {}
+
+function CT:GetProxyButtonCount()
+    local count = 0
+    for _ in pairs(self.proxyButtons) do
+        count = count + 1
+    end
+    return count
+end
 
 function CT:EnsureProxyButton(command)
     if not command or self.proxyButtons[command] then return end
