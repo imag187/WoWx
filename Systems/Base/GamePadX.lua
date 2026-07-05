@@ -46,6 +46,19 @@ local GPX = GamePadX
 local mainFrame
 GPX.version = "1.0.0"
 GPX.brand = "WoWX"
+GPX.inputStyleAliases = {
+    ps5 = "playstation",
+    ps4 = "playstation",
+    ps = "playstation",
+    playstation = "playstation",
+    xbox = "xbox",
+    xb = "xbox",
+    switch = "switch",
+    ns = "switch",
+    generic = "generic",
+    keyboard = "keyboard",
+    kb = "keyboard",
+}
 GPX.inputStyles = {
     keyboard = {
         id = "keyboard",
@@ -59,27 +72,11 @@ GPX.inputStyles = {
         id = "xbox",
         name = "Xbox",
         slotLabels = { "A", "B", "X", "Y", "D-Up", "D-Right", "D-Down", "D-Left", "LB", "RB", "L3", "R3" },
-        combatSlotLabels = { "X", "Y", "B", "A", "LB", "RB", "D-Left", "D-Up", "D-Right" },
-        combatDisplayLabels = { "X", "Y", "B", "A", "LB", "RB", "D-Left", "D-Up", "D-Right" },
+        combatSlotLabels = { "B", "Y", "X", "Back", "Start", "D-Left", "D-Up", "D-Right", "D-Down" },
+        combatDisplayLabels = { "B", "Y", "X", "Back", "Start", "D-Left", "D-Up", "D-Right", "D-Down" },
         modifierLabels = { "L1 / LB", "R1 / RB", "L3 / Click" },
         confirmLabel = "A",
         shortModifierLabels = { "LB", "RB", "L3" },
-        buttonTextures = {
-            ["D-Left"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_LEFT",
-            ["D-Up"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_UP",
-            ["D-Right"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_RIGHT",
-            ["D-Down"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_DOWN",
-            ["Back"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_GRIP2",
-            ["Start"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_GRIP2",
-            ["X"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_LEFT",
-            ["Y"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_UP",
-            ["B"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_RIGHT",
-            ["A"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_DOWN",
-            ["LB"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TL1",
-            ["RB"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TR1",
-            ["L3"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_L3",
-            ["R3"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_R3",
-        },
     },
     playstation = {
         id = "playstation",
@@ -95,8 +92,8 @@ GPX.inputStyles = {
             ["D-Up"]     = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_UP",
             ["D-Right"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_RIGHT",
             ["D-Down"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_DOWN",
-            ["Share"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_GRIP1",
-            ["Options"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_GRIP1",
+            ["Share"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_X_LEFT",
+            ["Options"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_X_RIGHT",
             ["Square"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_LEFT",
             ["Triangle"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_UP",
             ["Circle"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_RIGHT",
@@ -119,22 +116,6 @@ GPX.inputStyles = {
         modifierLabels = { "L", "R", "L-Stick" },
         confirmLabel = "B",
         shortModifierLabels = { "L", "R", "L3" },
-        buttonTextures = {
-            ["B"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_DOWN",
-            ["Y"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_LEFT",
-            ["X"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_UP",
-            ["A"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_RIGHT",
-            ["Minus"]   = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_GRIP2",
-            ["Plus"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_GRIP2",
-            ["D-Left"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_LEFT",
-            ["D-Up"]    = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_UP",
-            ["D-Right"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_RIGHT",
-            ["D-Down"]  = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_L_DOWN",
-            ["L"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TL1",
-            ["R"]       = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_TR1",
-            ["L3"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_L3",
-            ["R3"]      = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_T_R3",
-        },
     },
     generic = {
         id = "generic",
@@ -543,6 +524,11 @@ function GPX:CaptureMachineScopedState()
         gridbookCopy = self:DeepCopy(self.db.ui.gridbook)
     end
 
+    local gameTypeDBCopy = nil
+    if self.db.ui and self.db.ui.gameTypeDB then
+        gameTypeDBCopy = self:DeepCopy(self.db.ui.gameTypeDB)
+    end
+
     return {
         profile = self.db.profile,
         controllerEnabled = self:IsControllerEnabled(),
@@ -550,6 +536,7 @@ function GPX:CaptureMachineScopedState()
         setup = setupCopy,
         visualButtonCount = visualButtonCount,
         gridbook = gridbookCopy,
+        gameTypeDB = gameTypeDBCopy,
     }
 end
 
@@ -621,6 +608,10 @@ function GPX:ApplyMachineScopedState(silent)
 
     if state.gridbook then
         self.db.ui.gridbook = self:DeepCopy(state.gridbook)
+    end
+
+    if state.gameTypeDB then
+        self.db.ui.gameTypeDB = self:DeepCopy(state.gameTypeDB)
     end
 
     if not silent then
@@ -897,7 +888,9 @@ function GPX:GetProfile()
 end
 
 function GPX:GetInputStyle(styleId)
-    return self.inputStyles[styleId] or self.inputStyles.keyboard
+    local token = string.lower(tostring(styleId or ""))
+    local resolved = self.inputStyleAliases[token] or token
+    return self.inputStyles[resolved] or self.inputStyles.keyboard
 end
 
 function GPX:GetCombatSlotLabels(styleId)
@@ -934,10 +927,13 @@ end
 function GPX:GetEffectiveControllerStyleId(setup, profile)
     profile = profile or self:GetProfile()
 
-    return (setup and setup.deviceId)
+    local rawStyleId = (setup and setup.deviceId)
         or (profile and profile.inputStyle)
         or (profile and profile.setup and profile.setup.deviceId)
         or "generic"
+
+    local token = string.lower(tostring(rawStyleId or ""))
+    return self.inputStyleAliases[token] or token
 end
 
 function GPX:GetConfirmLabel(styleId)
@@ -1251,28 +1247,313 @@ function GPX:IsControllerEnabled()
     return self.db and self.db.ui and self.db.ui.controller and self.db.ui.controller.enabled == true
 end
 
-function GPX:IsCoARealm()
-    local _, classFile = UnitClass("player")
-    if classFile == "DRUID" then
-        -- CoA class set does not include Druid; force non-CoA behavior for Druid.
-        return false
+function GPX:GetSystemRegistry()
+    if WoWXSystems and WoWXSystems.Registry then
+        return WoWXSystems.Registry
+    end
+    return nil
+end
+
+function GPX:IsSystemEnabled(id)
+    local registry = self:GetSystemRegistry()
+    if registry and registry.IsEnabled then
+        return registry:IsEnabled(id)
+    end
+    return true
+end
+
+function GPX:SetSystemEnabled(id, enabled)
+    local registry = self:GetSystemRegistry()
+    if registry and registry.SetEnabled then
+        local ok = registry:SetEnabled(id, enabled)
+        if ok then
+            self:ApplySystemRuntimeState(id)
+        end
+        return ok
+    end
+    return false
+end
+
+function GPX:ApplySystemRuntimeState(id)
+    local key = string.lower(tostring(id or ""))
+    local enabled = self:IsSystemEnabled(key)
+
+    if key == "bags" then
+        if self.db then
+            self.db.ui = self.db.ui or {}
+            self.db.ui.actionButtons = self.db.ui.actionButtons or {}
+            if not enabled then
+                self.db.ui.actionButtons.showBags = false
+            end
+        end
+        if self.ActionButtons and self.ActionButtons.UpdateAll then
+            self.ActionButtons:UpdateAll()
+        end
+        return
+    end
+
+    if key == "spellgrid" then
+        if not enabled and self.SpellbookUI and self.SpellbookUI.frame and self.SpellbookUI.frame:IsShown() then
+            self.SpellbookUI.frame:Hide()
+        end
+        return
+    end
+
+    if key == "unitframes" then
+        if self.UnitFrames and self.UnitFrames.SetEnabled then
+            self.UnitFrames:SetEnabled(enabled)
+        end
+        return
+    end
+
+    if key == "cues" then
+        if not enabled then
+            if self.UnitFrameCues and self.UnitFrameCues.HideAll then
+                self.UnitFrameCues:HideAll()
+            end
+            if self.DispelPrompt and self.DispelPrompt.frame then
+                self.DispelPrompt.frame:Hide()
+            end
+        elseif self.UnitFrameCues and self.UnitFrameCues.UpdateAll then
+            self.UnitFrameCues:UpdateAll()
+        end
+        return
+    end
+
+    if key == "gamepad" then
+        if not enabled and self:IsControllerEnabled() then
+            self:SetControllerEnabled(false)
+            if self.db and self.db.enabled then
+                self:ClearBindings(true)
+                self:ApplyBindings(true)
+            end
+            if self.VisualBar and self.VisualBar.UpdateAll then
+                self.VisualBar:UpdateAll()
+            end
+        end
+        return
+    end
+end
+
+function GPX:GetAscensionRealmFlavor()
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.GetDescriptor then
+        local descriptor = WoWXSystems.GameTypeDB:GetDescriptor()
+        if descriptor and descriptor.flavor then
+            return descriptor.flavor
+        end
+    end
+
+    if WoWXSystems and WoWXSystems.RealmDetector and WoWXSystems.RealmDetector.GetActiveFlavor then
+        return WoWXSystems.RealmDetector:GetActiveFlavor()
     end
 
     local realmName = GetRealmName and GetRealmName() or ""
     local lowered = string.lower(tostring(realmName or ""))
     if lowered == "" then
-        return false
+        return "other"
     end
-    if string.find(lowered, "coa", 1, true) then
-        return true
+
+    if string.find(lowered, "conquest of azeroth", 1, true) or string.find(lowered, "coa", 1, true) then
+        return "coa"
     end
-    if string.find(lowered, "conquest of azeroth", 1, true) then
-        return true
+    if string.find(lowered, "bronzebeard", 1, true) then
+        return "bronzebeard"
+    end
+    if string.find(lowered, "classless", 1, true) then
+        return "classless"
     end
     if string.find(lowered, "ascension", 1, true) then
-        return true
+        return "ascension"
+    end
+
+    return "other"
+end
+
+function GPX:IsCoARealm()
+    return self:GetAscensionRealmFlavor() == "coa"
+end
+
+function GPX:GetGameTypeDescriptor()
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.GetDescriptor then
+        return WoWXSystems.GameTypeDB:GetDescriptor()
+    end
+    return {
+        realmName = (GetRealmName and GetRealmName()) or "",
+        realmType = "unknown",
+        gameType = self:IsCoARealm() and "conquest_of_azeroth" or "classic",
+        expansionType = self:IsCoARealm() and "vanilla_progressive" or "wotlk_full",
+        classModel = self:IsCoARealm() and "custom_classes" or "blizzard_classes",
+        flavor = self:GetAscensionRealmFlavor(),
+        isAscension = self:GetAscensionRealmFlavor() ~= "other",
+        isCoA = self:IsCoARealm(),
+    }
+end
+
+function GPX:GetGameTypePagerRules()
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.GetPagerRules then
+        return WoWXSystems.GameTypeDB:GetPagerRules()
+    end
+    return {}
+end
+
+function GPX:GetResourceDefinitions()
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.GetResourceDefinitions then
+        return WoWXSystems.GameTypeDB:GetResourceDefinitions()
+    end
+    return {}
+end
+
+function GPX:GetClassProfiles()
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.GetClassProfiles then
+        return WoWXSystems.GameTypeDB:GetClassProfiles()
+    end
+    return {}
+end
+
+function GPX:GetActiveClassProfileId()
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.GetActiveClassProfileId then
+        return WoWXSystems.GameTypeDB:GetActiveClassProfileId()
+    end
+    return self:GetResolvedClassToken("player")
+end
+
+function GPX:SetActiveClassProfileId(profileId)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.SetActiveClassProfileId then
+        return WoWXSystems.GameTypeDB:SetActiveClassProfileId(profileId)
     end
     return false
+end
+
+function GPX:GetActiveClassProfile()
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.GetActiveClassProfile then
+        return WoWXSystems.GameTypeDB:GetActiveClassProfile()
+    end
+    return nil
+end
+
+function GPX:SetClassProfileDisplayName(profileId, displayName)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.SetClassProfileDisplayName then
+        return WoWXSystems.GameTypeDB:SetClassProfileDisplayName(profileId, displayName)
+    end
+    return false
+end
+
+function GPX:EnsureClassProfile(profileId, displayName, classToken)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.EnsureClassProfile then
+        return WoWXSystems.GameTypeDB:EnsureClassProfile(profileId, displayName, classToken)
+    end
+    return false
+end
+
+function GPX:AddClassProfileReactiveSpell(profileId, spellID)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.AddClassProfileReactiveSpell then
+        return WoWXSystems.GameTypeDB:AddClassProfileReactiveSpell(profileId, spellID)
+    end
+    return false
+end
+
+function GPX:UpdateClassProfileReactiveSpell(profileId, index, spellID)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.UpdateClassProfileReactiveSpell then
+        return WoWXSystems.GameTypeDB:UpdateClassProfileReactiveSpell(profileId, index, spellID)
+    end
+    return false
+end
+
+function GPX:RemoveClassProfileReactiveSpell(profileId, index)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.RemoveClassProfileReactiveSpell then
+        return WoWXSystems.GameTypeDB:RemoveClassProfileReactiveSpell(profileId, index)
+    end
+    return false
+end
+
+function GPX:AddClassProfileResource(profileId, definition)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.AddClassProfileResource then
+        return WoWXSystems.GameTypeDB:AddClassProfileResource(profileId, definition)
+    end
+    return false
+end
+
+function GPX:RemoveClassProfileResource(profileId, index)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.RemoveClassProfileResource then
+        return WoWXSystems.GameTypeDB:RemoveClassProfileResource(profileId, index)
+    end
+    return false
+end
+
+function GPX:UpdateClassProfileResource(profileId, index, definition)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.UpdateClassProfileResource then
+        return WoWXSystems.GameTypeDB:UpdateClassProfileResource(profileId, index, definition)
+    end
+    return false
+end
+
+function GPX:IsReactiveSpellID(spellID)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.IsSpellReactiveForActiveProfile then
+        return WoWXSystems.GameTypeDB:IsSpellReactiveForActiveProfile(spellID)
+    end
+    return false
+end
+
+function GPX:ExportSpellDBText()
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.ExportSpellDBText then
+        return WoWXSystems.GameTypeDB:ExportSpellDBText()
+    end
+    return ""
+end
+
+function GPX:ImportSpellDBText(text, mode)
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.ImportSpellDBText then
+        return WoWXSystems.GameTypeDB:ImportSpellDBText(text, mode)
+    end
+    return false, "GameTypeDB import unavailable."
+end
+
+function GPX:GetOutputWindowText()
+    local frame = self:EnsureOutputWindow()
+    if frame and frame._wowxOutputEdit and frame._wowxOutputEdit.GetText then
+        return tostring(frame._wowxOutputEdit:GetText() or "")
+    end
+    return ""
+end
+
+function GPX:ShowSpellDBExportWindow()
+    local text = self:ExportSpellDBText()
+    if not text or text == "" then
+        self:Print("SpellDB export is empty.")
+        return
+    end
+
+    local lines = {}
+    for line in string.gmatch(text, "[^\n]+") do
+        lines[#lines + 1] = line
+    end
+    self:SetOutputWindowLines(lines, "SpellDB Export", true)
+end
+
+function GPX:ImportSpellDBFromOutputWindow(mode)
+    local text = self:GetOutputWindowText()
+    if text == "" then
+        self:Print("Output window is empty. Paste SpellDB text first, then import.")
+        return false
+    end
+
+    local ok, result = self:ImportSpellDBText(text, mode)
+    if not ok then
+        self:Print("SpellDB import failed: " .. tostring(result))
+        return false
+    end
+
+    self:Print("SpellDB import complete: mode=" .. tostring(result.mode)
+        .. " profiles=" .. tostring(result.importedProfiles)
+        .. " active=" .. tostring(result.activeProfileId or ""))
+
+    if self.SettingsUI and self.SettingsUI.frame and self.SettingsUI.frame:IsShown() then
+        self.SettingsUI:Refresh()
+    end
+    if self.VisualBar and self.VisualBar.UpdateAll then
+        self.VisualBar:UpdateAll()
+    end
+    return true
 end
 
 function GPX:GetResolvedClassToken(unit)
@@ -1303,6 +1584,107 @@ function GPX:IsCoAStealthPageClass(unit)
 
     local classToken = self:GetResolvedClassToken(unit)
     return classToken == "REAPER"
+end
+
+function GPX:IsDruidDualStealthPagerClass(unit)
+    local _, classFile = UnitClass(unit or "player")
+    if classFile ~= "DRUID" then
+        return false
+    end
+    return not self:IsCoARealm()
+end
+
+function GPX:IsDruidCatFormActive()
+    local _, classFile = UnitClass("player")
+    if classFile ~= "DRUID" then
+        return false
+    end
+    if not (GetNumShapeshiftForms and GetShapeshiftForm and GetShapeshiftFormInfo) then
+        return false
+    end
+
+    local currentForm = tonumber(GetShapeshiftForm() or 0) or 0
+    if currentForm < 1 then
+        return false
+    end
+
+    local icon, name, active = GetShapeshiftFormInfo(currentForm)
+    if active ~= 1 then
+        return false
+    end
+
+    local loweredIcon = string.lower(tostring(icon or ""))
+    local loweredName = string.lower(tostring(name or ""))
+    if string.find(loweredIcon, "ability_druid_catform", 1, true)
+        or string.find(loweredName, "cat", 1, true)
+        or string.find(loweredName, "feline", 1, true) then
+        return true
+    end
+
+    return false
+end
+
+function GPX:GetMainActionPageState(unit)
+    unit = unit or "player"
+    local _, classFile = UnitClass(unit)
+    local stealthed = IsStealthed and IsStealthed() or false
+    local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
+    local actionPage = GetActionBarPage and (tonumber(GetActionBarPage()) or 1) or 1
+
+    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.EvaluatePagerRules then
+        local page, reason = WoWXSystems.GameTypeDB:EvaluatePagerRules({
+            unit = unit,
+            classFile = classFile,
+            stealthed = stealthed,
+            bonusOffset = bonusOffset,
+            actionPage = actionPage,
+        })
+        if page then
+            return page, reason or "manual-rule"
+        end
+    end
+
+    if self:IsCoAStealthPageClass(unit) then
+        return stealthed and 7 or 1, "coa-stealth"
+    end
+
+    if self:IsDruidDualStealthPagerClass(unit) then
+        if stealthed then
+            return 8, "druid-prowl"
+        end
+        if bonusOffset > 0 then
+            if bonusOffset == 1 then
+                return 7, "druid-cat"
+            elseif bonusOffset == 2 then
+                return 8, "druid-stealth"
+            elseif bonusOffset == 3 then
+                return 9, "druid-bear"
+            elseif bonusOffset == 4 then
+                return 10, "druid-moonkin"
+            end
+            return 6 + bonusOffset, "druid-bonus"
+        end
+        if actionPage >= 7 and actionPage <= 10 then
+            return actionPage, "druid-actionpage"
+        end
+        if self:IsDruidCatFormActive() then
+            return 7, "druid-cat-form"
+        end
+        return 1, "druid-base"
+    end
+
+    if bonusOffset > 0 then
+        return 6 + bonusOffset, "bonus"
+    end
+
+    if not self:IsCoARealm() then
+        if actionPage < 1 then
+            actionPage = 1
+        end
+        return actionPage, "native"
+    end
+
+    return 1, "coa-base"
 end
 
 function GPX:GetControllerConfig()
@@ -2204,16 +2586,20 @@ function GPX:CollectStanceDiagnosticsLines()
     local realmName = GetRealmName and GetRealmName() or "unknown"
     local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
     local actionPage = GetActionBarPage and (tonumber(GetActionBarPage()) or 1) or 1
+    local pagerPage, pagerReason = self:GetMainActionPageState("player")
     local hasBonus = HasBonusActionBar and HasBonusActionBar() or false
     local isStealthed = IsStealthed and IsStealthed() or false
     local isCoA = self:IsCoARealm()
+    local realmFlavor = self:GetAscensionRealmFlavor()
     local usesDruidStanceFallback = (classFile == "DRUID") and (not isCoA)
     add("StanceDiag:")
-    add("  Realm: " .. tostring(realmName) .. " coaMode=" .. tostring(isCoA))
+    add("  Realm: " .. tostring(realmName) .. " flavor=" .. tostring(realmFlavor) .. " coaMode=" .. tostring(isCoA))
     add("  PlayerClass: " .. tostring(className or "") .. " (" .. tostring(classFile or "") .. ")")
     add("  ResolvedClassToken: " .. tostring(resolvedClassToken or ""))
     add("  BarState: bonusOffset=" .. tostring(bonusOffset)
         .. " actionPage=" .. tostring(actionPage)
+        .. " pagerPage=" .. tostring(pagerPage)
+        .. " pagerReason=" .. tostring(pagerReason)
         .. " hasBonus=" .. tostring(hasBonus)
         .. " stealthed=" .. tostring(isStealthed))
     add("  BaseMacroFallback: druidStance=" .. tostring(usesDruidStanceFallback))
@@ -3725,15 +4111,7 @@ function GPX:Slash(msg)
         arg = arg or argFull
         styleArg = (styleArg ~= "") and styleArg or nil
 
-        local styleAliases = {
-            ps5 = "playstation", ps4 = "playstation", ps = "playstation",
-            playstation = "playstation",
-            xbox = "xbox", xb = "xbox",
-            switch = "switch", ns = "switch",
-            generic = "generic",
-            keyboard = "keyboard", kb = "keyboard",
-        }
-        local resolvedStyle = styleArg and styleAliases[styleArg]
+        local resolvedStyle = styleArg and self:GetEffectiveControllerStyleId({ deviceId = styleArg })
 
         if arg == "keyboard" then
             self.db.characterOptIn = true
@@ -3783,10 +4161,14 @@ function GPX:Slash(msg)
     elseif cmd == "init" or cmd == "recal" or cmd == "setup" then
         self:OpenSetupWizard(cmd)
 
-    elseif cmd == "config" or cmd == "options" then
+    elseif cmd == "config" or cmd == "settings" or cmd == "options" then
         self:OpenSettings()
 
     elseif cmd == "gridbook" or cmd == "spellgrid" then
+        if not self:IsSystemEnabled("spellgrid") then
+            self:Print("SpellGrid system is disabled in settings.")
+            return
+        end
         if self.SpellbookUI then
             self.SpellbookUI:CreateFrame()
             if self.SpellbookUI.frame and self.SpellbookUI.frame:IsShown() then
@@ -3833,6 +4215,10 @@ function GPX:Slash(msg)
         self:PrintManualPlacementGuide()
 
     elseif cmd == "controller" then
+        if not self:IsSystemEnabled("gamepad") then
+            self:Print("Gamepad system is disabled in settings.")
+            return
+        end
         local arg = string.lower((rest or ""):match("^%s*(.-)%s*$"))
         if arg == "platformer" or arg == "platformer on" or arg == "platformer 1" or arg == "platformer enable" then
             self:SetControllerMouseLookMode("platformer")
@@ -3878,6 +4264,10 @@ function GPX:Slash(msg)
         end
 
     elseif cmd == "bags" then
+        if not self:IsSystemEnabled("bags") then
+            self:Print("Bags system is disabled in settings.")
+            return
+        end
         if self.ActionButtons and self.ActionButtons.Slash then
             self.ActionButtons:Slash(rest)
         else
@@ -4095,6 +4485,22 @@ function GPX:Slash(msg)
             self:Print("Usage: /wowx out [window|toggle|clear|copy]")
         end
 
+    elseif cmd == "spelldb" or cmd == "spellsdb" then
+        local arg = string.lower((rest or ""):match("^%s*(.-)%s*$"))
+        if arg == "" or arg == "help" then
+            self:Print("Usage: /wowx spelldb [export|copy|window|import merge|import replace]")
+            self:Print("Flow: /wowx spelldb export -> copy/share -> paste in output window -> /wowx spelldb import merge")
+        elseif arg == "export" or arg == "copy" or arg == "window" then
+            self:ShowSpellDBExportWindow()
+            self:Print("SpellDB exported to output window (auto-selected). Ctrl+C to copy.")
+        elseif arg == "import" or arg == "import merge" then
+            self:ImportSpellDBFromOutputWindow("merge")
+        elseif arg == "import replace" then
+            self:ImportSpellDBFromOutputWindow("replace")
+        else
+            self:Print("Usage: /wowx spelldb [export|copy|window|import merge|import replace]")
+        end
+
     elseif cmd == "bar" then
         if GPX.VisualBar then
             GPX.VisualBar:Slash(rest)
@@ -4209,6 +4615,9 @@ function GPX:PrintHelp()
     self:Print("  "..c.."/wowx diagwin"..r.."            Toggle selectable output window")
     self:Print("  "..c.."/wowx diagauto [on|off]"..r.."   Toggle auto diagnostics on login/state changes")
     self:Print("  "..c.."/wowx out [window|toggle|clear|copy]"..r.." Open/copy selectable output mirror")
+    self:Print("  "..c.."/wowx spelldb export"..r.."    Export class/resource/reactive DB into output window")
+    self:Print("  "..c.."/wowx spelldb import merge"..r.." Import from output window (merge by profile id)")
+    self:Print("  "..c.."/wowx spelldb import replace"..r.." Replace SpellDB profiles from output window")
     self:Print("  "..c.."/wowx bar toggle"..r.."         Show or hide the visual WoWX bar")
     self:Print("  "..c.."/wowx bar progress"..r.."       Toggle XP/Rep tracker strip")
     self:Print("  "..c.."/wowx bar progresslock"..r.."   Lock/unlock XP/Rep bar placement")
@@ -4262,8 +4671,15 @@ function GPX:PrintStatus()
     end
     self:Print("  Profile: " .. (self.db.profile or "default") .. "  (" .. bindCount .. " bindings defined)")
     self:Print("  Controller mode: " .. (self:IsControllerEnabled() and "enabled" or "disabled (base-first)"))
+    local realmFlavor = self.GetAscensionRealmFlavor and self:GetAscensionRealmFlavor() or "other"
+    self:Print("  Realm flavor: " .. tostring(realmFlavor) .. " (CoA=" .. tostring(self:IsCoARealm()) .. ")")
+    local pagerPage, pagerReason = self:GetMainActionPageState("player")
+    self:Print("  Action Bar Pager: page " .. tostring(pagerPage) .. " [" .. tostring(pagerReason) .. "]")
     local engineCfg = self:GetBindingEngineConfig()
     self:Print("  Engine: " .. engineCfg.transport .. " (mods=" .. tostring(engineCfg.claimModifiers) .. ", combo=" .. tostring(engineCfg.claimCombo) .. ")")
+    if self.ClickTransport and self.ClickTransport.GetProxyButtonCount then
+        self:Print("  Click transport proxies: " .. tostring(self.ClickTransport:GetProxyButtonCount()))
+    end
     local syncCfg = self:GetBindingSyncConfig()
     self:Print("  Binding sync: " .. (syncCfg.enabled and "ON" or "OFF") .. " (" .. syncCfg.scope .. ")")
     self:Print("  Calibrated: " .. (self:HasCalibratedSetup(profile) and "yes" or "no"))

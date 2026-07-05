@@ -2951,7 +2951,24 @@ function Bar:GetControllerVisualForSlot(index)
         return nil, nil
     end
 
-    return slotLabel, GPX:GetButtonTexture(styleId, slotLabel)
+    return slotLabel, GPX:GetButtonTexture(styleId, slotLabel), styleId
+end
+
+local function buildControllerBadgeText(styleId, slotLabel, index)
+    if styleId == "generic" then
+        return tostring(index)
+    end
+
+    local text = tostring(slotLabel or "")
+    if text == "D-Left" then return "DL" end
+    if text == "D-Up" then return "DU" end
+    if text == "D-Right" then return "DR" end
+    if text == "D-Down" then return "DD" end
+    if text == "Back" then return "BK" end
+    if text == "Start" then return "ST" end
+    if text == "Minus" then return "-" end
+    if text == "Plus" then return "+" end
+    return text
 end
 
 function Bar:GetCommandForButton(index, state)
@@ -2998,42 +3015,10 @@ function Bar:GetButtonCandidates(command)
 end
 
 local function getCurrentMainActionPage()
-    local _, classFile = UnitClass("player")
-    local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
-    local stealthed = IsStealthed and IsStealthed() or false
-
-    if GPX and GPX.IsCoAStealthPageClass and GPX:IsCoAStealthPageClass("player") then
-        return stealthed and 7 or 1
+    if GPX and GPX.GetMainActionPageState then
+        local page = GPX:GetMainActionPageState("player")
+        return tonumber(page) or 1
     end
-
-    if GetBonusBarOffset then
-        local bonusOffset = tonumber(GetBonusBarOffset()) or 0
-        if bonusOffset > 0 then
-            if classFile == "DRUID" and not isCoA then
-                if bonusOffset == 1 then
-                    return stealthed and 8 or 7
-                elseif bonusOffset == 2 then
-                    return 8
-                elseif bonusOffset == 3 then
-                    return 9
-                elseif bonusOffset == 4 then
-                    return 10
-                end
-            end
-            return 6 + bonusOffset
-        end
-    end
-
-    if not isCoA and GetActionBarPage then
-        local page = tonumber(GetActionBarPage()) or 1
-        if page < 1 then
-            page = 1
-        end
-        return page
-    end
-
-    -- CoA realms can report stale/non-visual page values after aura-driven swaps;
-    -- treat base page as authoritative whenever bonus offset is zero.
     return 1
 end
 
@@ -3043,7 +3028,6 @@ function Bar:ResolveCommand(command)
         local liveButton = _G["ActionButton" .. mainIndex]
         local liveAction = liveButton and liveButton.action or nil
         local _, classFile = UnitClass("player")
-        local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
         local stealthed = IsStealthed and IsStealthed() or false
         local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
         local page = getCurrentMainActionPage()
@@ -3072,7 +3056,7 @@ function Bar:ResolveCommand(command)
         -- reliable signal for Runeshroud page routing. Treat bonusOffset as
         -- authoritative when present for ACTIONBUTTON slot resolution.
         if bonusOffset > 0 then
-            if classFile == "DRUID" and not isCoA then
+            if GPX and GPX.IsDruidDualStealthPagerClass and GPX:IsDruidDualStealthPagerClass("player") then
                 local bonusButton = _G["BonusActionButton" .. mainIndex]
                 local bonusAction = bonusButton and tonumber(bonusButton.action)
                 if bonusAction and bonusAction > 0 then
@@ -3083,6 +3067,23 @@ function Bar:ResolveCommand(command)
                 end
             end
             return slot
+        end
+
+        if classFile == "DRUID" and GPX and GPX.IsDruidDualStealthPagerClass and GPX:IsDruidDualStealthPagerClass("player") then
+            if stealthed then
+                local prowlSlot = (7 * 12) + mainIndex
+                if HasAction and HasAction(prowlSlot) then
+                    return prowlSlot
+                end
+                return prowlSlot
+            end
+            if GPX.IsDruidCatFormActive and GPX:IsDruidCatFormActive() then
+                local catSlot = (6 * 12) + mainIndex
+                if HasAction and HasAction(catSlot) then
+                    return catSlot
+                end
+                return catSlot
+            end
         end
 
         if page > 1 then
@@ -3145,6 +3146,22 @@ function Bar:GetActionName(slot)
     end
 
     return nil
+end
+
+function Bar:IsReactiveSpellActive(actionSlot, actionType, actionID, isUsable)
+    if actionType ~= "spell" or not actionID then
+        return false
+    end
+
+    if IsSpellOverlayed and IsSpellOverlayed(actionID) then
+        return true
+    end
+
+    if GPX and GPX.IsReactiveSpellID and GPX:IsReactiveSpellID(actionID) then
+        return isUsable == true
+    end
+
+    return false
 end
 
 function Bar:IsNativeUtilitySlot(slot)
@@ -3651,6 +3668,20 @@ function Bar:CreateFrame()
         controllerIcon:SetTexCoord(0, 1, 0, 1)
         controllerIcon:Hide()
 
+        local controllerBadge = button:CreateTexture(nil, "OVERLAY")
+        controllerBadge:SetWidth(20)
+        controllerBadge:SetHeight(20)
+        controllerBadge:SetPoint("CENTER", controllerIcon, "CENTER", 0, 0)
+        controllerBadge:SetTexture("Interface\\COMMON\\Indicator-Black")
+        controllerBadge:SetVertexColor(0.02, 0.02, 0.02, 0.95)
+        controllerBadge:Hide()
+
+        local controllerBadgeText = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        controllerBadgeText:SetPoint("CENTER", controllerBadge, "CENTER", 0, 0)
+        controllerBadgeText:SetJustifyH("CENTER")
+        controllerBadgeText:SetTextColor(1.0, 1.0, 1.0)
+        controllerBadgeText:Hide()
+
         button.icon = icon
         button.glyph = glyph
         button.name = name
@@ -3659,6 +3690,8 @@ function Bar:CreateFrame()
         button.shine = shine
         button.cooldown = cooldown
         button.controllerIcon = controllerIcon
+        button.controllerBadge = controllerBadge
+        button.controllerBadgeText = controllerBadgeText
         button:SetAttribute("type", nil)
         button:SetAttribute("action", nil)
         button:SetAttribute("type2", nil)
@@ -3866,10 +3899,14 @@ function Bar:UpdateButtonVisualState(button)
 
         local usable, oom = IsUsableAction(display.slot)
         local inRange = IsActionInRange(display.slot)
-        local actionType = GetActionInfo and select(1, GetActionInfo(display.slot)) or nil
+        local actionType, actionID = nil, nil
+        if GetActionInfo then
+            actionType, actionID = GetActionInfo(display.slot)
+        end
         local actionCount = GetActionCount and (GetActionCount(display.slot) or 0) or 0
         local stackCount = (actionType == "spell") and 0 or actionCount
         local equippedAction = IsEquippedAction and IsEquippedAction(display.slot)
+        local reactiveGlow = self:IsReactiveSpellActive(display.slot, actionType, actionID, usable)
         local red, green, blue = 1.0, 1.0, 1.0
         local finalAlpha = alpha
 
@@ -3908,6 +3945,9 @@ function Bar:UpdateButtonVisualState(button)
             local isQueued = IsCurrentAction and IsCurrentAction(display.slot)
             if isQueued then
                 button.shine:SetVertexColor(1.0, 0.82, 0.0, 0.55)
+                button.shine:Show()
+            elseif reactiveGlow then
+                button.shine:SetVertexColor(1.0, 0.55, 0.16, 0.78)
                 button.shine:Show()
             elseif equippedAction then
                 button.shine:SetVertexColor(0.2, 1.0, 0.42, 0.5)
@@ -4007,7 +4047,7 @@ function Bar:UpdateButton(index, state)
     local iconInset = hasAction and 2 or 4
 
     local keyLabel = physicalKey or defaultKeyHints[index] or tostring(index)
-    local controllerLabel, controllerTexture = self:GetControllerVisualForSlot(index)
+    local controllerLabel, controllerTexture, controllerStyleId = self:GetControllerVisualForSlot(index)
     button.glyph:SetText(keyLabel)
     button.name:SetText("")
     if showSecondaryKeyText then
@@ -4026,6 +4066,33 @@ function Bar:UpdateButton(index, state)
         else
             button.controllerIcon:Hide()
         end
+    end
+
+    local showBadge = GPX:IsControllerEnabled() and controllerLabel and controllerLabel ~= "" and not controllerTexture
+    if button.controllerBadge and button.controllerBadgeText then
+        if showBadge then
+            local badgeText = buildControllerBadgeText(controllerStyleId, controllerLabel, index)
+            button.controllerBadgeText:SetText(tostring(badgeText or ""))
+            button.controllerBadge:Show()
+            button.controllerBadgeText:Show()
+        else
+            button.controllerBadge:Hide()
+            button.controllerBadgeText:Hide()
+        end
+    end
+
+    if GPX:IsControllerEnabled() and controllerLabel and controllerLabel ~= "" then
+        if controllerTexture or showBadge then
+            button.name:SetText("")
+            button.name:Hide()
+        else
+            button.name:SetText(tostring(controllerLabel))
+            button.name:SetTextColor(0.95, 0.96, 1.0)
+            button.name:Show()
+        end
+    else
+        button.name:SetText("")
+        button.name:Hide()
     end
 
     button.display = display
@@ -4395,6 +4462,8 @@ eventFrame:RegisterEvent("UPDATE_POSSESS_BAR")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("SPELLS_CHANGED")
 eventFrame:RegisterEvent("UPDATE_BINDINGS")
+eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
+eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
 eventFrame:RegisterEvent("PLAYER_XP_UPDATE")
 eventFrame:RegisterEvent("UPDATE_FACTION")
 eventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
