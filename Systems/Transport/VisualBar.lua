@@ -1152,6 +1152,10 @@ function Bar:GetVisibleButtonCount()
     -- Controller mode: respect configured button count
     local visibleCount = clamp(math.floor((tonumber(layout.buttonCount) or BAR_BUTTON_COUNT) + 0.5), 1, BAR_BUTTON_COUNT)
     local setup = self:GetSetup()
+    local style = self:GetStyle()
+    local combatLabels = style and style.combatSlotLabels or nil
+    local combatVisibleCount = type(combatLabels) == "table" and #combatLabels or BAR_BUTTON_COUNT
+    visibleCount = math.min(visibleCount, combatVisibleCount)
     visibleCount = math.min(visibleCount, GPX:GetConfiguredActionButtonCount(setup, self:GetProfile()))
     
     return visibleCount
@@ -3016,8 +3020,6 @@ end
 function Bar:ResolveCommand(command)
     local mainIndex = tonumber(command and command:match("^ACTIONBUTTON(%d+)$"))
     if mainIndex then
-        local liveButton = _G["ActionButton" .. mainIndex]
-        local liveAction = liveButton and liveButton.action or nil
         local _, classFile = UnitClass("player")
         local stealthed = IsStealthed and IsStealthed() or false
         local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
@@ -3033,13 +3035,6 @@ function Bar:ResolveCommand(command)
                 end
                 return slot
             end
-
-            if liveAction and liveAction ~= mainIndex then
-                return liveAction
-            end
-            if HasAction and HasAction(mainIndex) then
-                return mainIndex
-            end
             return mainIndex
         end
 
@@ -3052,9 +3047,6 @@ function Bar:ResolveCommand(command)
                 local bonusAction = bonusButton and tonumber(bonusButton.action)
                 if bonusAction and bonusAction > 0 then
                     return bonusAction
-                end
-                if HasAction and HasAction(slot) then
-                    return slot
                 end
             end
             return slot
@@ -3078,25 +3070,7 @@ function Bar:ResolveCommand(command)
         end
 
         if page > 1 then
-            if liveAction then
-                return liveAction
-            end
-            if HasAction and HasAction(slot) then
-                return slot
-            end
             return slot
-        end
-
-        if liveAction and liveAction ~= mainIndex then
-            return liveAction
-        end
-
-        if HasAction and HasAction(slot) then
-            return slot
-        end
-
-        if liveButton and liveButton.action then
-            return liveButton.action
         end
         return slot
     end
@@ -4301,11 +4275,11 @@ function Bar:UpdateAll()
             self.frame._wowxShell:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.98)
             self.frame._wowxShell:SetBackdropColor(0.12, 0.09, 0.03, math.max(chromeAlpha, 0.16))
         elseif self:IsLayoutEditLocked() then
-            self.frame._wowxShell:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.9)
-            self.frame._wowxShell:SetBackdropColor(0.05, 0.07, 0.12, chromeAlpha)
+            self.frame._wowxShell:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
+            self.frame._wowxShell:SetBackdropColor(0.05, 0.07, 0.12, 0.0)
         else
-            self.frame._wowxShell:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.96)
-            self.frame._wowxShell:SetBackdropColor(0.12, 0.09, 0.03, math.max(chromeAlpha, 0.16))
+            self.frame._wowxShell:SetBackdropBorderColor(0.96, 0.8, 0.22, 0.0)
+            self.frame._wowxShell:SetBackdropColor(0.12, 0.09, 0.03, 0.0)
         end
     end
 
