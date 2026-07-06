@@ -2945,7 +2945,10 @@ function Bar:GetControllerVisualForSlot(index)
     local setup = self:GetSetup()
     local profile = self:GetProfile()
     local styleId = GPX:GetEffectiveControllerStyleId(setup, profile)
-    local labels = GPX:GetCombatSlotLabels(styleId)
+    -- Use slot-order labels for glyph placement so icon position follows the
+    -- calibrated slot map (e.g. X bound to slot 3 renders in position 3).
+    local style = GPX:GetInputStyle(styleId)
+    local labels = (style and style.slotLabels) or GPX:GetCombatSlotLabels(styleId)
     if not labels or #labels == 0 then
         return nil, nil
     end
