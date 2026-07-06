@@ -2285,6 +2285,12 @@ function GPX:ApplyQuickTogglePreset(mode, styleId)
         setup.inputStyle = "keyboard"
         setup.actionKeyBaseSlot = 2
         setup.actionButtonCount = 12
+        setup.jumpKey = "1"
+        setup.actionKeys = {}
+        local keyboardKeys = { "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
+        for slotIndex = 2, setup.actionButtonCount do
+            self:SetSetupActionKey(setup, slotIndex, keyboardKeys[slotIndex - 1])
+        end
         setup.modifiers = setup.modifiers or { "SHIFT", "ALT", "CTRL" }
         if not setup.modifiers[1] then setup.modifiers[1] = "SHIFT" end
         if not setup.modifiers[2] then setup.modifiers[2] = "ALT" end
