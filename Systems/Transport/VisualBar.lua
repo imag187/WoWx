@@ -3020,6 +3020,8 @@ end
 function Bar:ResolveCommand(command)
     local mainIndex = tonumber(command and command:match("^ACTIONBUTTON(%d+)$"))
     if mainIndex then
+        local liveButton = _G["ActionButton" .. mainIndex]
+        local liveAction = liveButton and liveButton.action or nil
         local _, classFile = UnitClass("player")
         local stealthed = IsStealthed and IsStealthed() or false
         local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
@@ -3032,6 +3034,12 @@ function Bar:ResolveCommand(command)
                 local bonusAction = bonusButton and tonumber(bonusButton.action)
                 if bonusAction and bonusAction > 0 then
                     return bonusAction
+                end
+                if liveAction and liveAction ~= mainIndex then
+                    return liveAction
+                end
+                if HasAction and HasAction(mainIndex) then
+                    return mainIndex
                 end
                 return slot
             end
@@ -3047,6 +3055,9 @@ function Bar:ResolveCommand(command)
                 local bonusAction = bonusButton and tonumber(bonusButton.action)
                 if bonusAction and bonusAction > 0 then
                     return bonusAction
+                end
+                if HasAction and HasAction(slot) then
+                    return slot
                 end
             end
             return slot
@@ -3070,7 +3081,25 @@ function Bar:ResolveCommand(command)
         end
 
         if page > 1 then
+            if liveAction then
+                return liveAction
+            end
+            if HasAction and HasAction(slot) then
+                return slot
+            end
             return slot
+        end
+
+        if liveAction and liveAction ~= mainIndex then
+            return liveAction
+        end
+
+        if HasAction and HasAction(slot) then
+            return slot
+        end
+
+        if liveButton and liveButton.action then
+            return liveButton.action
         end
         return slot
     end
