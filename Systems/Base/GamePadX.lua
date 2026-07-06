@@ -981,13 +981,17 @@ function GPX:GetConfiguredActionButtonCount(setup, profile)
         styleId = self:GetEffectiveControllerStyleId(setup, profile)
     end
 
-    local labels = self:GetCombatSlotLabels(styleId)
+    local style = self:GetInputStyle(styleId)
+    local actionLabels = style and style.slotLabels or nil
+    local actionLabelCount = type(actionLabels) == "table" and #actionLabels or 0
 
-    if self:IsControllerEnabled() and #labels > 0 then
+    -- Keep behavior tied to full action-slot capacity, not combat display labels.
+    -- This prevents icon/style-only changes from altering live bar/pager behavior.
+    if self:IsControllerEnabled() and actionLabelCount > 0 then
         if configured and configured > 0 then
-            return math.min(configured, #labels)
+            return math.min(configured, actionLabelCount)
         end
-        return #labels
+        return actionLabelCount
     end
 
     if configured and configured > 0 then
