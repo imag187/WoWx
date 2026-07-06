@@ -6,6 +6,17 @@ WoWXSystems = WoWXSystems or {}
 local DB = {}
 WoWXSystems.GameTypeDB = DB
 
+local function deepCopy(source)
+    if type(source) ~= "table" then
+        return source
+    end
+    local copy = {}
+    for key, value in pairs(source) do
+        copy[deepCopy(key)] = deepCopy(value)
+    end
+    return setmetatable(copy, getmetatable(source))
+end
+
 local catalog = {
     classic = {
         id = "classic",
@@ -279,17 +290,6 @@ end
 
 local function normalize(text)
     return string.lower(tostring(text or ""))
-end
-
-local function deepCopy(source)
-    if type(source) ~= "table" then
-        return source
-    end
-    local copy = {}
-    for key, value in pairs(source) do
-        copy[deepCopy(key)] = deepCopy(value)
-    end
-    return setmetatable(copy, getmetatable(source))
 end
 
 local SPELLDB_SHARE_HEADER = "WOWX_SPELLDB_V1"
