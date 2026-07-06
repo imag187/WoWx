@@ -38,6 +38,8 @@ local modifierStates = {
 
 local cachedDisplayStates = { "", "SHIFT", "ALT", "CTRL", "SHIFT-ALT" }
 
+local controllerActionKeyOrder = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
+
 local placementRows = {
     { state = "", label = "Base" },
     { state = "SHIFT", label = "Shift" },
@@ -2945,15 +2947,29 @@ function Bar:GetControllerVisualForSlot(index)
     local setup = self:GetSetup()
     local profile = self:GetProfile()
     local styleId = GPX:GetEffectiveControllerStyleId(setup, profile)
-    -- Use slot-order labels for glyph placement so icon position follows the
-    -- calibrated slot map (e.g. X bound to slot 3 renders in position 3).
     local style = GPX:GetInputStyle(styleId)
-    local labels = (style and style.slotLabels) or GPX:GetCombatSlotLabels(styleId)
-    if not labels or #labels == 0 then
-        return nil, nil
+    local labels = GPX:GetCombatDisplayLabels(styleId)
+    local keyText = tostring(self:GetPhysicalKeyForButton(index) or "")
+    local normalizedKey = string.upper(keyText)
+
+    local slotLabel = nil
+    if labels and #labels > 0 then
+        for labelIndex, key in ipairs(controllerActionKeyOrder) do
+            if normalizedKey == key then
+                slotLabel = labels[labelIndex]
+                break
+            end
+        end
     end
 
-    local slotLabel = labels[tonumber(index) or 0]
+    if (not slotLabel or slotLabel == "") and setup and setup.jumpKey and string.upper(tostring(setup.jumpKey)) == normalizedKey then
+        slotLabel = style and style.confirmLabel or nil
+    end
+
+    if (not slotLabel or slotLabel == "") and style and style.slotLabels then
+        slotLabel = style.slotLabels[tonumber(index) or 0]
+    end
+
     if not slotLabel or slotLabel == "" then
         return nil, nil
     end
