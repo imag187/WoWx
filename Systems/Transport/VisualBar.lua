@@ -3105,22 +3105,20 @@ function Bar:ResolveCommand(command)
     end
 
     local candidates = self:GetButtonCandidates(command)
-    -- Deterministic command->slot mapping is the source of truth for modifier
-    -- pages so already-placed actions are honored across reloads/machines.
+    if candidates then
+        for _, buttonName in ipairs(candidates) do
+            local button = _G[buttonName]
+            if button and button.action then
+                return button.action
+            end
+        end
+    end
+
+    -- Only fall back to static command slots when Blizzard buttons are not
+    -- available; this keeps WoWX display aligned to live Blizzard ownership.
     local staticSlot = GPX.ClickTransport and GPX.ClickTransport:StaticSlotForCommand(command) or nil
     if staticSlot then
         return staticSlot
-    end
-
-    if not candidates then
-        return nil
-    end
-
-    for _, buttonName in ipairs(candidates) do
-        local button = _G[buttonName]
-        if button and button.action then
-            return button.action
-        end
     end
 
     return nil
