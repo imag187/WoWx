@@ -16,16 +16,17 @@ GPX.ClickTransport = CT
 
 -- ---------------------------------------------------------------------------
 -- Static slot map: compile-time fallbacks when native bar button .action is nil.
--- WotLK 3.3.5a canonical command slots:
--- MULTIACTIONBAR1 = BottomLeft  (slots 61-72)
--- MULTIACTIONBAR2 = BottomRight (slots 49-60)
--- MULTIACTIONBAR3 = Right       (slots 25-36)
--- MULTIACTIONBAR4 = Left        (slots 37-48)
+-- WoWX maps modifier rows onto Blizzard main action bar pages so the same
+-- placed slots remain valid across WoWX and non-WoWX sessions:
+-- SHIFT     -> page 2 (slots 13-24)
+-- ALT       -> page 3 (slots 25-36)
+-- CTRL      -> page 4 (slots 37-48)
+-- SHIFT-ALT -> page 5 (slots 49-60)
 -- ---------------------------------------------------------------------------
 local multibarStaticOffset = {
-    ["MULTIACTIONBAR1BUTTON"] = 60,
-    ["MULTIACTIONBAR2BUTTON"] = 48,
-    ["MULTIACTIONBAR3BUTTON"] = 24,
+    ["MULTIACTIONBAR1BUTTON"] = 24,
+    ["MULTIACTIONBAR2BUTTON"] = 12,
+    ["MULTIACTIONBAR3BUTTON"] = 48,
     ["MULTIACTIONBAR4BUTTON"] = 36,
 }
 

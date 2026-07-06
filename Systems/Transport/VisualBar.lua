@@ -3104,6 +3104,14 @@ function Bar:ResolveCommand(command)
         return slot
     end
 
+    -- Modifier rows are modeled as deterministic Blizzard page slot ranges.
+    -- Resolve static slot first so display and key transport stay aligned with
+    -- cross-machine slot placement even when multibar frames are hidden.
+    local staticSlot = GPX.ClickTransport and GPX.ClickTransport:StaticSlotForCommand(command) or nil
+    if staticSlot then
+        return staticSlot
+    end
+
     local candidates = self:GetButtonCandidates(command)
     if candidates then
         for _, buttonName in ipairs(candidates) do
@@ -3112,13 +3120,6 @@ function Bar:ResolveCommand(command)
                 return button.action
             end
         end
-    end
-
-    -- Only fall back to static command slots when Blizzard buttons are not
-    -- available; this keeps WoWX display aligned to live Blizzard ownership.
-    local staticSlot = GPX.ClickTransport and GPX.ClickTransport:StaticSlotForCommand(command) or nil
-    if staticSlot then
-        return staticSlot
     end
 
     return nil
