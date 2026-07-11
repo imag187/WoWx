@@ -2294,21 +2294,27 @@ gridbookSyncFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ACTIONBAR_SLOT_CHANGED" then
         if InCombatLockdown() then
             GPX.SpellbookUI.pendingBarCapture = true
+            return
+        end
+        -- Batch all slot-change events (spec swap fires up to 72) into one
+        -- deferred full capture instead of 72 individual per-slot scans.
+        if GPX.SpellbookUI._slotChangePending then return end
+        GPX.SpellbookUI._slotChangePending = true
+        local function runCapture()
+            GPX.SpellbookUI._slotChangePending = nil
+            if InCombatLockdown() then
+                GPX.SpellbookUI.pendingBarCapture = true
+                return
+            end
+            GPX.SpellbookUI:CaptureGridbookFromActionSlots()
             if GPX.SpellbookUI.frame and GPX.SpellbookUI.frame:IsShown() then
                 GPX.SpellbookUI:Refresh()
             end
-            return
         end
-
-        local changedSlot = select(1, ...)
-        local changed = false
-        if changedSlot and tonumber(changedSlot) and tonumber(changedSlot) > 0 then
-            changed = GPX.SpellbookUI:WriteGridbookForSlot(changedSlot, false)
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.3, runCapture)
         else
-            changed = GPX.SpellbookUI:CaptureGridbookFromActionSlots()
-        end
-        if changed and GPX.SpellbookUI.frame and GPX.SpellbookUI.frame:IsShown() then
-            GPX.SpellbookUI:Refresh()
+            runCapture()
         end
     end
 end)

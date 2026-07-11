@@ -4482,15 +4482,49 @@ eventFrame:RegisterEvent("UNIT_INVENTORY_CHANGED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
+local _vbUpdatePending = false
+local function scheduleVisualBarUpdate()
+    if _vbUpdatePending then return end
+    _vbUpdatePending = true
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.15, function()
+            _vbUpdatePending = false
+            if GPX.VisualBar then GPX.VisualBar:UpdateAll() end
+        end)
+    else
+        _vbUpdatePending = false
+        if GPX.VisualBar then GPX.VisualBar:UpdateAll() end
+    end
+end
+
 eventFrame:SetScript("OnEvent", function(_, event)
-    if GPX.VisualBar then
-        if event == "PLAYER_REGEN_DISABLED" and GPX.UIMode and GPX.UIMode.activeContext == "bar" then
+    if not GPX.VisualBar then return end
+    if event == "PLAYER_REGEN_DISABLED" then
+        if GPX.UIMode and GPX.UIMode.activeContext == "bar" then
             GPX.UIMode:Exit()
         end
-        if event == "PLAYER_REGEN_ENABLED" and GPX.VisualBar.pendingAttributeRefresh then
-            GPX.VisualBar:UpdateAll()
-            return
-        end
-        GPX.VisualBar:UpdateAll()
+        return
     end
+    if event == "PLAYER_REGEN_ENABLED" then
+        if GPX.VisualBar.pendingAttributeRefresh then
+            GPX.VisualBar:UpdateAll()
+        end
+        return
+    end
+    -- High-frequency slot/cooldown/usable events: coalesce into one deferred update.
+    if event == "ACTIONBAR_SLOT_CHANGED"
+        or event == "ACTIONBAR_UPDATE_USABLE"
+        or event == "ACTIONBAR_UPDATE_COOLDOWN"
+        or event == "UPDATE_SHAPESHIFT_USABLE"
+        or event == "UPDATE_SHAPESHIFT_COOLDOWN"
+        or event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW"
+        or event == "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE"
+        or event == "PLAYER_XP_UPDATE"
+        or event == "UPDATE_FACTION"
+        or event == "UNIT_INVENTORY_CHANGED" then
+        scheduleVisualBarUpdate()
+        return
+    end
+    -- All other events trigger an immediate full update.
+    GPX.VisualBar:UpdateAll()
 end)
