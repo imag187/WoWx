@@ -702,11 +702,13 @@ function GPX:QueueSpecSnapshotCapture(specIndex, reason)
             self.pendingSpecSwapLayout = true
             return
         end
-        self:StoreCurrentSpecActionBars(spec)
-        self._lastSpecSwapReason = reason
-        if self.VisualBar then
-            self.VisualBar:UpdateAll()
+        -- Only snapshot for non-native reasons (manual saves etc).
+        -- Native spec swap: let the debounced VisualBar event handler
+        -- handle the redraw; no extra UpdateAll needed here.
+        if reason ~= "native-swap" and reason ~= "same-group" then
+            self:StoreCurrentSpecActionBars(spec)
         end
+        self._lastSpecSwapReason = reason
     end
 
     if delaySeconds <= 0 or not (C_Timer and C_Timer.After) then
@@ -845,16 +847,12 @@ function GPX:HandleSpecSwapLayouts()
         return
     end
 
-    -- Native-first mode only: never rewrite action bars during spec change.
-    -- Let Blizzard/Ascension finish the swap, then snapshot the active layout.
-    self:QueueSpecSnapshotCapture(currentGroup, "native-swap")
-
+    -- Native-first mode only: Blizzard/Ascension owns the bar swap entirely.
+    -- Record the new group; the debounced ACTIONBAR_SLOT_CHANGED handler will
+    -- fire once everything settles and trigger the single VisualBar refresh.
     self.pendingSpecSwapSourceGroup = nil
     self.db.lastTalentGroup = currentGroup
-
-    if self.VisualBar then
-        self.VisualBar:UpdateAll()
-    end
+    self._lastSpecSwapReason = "native-swap"
 end
 
 function GPX:IsLikelySpecSwapSpell(spellName)
