@@ -667,7 +667,9 @@ function GPX:GetSpecSwapConfig()
     self.db.ui.specSwap = self.db.ui.specSwap or {}
 
     local cfg = self.db.ui.specSwap
-    if cfg.mode ~= "native" and cfg.mode ~= "restore" then
+    -- Always keep spec swap native-first on this fork. Rewriting action bars
+    -- during swap can cause long stalls/desync on Ascension clients.
+    if cfg.mode ~= "native" then
         cfg.mode = "native"
     end
 
@@ -832,7 +834,7 @@ function GPX:HandleSpecSwapLayouts()
         return
     end
 
-    local cfg = self:GetSpecSwapConfig()
+    self:GetSpecSwapConfig()
     local currentGroup = self:GetActiveTalentGroupSafe()
     local previousGroup = tonumber(self.pendingSpecSwapSourceGroup) or tonumber(self.db.lastTalentGroup) or currentGroup
 
@@ -843,17 +845,9 @@ function GPX:HandleSpecSwapLayouts()
         return
     end
 
-    self:StoreCurrentSpecActionBars(previousGroup)
-
-    if cfg.mode == "restore" then
-        if not self:RestoreSpecActionBars(currentGroup) then
-            self:StoreCurrentSpecActionBars(currentGroup)
-        end
-    else
-        -- Native-first mode: do not rewrite bars during swap. Let Blizzard settle,
-        -- then snapshot the active layout for WoWX display routing.
-        self:QueueSpecSnapshotCapture(currentGroup, "native-swap")
-    end
+    -- Native-first mode only: never rewrite action bars during spec change.
+    -- Let Blizzard/Ascension finish the swap, then snapshot the active layout.
+    self:QueueSpecSnapshotCapture(currentGroup, "native-swap")
 
     self.pendingSpecSwapSourceGroup = nil
     self.db.lastTalentGroup = currentGroup
