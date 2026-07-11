@@ -354,17 +354,79 @@ local guideSlotLabels = {
     [10] = "0", [11] = "-", [12] = "=",
 }
 
+local controllerActionKeyOrder = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
+
+local function getControllerGuideSlotLabel(slotIndex)
+    local profile = GPX:GetProfile()
+    local setup = profile and profile.setup
+    local styleId = GPX:GetEffectiveControllerStyleId(setup, profile)
+    local labels = GPX:GetCombatDisplayLabels(styleId)
+    local key = GPX:GetSetupActionKey(setup, slotIndex)
+
+    if (not key or key == "") and setup and setup.jumpKey and tonumber(slotIndex) == 1 then
+        key = setup.jumpKey
+    end
+
+    local normalizedKey = string.upper(tostring(key or ""))
+    for index, actionKey in ipairs(controllerActionKeyOrder) do
+        if normalizedKey == actionKey and labels and labels[index] and labels[index] ~= "" then
+            return labels[index]
+        end
+    end
+
+    local style = GPX:GetInputStyle(styleId)
+    if setup and setup.jumpKey and string.upper(tostring(setup.jumpKey)) == normalizedKey then
+        return style and style.confirmLabel or nil
+    end
+
+    return labels and labels[tonumber(slotIndex) or 0] or nil
+end
+
 local function getGuideSlotLabel(slotIndex)
     if GPX:IsControllerEnabled() then
-        local profile = GPX:GetProfile()
-        local setup = profile and profile.setup
-        local styleId = GPX:GetEffectiveControllerStyleId(setup, profile)
-        local labels = GPX:GetCombatSlotLabels(styleId)
-        if labels[slotIndex] then
-            return labels[slotIndex]
+        local label = getControllerGuideSlotLabel(slotIndex)
+        if label and label ~= "" then
+            return label
         end
     end
     return guideSlotLabels[tonumber(slotIndex) or 1] or tostring(slotIndex)
+end
+
+local function buildHighestSpellRankByName()
+    local bestByName = {}
+    local tabCount = tonumber(GetNumSpellTabs and GetNumSpellTabs() or 0) or 0
+
+    for tabIndex = 1, tabCount do
+        local _, _, offset, numSpells = GetSpellTabInfo(tabIndex)
+        local totalSpells = tonumber(numSpells) or 0
+        for localIndex = 1, totalSpells do
+            local bookSlot = (offset or 0) + localIndex
+            local spellName = GetSpellBookItemName and GetSpellBookItemName(bookSlot, BOOK) or nil
+            if spellName and spellName ~= "" then
+                local _, rankNumber = getSpellBookRankText(bookSlot)
+                local key = normalizeSpellFamilyKey(spellName)
+                local existing = bestByName[key]
+                if not existing or (tonumber(rankNumber) or 0) > (tonumber(existing.rankNumber) or 0) then
+                    bestByName[key] = {
+                        rankNumber = tonumber(rankNumber) or 0,
+                    }
+                end
+            end
+        end
+    end
+
+    return bestByName
+end
+
+local function getActionSpellRankNumber(spellID)
+    local id = tonumber(spellID)
+    if not id then
+        return 0
+    end
+
+    local rankText = GetSpellSubtext and GetSpellSubtext(id) or nil
+    local rankNumber = tonumber(string.match(tostring(rankText or ""), "(%d+)")) or 0
+    return rankNumber
 end
 
 function UI:CreateFrame()
@@ -1392,8 +1454,15 @@ end
 function UI:GetGuideRowsForSelectedPage()
     local rows = {}
     local state = self.selectedPageState or ""
+    local maxSlot = self:GetGridMaxAssignableSlot()
+    local showHiddenSlots = not (GPX:IsControllerEnabled() and self.allowHiddenSlotEdit ~= true)
+    local highestRankByName = buildHighestSpellRankByName()
 
     for slotIndex = 1, 12 do
+        if not showHiddenSlots and slotIndex > maxSlot then
+            break
+        end
+
         local command = self:GetGridCommandFor(state, slotIndex)
         local actionSlot = self:GetGridSlotForCommand(command)
         local icon = actionSlot and GetActionTexture and GetActionTexture(actionSlot) or nil
@@ -1409,6 +1478,14 @@ function UI:GetGuideRowsForSelectedPage()
                 if actionEntry.kind == "spell" then
                     name = actionEntry.name or ("Spell " .. tostring(actionEntry.id))
                     detail = "Spell ID " .. tostring(actionEntry.id)
+                    local key = normalizeSpellFamilyKey(name)
+                    local highest = highestRankByName[key]
+                    if highest and (tonumber(highest.rankNumber) or 0) > 0 then
+                        local currentRank = getActionSpellRankNumber(actionEntry.id)
+                        if currentRank > 0 and currentRank < (tonumber(highest.rankNumber) or 0) then
+                            detail = detail .. "  (rank " .. tostring(currentRank) .. " < max " .. tostring(highest.rankNumber) .. ")"
+                        end
+                    end
                 elseif actionEntry.kind == "item" then
                     name = actionEntry.name or ("Item " .. tostring(actionEntry.id))
                     detail = "Item ID " .. tostring(actionEntry.id)
@@ -1649,6 +1726,7 @@ function UI:Refresh()
         local showSlotButtons = (mode == "guide")
         local selectedSlot = tonumber(self.selectedSlotIndex) or 1
         local maxSlot = self:GetGridMaxAssignableSlot()
+        local collapseHiddenSlots = GPX:IsControllerEnabled() and self.allowHiddenSlotEdit ~= true
         local state = self.selectedPageState or ""
         for _, button in ipairs(self.frame.slotButtons) do
             local selected = button.slotIndex == selectedSlot
@@ -1676,7 +1754,7 @@ function UI:Refresh()
                 button:Disable()
                 button:SetAlpha(0.35)
             end
-            if showSlotButtons then
+            if showSlotButtons and (not collapseHiddenSlots or accessible or editableHidden) then
                 button:Show()
             else
                 button:Hide()
