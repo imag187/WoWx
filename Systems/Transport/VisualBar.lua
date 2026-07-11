@@ -4511,7 +4511,7 @@ eventFrame:SetScript("OnEvent", function(_, event)
         end
         return
     end
-    -- High-frequency slot/cooldown/usable events: coalesce into one deferred update.
+    -- High-frequency / storm events: coalesce into one deferred update.
     if event == "ACTIONBAR_SLOT_CHANGED"
         or event == "ACTIONBAR_UPDATE_USABLE"
         or event == "ACTIONBAR_UPDATE_COOLDOWN"
@@ -4521,7 +4521,9 @@ eventFrame:SetScript("OnEvent", function(_, event)
         or event == "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE"
         or event == "PLAYER_XP_UPDATE"
         or event == "UPDATE_FACTION"
-        or event == "UNIT_INVENTORY_CHANGED" then
+        or event == "UNIT_INVENTORY_CHANGED"
+        or event == "SPELLS_CHANGED"
+        or event == "UPDATE_BINDINGS" then
         scheduleVisualBarUpdate()
         return
     end
