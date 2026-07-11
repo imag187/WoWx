@@ -1117,9 +1117,6 @@ function UI:GetAssignmentTargetSlot()
     if self.pendingActionSlot then
         return self.pendingActionSlot
     end
-    if self.mode ~= "guide" then
-        return nil
-    end
     return self:GetGridTargetSlot()
 end
 
@@ -1626,7 +1623,7 @@ function UI:Refresh()
         end
     end
 
-    local showTargetPanel = (mode == "guide") or (self.pendingActionSlot ~= nil)
+    local showTargetPanel = true
     if self.frame.targetPanel then
         if showTargetPanel then
             self.frame.targetPanel:Show()
@@ -1657,22 +1654,35 @@ function UI:Refresh()
             self.frame.hiddenNote:SetText("")
         end
     elseif mode == "actions" then
-        self.frame.subtitle:SetText("Utility actions are native command bindings. Changes here apply machine-wide to all characters.")
-        self.frame.footer:SetText("Combat bar slots remain per-character. Utility command keys are shared on this client.")
+        local command = self:GetGridTargetCommand() or "(none)"
+        local slot = self:GetGridTargetSlot() or 0
+        self.frame.subtitle:SetText("Choose a page + slot, then place a utility action without changing live gameplay state.")
+        self.frame.footer:SetText("Editing " .. command .. " (slot " .. tostring(slot) .. "). Utility command keys remain machine-scoped.")
         if self.frame.targetValue then
-            self.frame.targetValue:SetText("Utility Actions")
+            self.frame.targetValue:SetText(command)
         end
         if self.frame.hiddenNote then
             self.frame.hiddenNote:SetText("")
         end
     elseif mode ~= "guide" then
-        self.frame.subtitle:SetText("Browse spells here. For slot editing, switch to Guide or open from a specific bar slot.")
-        self.frame.footer:SetText("Spell source pages stay separate from the fixed 12-slot Gridbook guide.")
+        local command = self:GetGridTargetCommand() or "(none)"
+        local slot = self:GetGridTargetSlot() or 0
+        self.frame.subtitle:SetText("Browse spells and click to place directly on the selected Gridbook page + slot.")
+        self.frame.footer:SetText("Editing " .. command .. " (slot " .. tostring(slot) .. "). Change page/slot here; modifiers do not need to be held.")
         if self.frame.targetValue then
-            self.frame.targetValue:SetText("Browse Mode")
+            self.frame.targetValue:SetText(command)
         end
         if self.frame.hiddenNote then
-            self.frame.hiddenNote:SetText("")
+            local hiddenCount, maxSlot = self:GetHiddenAssignmentCountForSelectedPage()
+            if GPX:IsControllerEnabled() and hiddenCount > 0 and self.allowHiddenSlotEdit ~= true then
+                self.frame.hiddenNote:SetText("Hidden in controller mode on this page: " .. tostring(hiddenCount) .. " (slots " .. tostring(maxSlot + 1) .. "-12)")
+                self.frame.hiddenNote:SetTextColor(1.0, 0.72, 0.4)
+            elseif GPX:IsControllerEnabled() then
+                self.frame.hiddenNote:SetText("Controller active slots on this page: 1-" .. tostring(maxSlot))
+                self.frame.hiddenNote:SetTextColor(0.72, 0.86, 1.0)
+            else
+                self.frame.hiddenNote:SetText("")
+            end
         end
     else
         local slot = self:GetGridTargetSlot() or 0
@@ -1715,15 +1725,11 @@ function UI:Refresh()
             local label = (pageLabels and pageLabels[button.pageState]) or button.baseLabel
             button:SetText(label .. (selected and " *" or ""))
             button:SetAlpha(selected and 1.0 or 0.85)
-            if mode == "guide" then
-                button:Show()
-            else
-                button:Hide()
-            end
+            button:Show()
         end
     end
     if self.frame.slotButtons then
-        local showSlotButtons = (mode == "guide")
+        local showSlotButtons = true
         local selectedSlot = tonumber(self.selectedSlotIndex) or 1
         local maxSlot = self:GetGridMaxAssignableSlot()
         local collapseHiddenSlots = GPX:IsControllerEnabled() and self.allowHiddenSlotEdit ~= true
@@ -1765,7 +1771,7 @@ function UI:Refresh()
         end
     end
     if self.frame.hiddenEditToggle then
-        if mode == "guide" and GPX:IsControllerEnabled() then
+        if GPX:IsControllerEnabled() then
             self.frame.hiddenEditToggle:Show()
             self.frame.hiddenEditToggle:SetText((self.allowHiddenSlotEdit and "Hidden Slots: Edit" or "Hidden Slots: Off"))
         else
