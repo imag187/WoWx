@@ -11,6 +11,14 @@ local function SetFrameShown(frame, shown)
     end
 end
 
+local function SetFrameEnabled(frame, enabled)
+    if enabled then
+        frame:Enable()
+    else
+        frame:Disable()
+    end
+end
+
 GPX.ActionButtons = Buttons
 
 local defaultConfig = {
@@ -1578,7 +1586,7 @@ function Buttons:RefreshBagWindow()
         frame._wowxBagSlotsToggle:SetText(bagSlotsExpanded and "Bags: Hide" or "Bags: Show")
     end
     if frame._wowxSellJunkButton then
-        frame._wowxSellJunkButton:SetEnabled(MerchantFrame and MerchantFrame:IsShown())
+        SetFrameEnabled(frame._wowxSellJunkButton, MerchantFrame and MerchantFrame:IsShown())
     end
 
     if frame._wowxGrid then
@@ -1971,7 +1979,7 @@ function Buttons:RefreshBankWindow()
     end
     if frame._wowxBuySlotButton then
         local nextBagID = getNextBankBagSlotForPurchase()
-        frame._wowxBuySlotButton:SetEnabled(self._bankIsOpen and nextBagID ~= nil)
+        SetFrameEnabled(frame._wowxBuySlotButton, self._bankIsOpen and nextBagID ~= nil)
         if nextBagID then
             frame._wowxBuySlotButton:SetText("Buy Slot " .. tostring(nextBagID - 4))
         else

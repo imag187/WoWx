@@ -11,6 +11,14 @@ local function SetFrameShown(frame, shown)
     end
 end
 
+local function SetFrameEnabled(frame, enabled)
+    if enabled then
+        frame:Enable()
+    else
+        frame:Disable()
+    end
+end
+
 GPX.SettingsUI = UI
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
@@ -1525,10 +1533,10 @@ function UI:RefreshProfilePanel()
             self.frame.profileButtons.loadProfile:Enable()
         end
         if self.frame.profileButtons.newProfile then
-            self.frame.profileButtons.newProfile:SetEnabled(hasName)
+            SetFrameEnabled(self.frame.profileButtons.newProfile, hasName)
         end
         if self.frame.profileButtons.deleteProfile then
-            self.frame.profileButtons.deleteProfile:SetEnabled(hasName and self.frame.profileNameBox:GetText() ~= "default")
+            SetFrameEnabled(self.frame.profileButtons.deleteProfile, hasName and self.frame.profileNameBox:GetText() ~= "default")
         end
     end
 
@@ -1547,13 +1555,13 @@ function UI:RefreshProfilePanel()
     local order = self:GetClassProfileOrder()
     local hasProfiles = #order > 0
     if self.frame.profileClassPrev then
-        self.frame.profileClassPrev:SetEnabled(hasProfiles and #order > 1)
+        SetFrameEnabled(self.frame.profileClassPrev, hasProfiles and #order > 1)
     end
     if self.frame.profileClassNext then
-        self.frame.profileClassNext:SetEnabled(hasProfiles and #order > 1)
+        SetFrameEnabled(self.frame.profileClassNext, hasProfiles and #order > 1)
     end
     if self.frame.profileClassUsePlayer then
-        self.frame.profileClassUsePlayer:SetEnabled(classToken ~= "")
+        SetFrameEnabled(self.frame.profileClassUsePlayer, classToken ~= "")
     end
 end
 
@@ -2151,9 +2159,9 @@ function UI:RefreshClassesPanel()
             inspector.pipCheck:SetChecked(nil)
             inspector.fragmentsCheck:SetChecked(nil)
             inspector.previewText:SetText("Preview: add/select a resource to inspect pips and fragment math.")
-            inspector.prev:SetEnabled(false)
-            inspector.next:SetEnabled(false)
-            inspector.saveButton:SetEnabled(false)
+            SetFrameEnabled(inspector.prev, false)
+            SetFrameEnabled(inspector.next, false)
+            SetFrameEnabled(inspector.saveButton, false)
         else
             local auraIcon = nil
             if resource.auraID then
@@ -2195,9 +2203,9 @@ function UI:RefreshClassesPanel()
 
             local previewLines = self:BuildResourcePreviewLines(resource)
             inspector.previewText:SetText(table.concat(previewLines, "\n"))
-            inspector.prev:SetEnabled(#resources > 1)
-            inspector.next:SetEnabled(#resources > 1)
-            inspector.saveButton:SetEnabled(true)
+            SetFrameEnabled(inspector.prev, #resources > 1)
+            SetFrameEnabled(inspector.next, #resources > 1)
+            SetFrameEnabled(inspector.saveButton, true)
         end
     end
 
