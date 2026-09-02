@@ -270,7 +270,22 @@ local function getBankBagSlotPurchaseCost()
 end
 
 local function canPurchaseBankBagSlot()
-    return type(BuyBankSlot) == "function"
+    if type(BuyBankSlot) == "function" then
+        return true
+    end
+    local nativeButton = _G and _G.BankFramePurchaseButton
+    return nativeButton and type(nativeButton.Click) == "function"
+end
+
+local function purchaseBankBagSlot()
+    if type(BuyBankSlot) == "function" then
+        return pcall(BuyBankSlot)
+    end
+    local nativeButton = _G and _G.BankFramePurchaseButton
+    if nativeButton and type(nativeButton.Click) == "function" then
+        return pcall(nativeButton.Click, nativeButton)
+    end
+    return false, "bank slot purchase is unavailable"
 end
 
 local function addChamferAccents(frame)
@@ -1211,7 +1226,7 @@ function Buttons:CreateBagSlotButton(parent, bagID)
                     return
                 end
                 if canPurchaseBankBagSlot() then
-                    local ok, err = pcall(BuyBankSlot)
+                    local ok, err = purchaseBankBagSlot()
                     if not ok then
                         GPX:Print("Unable to buy bank slot: " .. tostring(err))
                     end
@@ -1878,7 +1893,7 @@ function Buttons:EnsureBankWindow()
             GPX:Print("This client does not support bank slot purchase API.")
             return
         end
-        local ok, err = pcall(BuyBankSlot)
+        local ok, err = purchaseBankBagSlot()
         if not ok then
             GPX:Print("Unable to buy bank slot: " .. tostring(err))
         end
