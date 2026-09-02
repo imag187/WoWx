@@ -490,6 +490,14 @@ Latest practical bottom line: on the CoA fork, the current known-good Runemaster
 
 ## Architecture Direction
 
+- Profile terminology and ownership must remain separate:
+  - **Layout profiles** are the Bartender-style profiles. They save WoWX UI element placement, sizing, visibility, scale, and related presentation settings. A character can select one independently of class.
+  - **Class/resource profiles** save observed class mechanics: resource bars, reactive spells, class tokens, and pager/resource test definitions. They exist so a player can probe, verify, and configure any private-server class without a new addon code commit.
+  - **Character state** selects the active layout profile and active class/resource profile independently. A class profile may optionally reference a layout profile, but that is a convenience mapping, not a change in profile ownership or meaning.
+  - **Machine state** stores controller calibration, input setup, and machine-local runtime preferences. It is not a UI layout profile or a class profile.
+- The Profiles tab should be layout-profile parity with Bartender: create, save, load, delete, and select presentation profiles. Class selection and class/resource editing belong in the Classes tab.
+- The Classes system is a data/probing surface, not a server fork. It should use the raw client APIs and manually entered observations to support arbitrary custom classes and mechanics; it must not require CoA, BronzeBeard, Ascension, realm detection, or a separate addon commit.
+- Current technical debt: `GamePadX.lua` still delegates class/resource APIs to the removed `WoWXSystems.GameTypeDB`. Restore that capability as a generic local class/resource service before expanding the Classes UI; do not reintroduce retired server-specific catalogs.
 - The user has repeatedly raised that WoWX may be outgrowing a single large addon file / single-surface coordination model.
 - Future work should stay open to splitting subsystems into cleaner modules or even separate addons where that improves ownership, debugging, and controller-specific iteration.
 - The relevant design goal is not abstraction for its own sake; it is making each system easier to reason about, validate, and evolve without destabilizing unrelated systems.
