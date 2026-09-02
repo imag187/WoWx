@@ -320,24 +320,6 @@ local function requestBankBagSlotPurchase()
     return true
 end
 
-local function AttachNativeBankPurchaseButton(bankWindow)
-    local nativeButton = _G and _G.BankFramePurchaseButton
-    if not nativeButton or not bankWindow or not bankWindow._wowxControls then
-        return false
-    end
-    if not nativeButton._wowxOriginalParent then
-        nativeButton._wowxOriginalParent = nativeButton.GetParent and nativeButton:GetParent() or nil
-    end
-    nativeButton:SetParent(bankWindow._wowxControls)
-    nativeButton:ClearAllPoints()
-    nativeButton:SetPoint("LEFT", bankWindow._wowxControls, "LEFT", 256, 0)
-    nativeButton:SetWidth(120)
-    nativeButton:SetHeight(22)
-    nativeButton:Show()
-    bankWindow._wowxNativePurchaseButton = nativeButton
-    return true
-end
-
 local function addChamferAccents(frame)
     if not frame or frame._wowxChamferAccents then
         return
@@ -2588,13 +2570,6 @@ updateFrame:SetScript("OnEvent", function(_, event)
         if GPX.ActionButtons.bagWindow and GPX.ActionButtons.bagWindow:IsShown() then
             GPX.ActionButtons.bagWindow:Hide()
         end
-        GPX.ActionButtons:SetBlizzardBankSuppressed(false)
-        for _, frameName in ipairs(BLIZZARD_BANK_FRAME_NAMES) do
-            local frame = _G[frameName]
-            if frame and frame.Show then
-                frame:Show()
-            end
-        end
         local wowxBank = GPX.ActionButtons:EnsureBankWindow()
         if wowxBank then
             GPX.ActionButtons:RefreshBankWindow()
@@ -2602,16 +2577,8 @@ updateFrame:SetScript("OnEvent", function(_, event)
             wowxBank:SetPoint("CENTER", UIParent, "CENTER", 0, -20)
             wowxBank:Show()
             wowxBank:Raise()
-            local nativePurchaseAttached = AttachNativeBankPurchaseButton(wowxBank)
-            if nativePurchaseAttached and wowxBank._wowxBuySlotButton then
-                wowxBank._wowxBuySlotButton:Hide()
-            end
-            for _, frameName in ipairs(BLIZZARD_BANK_FRAME_NAMES) do
-                local frame = _G[frameName]
-                if frame and frame.Hide then
-                    frame:Hide()
-                end
-            end
+            GPX.ActionButtons:SetBlizzardBankSuppressed(true)
+            HideBlizzardContainerFrames()
         end
         return
     end
