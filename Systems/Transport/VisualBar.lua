@@ -183,9 +183,7 @@ function Bar:GetLayoutProfileName()
 end
 
 function Bar:GetLayoutProfiles()
-    local config = ensureVisualBarConfig()
-    config.layoutProfiles = config.layoutProfiles or {}
-    return config.layoutProfiles
+    return GPX:GetLayoutProfilesStore()
 end
 
 function Bar:GetLayoutProfileNames()

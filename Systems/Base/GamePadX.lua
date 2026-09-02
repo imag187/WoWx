@@ -388,6 +388,17 @@ function GPX:InitDB()
     GamePadXDB = WoWXDB
     local db = WoWXDB
 
+    WoWXProfilesDB = WoWXProfilesDB or {}
+    WoWXProfilesDB.layoutProfiles = WoWXProfilesDB.layoutProfiles or {}
+    if db.ui and db.ui.visualBar and type(db.ui.visualBar.layoutProfiles) == "table" then
+        local accountProfiles = WoWXProfilesDB.layoutProfiles
+        for name, profile in pairs(db.ui.visualBar.layoutProfiles) do
+            if accountProfiles[name] == nil then
+                accountProfiles[name] = self:DeepCopy(profile)
+            end
+        end
+    end
+
     -- Stamp any fields that are missing (first-time or upgrade)
     db = self:StampDefaults(db, self.defaults)
 
@@ -500,7 +511,15 @@ function GPX:InitDB()
     end
 
     self.db = db
+    self.profilesDB = WoWXProfilesDB
     self:ApplyMachineScopedState(true)
+end
+
+function GPX:GetLayoutProfilesStore()
+    WoWXProfilesDB = WoWXProfilesDB or {}
+    WoWXProfilesDB.layoutProfiles = WoWXProfilesDB.layoutProfiles or {}
+    self.profilesDB = WoWXProfilesDB
+    return WoWXProfilesDB.layoutProfiles
 end
 
 function GPX:DeepCopy(orig)
