@@ -520,6 +520,16 @@ Latest practical bottom line: on the CoA fork, the current known-good Runemaster
 - Future agents should treat this not as overengineering but as a legitimate containment strategy for regression control.
 - The caution is secure ownership: if a split is attempted, keep the secure action/button ownership boundaries clear so combat-safe behavior does not become harder to reason about than it is now.
 
+## Controller-Friendly Surface Direction
+
+- WoWX should eventually own and style the player, target, and target-of-target frames as placeable UI surfaces. Their positions, sizes, visibility, chrome, and presentation belong to layout profiles; class/resource definitions belong to class/resource profiles.
+- Unit frames should consume a shared resource-provider contract rather than contain class logic. The class system supplies observed resource definitions and reactive spell metadata; the frame surface decides how to display them.
+- Controller navigation should be a shared non-secure service with surface adapters. It should provide focus order, D-pad movement, confirm/cancel, cursor centering or bobble behavior, and contextual action hints. Quest dialogue, gossip choices, loot rows, menus, spellbook entries, and similar surfaces should register their own items with that service.
+- Quest dialogue and gossip need explicit support for focused choice rows, quest accept/decline/complete actions, and scroll state. Loot needs focused rows, item tooltips, loot-all, individual loot, and escape/close behavior. These surfaces must work without requiring action-bar ownership.
+- The current `MenuNav.lua` is only a static launcher and `WoWXUnitFrames.lua` is only an enable/config foundation. Neither is the finished controller surface system; do not treat their existence as completed feature support.
+- Initial implementation should remain in the main WoWX addon under surface-oriented modules. A future `WoWX_Gamepad` addon is appropriate only for controller-only input helpers, cursor/movement behavior, and navigation orchestration once those interfaces are narrow and tested. Core UI surfaces should remain usable without it.
+- ConsolePortLK should be studied for interaction patterns, not copied wholesale: detect the active Blizzard frame, build a deterministic focus list, show the current control's WoWX/controller hint, and route confirmation through the control's native click/selection behavior.
+
 ## Groundwork Plan
 
 - Do not begin with a broad rewrite.
