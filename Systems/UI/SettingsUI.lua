@@ -1515,8 +1515,10 @@ function UI:RefreshProfilePanel()
 
     local activeName = visualBar.GetLayoutProfileName and visualBar:GetLayoutProfileName() or "default"
     local names = visualBar.GetLayoutProfileNames and visualBar:GetLayoutProfileNames() or {}
+    local activeProfile = visualBar.GetLayoutProfiles and visualBar:GetLayoutProfiles()[activeName] or nil
+    local inputMode = activeProfile and activeProfile.inputMode or "unknown"
     if self.frame.currentProfileText then
-        self.frame.currentProfileText:SetText("Active Layout Profile: " .. tostring(activeName) .. "   Available: " .. table.concat(names, ", "))
+        self.frame.currentProfileText:SetText("Active Layout Profile: " .. tostring(activeName) .. "   Mode: " .. tostring(inputMode) .. "   Available: " .. table.concat(names, ", "))
     end
     if self.frame.profileNameBox and (not self.captureField) then
         if self.frame.profileNameBox:GetText() == nil or self.frame.profileNameBox:GetText() == "" then

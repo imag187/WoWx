@@ -157,6 +157,7 @@ end
 local function getLayoutProfileSnapshot()
     local config = ensureVisualBarConfig()
     return {
+        inputMode = GPX:IsControllerEnabled() and "controller" or "keyboard",
         layout = copyLayoutTable(config.layout),
         point = copyPoint(config.point, GPX.defaults.ui.visualBar.point),
         progressPoint = copyPoint(config.progressPoint, GPX.defaults.ui.visualBar.progressPoint),
@@ -198,22 +199,22 @@ end
 
 function Bar:EnsureLayoutProfile(profileName)
     local config = ensureVisualBarConfig()
-    config.layoutProfiles = config.layoutProfiles or {}
     local name = tostring(profileName or config.layoutProfile or "default")
     if name == "" then
         name = "default"
     end
-    if type(config.layoutProfiles[name]) ~= "table" then
-        config.layoutProfiles[name] = getLayoutProfileSnapshot()
+    local profiles = self:GetLayoutProfiles()
+    if type(profiles[name]) ~= "table" then
+        profiles[name] = getLayoutProfileSnapshot()
     end
-    return config.layoutProfiles[name], name
+    return profiles[name], name
 end
 
 function Bar:SaveLayoutProfile(profileName)
     local config = ensureVisualBarConfig()
     local snapshot, name = self:EnsureLayoutProfile(profileName)
     local fresh = getLayoutProfileSnapshot()
-    config.layoutProfiles[name] = fresh
+    self:GetLayoutProfiles()[name] = fresh
     config.layoutProfile = name
     return fresh
 end
@@ -253,8 +254,9 @@ function Bar:DeleteLayoutProfile(profileName)
     if name == "" or name == "default" then
         return false
     end
-    if config.layoutProfiles then
-        config.layoutProfiles[name] = nil
+    local profiles = self:GetLayoutProfiles()
+    if profiles then
+        profiles[name] = nil
     end
     if config.layoutProfile == name then
         config.layoutProfile = "default"
