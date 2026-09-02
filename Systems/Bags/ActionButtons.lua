@@ -3,6 +3,14 @@ if not GamePadX then return end
 local GPX = GamePadX
 local Buttons = {}
 
+local function SetFrameShown(frame, shown)
+    if shown then
+        frame:Show()
+    else
+        frame:Hide()
+    end
+end
+
 GPX.ActionButtons = Buttons
 
 local defaultConfig = {
@@ -775,7 +783,7 @@ function Buttons:RefreshMouseLookButton()
     end
 
     local show = GPX and GPX.IsControllerEnabled and GPX:IsControllerEnabled()
-    self.mouseLookButton:SetShown(show)
+    SetFrameShown(self.mouseLookButton, show)
 
     if not show then
         return
@@ -1058,7 +1066,7 @@ function Buttons:RefreshBagButtonChrome(force)
     end
 
     if self.editButton then
-        self.editButton:SetShown(not locked)
+        SetFrameShown(self.editButton, not locked)
     end
 
     if self.bagLabel then
@@ -1564,7 +1572,7 @@ function Buttons:RefreshBagWindow()
     end
 
     if frame._wowxBagSlotRow then
-        frame._wowxBagSlotRow:SetShown(bagSlotsExpanded)
+        SetFrameShown(frame._wowxBagSlotRow, bagSlotsExpanded)
     end
     if frame._wowxBagSlotsToggle then
         frame._wowxBagSlotsToggle:SetText(bagSlotsExpanded and "Bags: Hide" or "Bags: Show")
@@ -1956,7 +1964,7 @@ function Buttons:RefreshBankWindow()
     end
 
     if frame._wowxBagSlotRow then
-        frame._wowxBagSlotRow:SetShown(bagSlotsExpanded)
+        SetFrameShown(frame._wowxBagSlotRow, bagSlotsExpanded)
     end
     if frame._wowxBagSlotsToggle then
         frame._wowxBagSlotsToggle:SetText(bagSlotsExpanded and "Bags: Hide" or "Bags: Show")

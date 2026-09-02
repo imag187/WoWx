@@ -3,6 +3,14 @@
 local GPX = GamePadX
 local UI = {}
 
+local function SetFrameShown(frame, shown)
+    if shown then
+        frame:Show()
+    else
+        frame:Hide()
+    end
+end
+
 GPX.SettingsUI = UI
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
@@ -943,14 +951,14 @@ function UI:CreateFrame()
         end
 
         frame:SetHeight(tabHeights[tab] or tabHeights.general)
-        statusPanel:SetShown(showGeneral)
-        actionPanel:SetShown(showGeneral)
-        bindingPanel:SetShown(showController)
-        utilityPanel:SetShown(showController)
-        inputPanel:SetShown(showController)
-        profilePanel:SetShown(showProfiles)
-        classesPanel:SetShown(showClasses)
-        systemsPanel:SetShown(true)
+        SetFrameShown(statusPanel, showGeneral)
+        SetFrameShown(actionPanel, showGeneral)
+        SetFrameShown(bindingPanel, showController)
+        SetFrameShown(utilityPanel, showController)
+        SetFrameShown(inputPanel, showController)
+        SetFrameShown(profilePanel, showProfiles)
+        SetFrameShown(classesPanel, showClasses)
+        SetFrameShown(systemsPanel, true)
         if showClasses then
             UI:SyncSelectedClassProfileToPlayer(true)
         end

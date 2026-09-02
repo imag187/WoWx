@@ -9,6 +9,14 @@ local BAR_BUTTON_COUNT = 12
 local PET_ACTION_BUTTON_COUNT = 10
 local defaultKeyHints = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "=" }
 
+local function SetFrameShown(frame, shown)
+    if shown then
+        frame:Show()
+    else
+        frame:Hide()
+    end
+end
+
 local PS5Icons = {
     ["1"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_LEFT",
     ["2"] = "Interface\\AddOns\\WoWX\\Textures\\PS5\\CP_R_UP",
@@ -1636,13 +1644,13 @@ function Bar:UpdateResizeHandles()
     local unlocked = not self:IsLayoutEditLocked()
     local function showHandle(frame)
         if frame and frame._wowxResizeHandle then
-            frame._wowxResizeHandle:SetShown(unlocked)
+            SetFrameShown(frame._wowxResizeHandle, unlocked)
         end
         if frame and frame._wowxMoveHandle then
-            frame._wowxMoveHandle:SetShown(unlocked and frame == self.modifierFrame)
+            SetFrameShown(frame._wowxMoveHandle, unlocked and frame == self.modifierFrame)
         end
         if frame and frame._wowxEditButton then
-            frame._wowxEditButton:SetShown(unlocked)
+            SetFrameShown(frame._wowxEditButton, unlocked)
         end
     end
     showHandle(self.frame)
@@ -4293,8 +4301,8 @@ function Bar:UpdateAll()
             self.frame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.9)
         end
     end
-    self.frame.title:SetShown(showHeader)
-    self.frame.pageText:SetShown(showHeader)
+    SetFrameShown(self.frame.title, showHeader)
+    SetFrameShown(self.frame.pageText, showHeader)
     self.frame.pageText:SetTextColor(self:IsLayoutEditLocked() and 0.85 or 1.0, self:IsLayoutEditLocked() and 0.88 or 0.9, self:IsLayoutEditLocked() and 0.98 or 0.35)
     if self.progressFrame then
         self:ApplyChromeBackdrop(self.progressFrame, 0.12)
