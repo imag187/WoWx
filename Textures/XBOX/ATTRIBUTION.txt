@@ -1,0 +1,8 @@
+Xbox controller glyph textures in this folder were sourced from:
+https://github.com/leoaviana/ConsolePortLK
+
+Source path:
+ConsolePort/Controllers/XBOX/Icons64/*.blp
+
+These files are redistributed here only as required runtime art assets
+for WoWX controller icon rendering.

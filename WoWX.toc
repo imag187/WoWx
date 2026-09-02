@@ -2,19 +2,26 @@
 ## Title: WoWX
 ## Notes: Modernized WotLK couch-play addon for controller, keyboard, and accessibility-focused input. Designed for Linux + AntiMicroX. No cloud sync.
 ## Author: WoWX
-## Version: 1.0.0
+## Version: 2.1.0
 ## SavedVariablesPerCharacter: WoWXDB, GamePadXDB
 
-GamePadX.lua
-ClickTransport.lua
-UIMode.lua
-SetupWizard.lua
-VisualBar.lua
-ActionButtons.lua
-SettingsUI.lua
-MenuNav.lua
-MinimapButton.lua
-SpellbookUI.lua
-SpellRing.lua
-DispelPrompt.lua
-UnitFrameCues.lua
+WoWX.lua
+Systems\Core\SystemRegistry.lua
+Systems\Base\GamePadX.lua
+Systems\Input\Gamepad\GamepadSystem.lua
+Systems\Input\Gamepad\Camera.lua
+Systems\Input\Keyboard\KeyboardSystem.lua
+Systems\Transport\ClickTransport.lua
+Systems\Transport\VisualBar.lua
+Systems\UI\UIMode.lua
+Systems\UI\SetupWizard.lua
+Systems\UI\SettingsUI.lua
+Systems\UI\MenuNav.lua
+Systems\UI\MinimapButton.lua
+Systems\Bags\ActionButtons.lua
+Systems\SpellGrid\SpellbookUI.lua
+Systems\SpellGrid\SpellRing.lua
+Systems\Cues\DispelPrompt.lua
+Systems\Cues\UnitFrameCues.lua
+Systems\UnitFrames\WoWXUnitFrames.lua
+Systems\UnitFrames\ResourcePresets.lua

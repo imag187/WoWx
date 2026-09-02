@@ -1,0 +1,8 @@
+Switch icon textures sourced from ConsolePortLK:
+https://github.com/leoaviana/ConsolePortLK
+
+Primary source path:
+ConsolePort/Controllers/SWITCH/Icons64/
+
+Shared D-pad icons sourced from:
+ConsolePort/Controllers/Shared/Icons64/
