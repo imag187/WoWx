@@ -270,6 +270,9 @@ local function getBankBagSlotPurchaseCost()
 end
 
 local function canPurchaseBankBagSlot()
+    if type(PurchaseSlot) == "function" then
+        return true
+    end
     if type(BuyBankSlot) == "function" then
         return true
     end
@@ -278,6 +281,9 @@ local function canPurchaseBankBagSlot()
 end
 
 local function purchaseBankBagSlot()
+    if type(PurchaseSlot) == "function" then
+        return pcall(PurchaseSlot)
+    end
     if type(BuyBankSlot) == "function" then
         return pcall(BuyBankSlot)
     end
@@ -286,6 +292,32 @@ local function purchaseBankBagSlot()
         return pcall(nativeButton.Click, nativeButton)
     end
     return false, "bank slot purchase is unavailable"
+end
+
+local function requestBankBagSlotPurchase()
+    if not StaticPopup_Show or not StaticPopupDialogs then
+        return purchaseBankBagSlot()
+    end
+    if not StaticPopupDialogs.WOWX_CONFIRM_BUY_BANK_SLOT then
+        StaticPopupDialogs.WOWX_CONFIRM_BUY_BANK_SLOT = {
+            text = CONFIRM_BUY_BANK_SLOT or "Purchase the next bank bag slot?",
+            button1 = YES or "Yes",
+            button2 = NO or "No",
+            OnAccept = function()
+                local ok, err = purchaseBankBagSlot()
+                if not ok and GPX and GPX.Print then
+                    GPX:Print("Unable to buy bank slot: " .. tostring(err))
+                end
+                if Buttons and Buttons.RefreshBankWindow then
+                    Buttons:RefreshBankWindow()
+                end
+            end,
+            timeout = 0,
+            hideOnEscape = 1,
+        }
+    end
+    StaticPopup_Show("WOWX_CONFIRM_BUY_BANK_SLOT")
+    return true
 end
 
 local function AttachNativeBankPurchaseButton(bankWindow)
@@ -1244,10 +1276,7 @@ function Buttons:CreateBagSlotButton(parent, bagID)
                     return
                 end
                 if canPurchaseBankBagSlot() then
-                    local ok, err = purchaseBankBagSlot()
-                    if not ok then
-                        GPX:Print("Unable to buy bank slot: " .. tostring(err))
-                    end
+                    requestBankBagSlotPurchase()
                 end
                 Buttons:RefreshBankWindow()
                 return
@@ -1911,11 +1940,7 @@ function Buttons:EnsureBankWindow()
             GPX:Print("This client does not support bank slot purchase API.")
             return
         end
-        local ok, err = purchaseBankBagSlot()
-        if not ok then
-            GPX:Print("Unable to buy bank slot: " .. tostring(err))
-        end
-        Buttons:RefreshBankWindow()
+        requestBankBagSlotPurchase()
     end)
 
     local buySlotCost = controls:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
