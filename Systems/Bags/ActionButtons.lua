@@ -269,6 +269,10 @@ local function getBankBagSlotPurchaseCost()
     return cost
 end
 
+local function canPurchaseBankBagSlot()
+    return type(BuyBankSlot) == "function"
+end
+
 local function addChamferAccents(frame)
     if not frame or frame._wowxChamferAccents then
         return
@@ -1206,7 +1210,7 @@ function Buttons:CreateBagSlotButton(parent, bagID)
                     GPX:Print("Unlock bank slots in order.")
                     return
                 end
-                if BuyBankSlot then
+                if canPurchaseBankBagSlot() then
                     local ok, err = pcall(BuyBankSlot)
                     if not ok then
                         GPX:Print("Unable to buy bank slot: " .. tostring(err))
@@ -1870,7 +1874,7 @@ function Buttons:EnsureBankWindow()
             GPX:Print("All bank bag slots are already unlocked.")
             return
         end
-        if not BuyBankSlot then
+        if not canPurchaseBankBagSlot() then
             GPX:Print("This client does not support bank slot purchase API.")
             return
         end
@@ -1979,8 +1983,11 @@ function Buttons:RefreshBankWindow()
     end
     if frame._wowxBuySlotButton then
         local nextBagID = getNextBankBagSlotForPurchase()
-        SetFrameEnabled(frame._wowxBuySlotButton, self._bankIsOpen and nextBagID ~= nil)
-        if nextBagID then
+        local canBuySlot = canPurchaseBankBagSlot()
+        SetFrameEnabled(frame._wowxBuySlotButton, self._bankIsOpen and nextBagID ~= nil and canBuySlot)
+        if not canBuySlot then
+            frame._wowxBuySlotButton:SetText("Buy Slot Unavailable")
+        elseif nextBagID then
             frame._wowxBuySlotButton:SetText("Buy Slot " .. tostring(nextBagID - 4))
         else
             frame._wowxBuySlotButton:SetText("Slots Maxed")
