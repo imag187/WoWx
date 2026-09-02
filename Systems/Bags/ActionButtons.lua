@@ -2545,13 +2545,21 @@ updateFrame:SetScript("OnEvent", function(_, event)
         if GPX.ActionButtons.bagWindow and GPX.ActionButtons.bagWindow:IsShown() then
             GPX.ActionButtons.bagWindow:Hide()
         end
-        GPX.ActionButtons:ToggleBankWindow(true)
+        GPX.ActionButtons:SetBlizzardBankSuppressed(false)
+        for _, frameName in ipairs(BLIZZARD_BANK_FRAME_NAMES) do
+            local frame = _G[frameName]
+            if frame and frame.Show then
+                frame:Show()
+            end
+        end
         return
     end
 
     if event == "BANKFRAME_CLOSED" then
         GPX.ActionButtons._bankIsOpen = nil
-        GPX.ActionButtons:ToggleBankWindow(false)
+        if GPX.ActionButtons.bankWindow then
+            GPX.ActionButtons.bankWindow:Hide()
+        end
         if GPX.ActionButtons._reopenBagAfterBank and GPX.ActionButtons:GetShowState() then
             local frame = GPX.ActionButtons:EnsureBagWindow()
             if frame then
