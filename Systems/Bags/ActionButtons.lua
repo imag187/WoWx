@@ -262,7 +262,7 @@ local function getBankBagSlotPurchaseCost()
     if not GetBankSlotCost then
         return nil
     end
-    local cost = tonumber(GetBankSlotCost())
+    local cost = tonumber(GetBankSlotCost(getPurchasedBankBagSlotCount()))
     if not cost or cost <= 0 then
         return nil
     end
@@ -2603,6 +2603,9 @@ updateFrame:SetScript("OnEvent", function(_, event)
 
     if event == "PLAYER_MONEY" or event == "CURRENCY_DISPLAY_UPDATE" then
         GPX.ActionButtons:RefreshEconomyText()
+        if GPX.ActionButtons.bankWindow and GPX.ActionButtons.bankWindow:IsShown() then
+            GPX.ActionButtons:RefreshBankWindow()
+        end
         return
     end
 
