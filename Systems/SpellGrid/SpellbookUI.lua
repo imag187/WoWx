@@ -1,6 +1,6 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local UI = {}
 
 GPX.SpellbookUI = UI
@@ -16,7 +16,7 @@ local gridbookPages = {
 }
 
 local utilityActions = {
-    { id = "gridbook", name = "Gridbook", detail = "Open/close Gridbook", icon = "Interface\\Icons\\INV_Misc_Book_09", macroName = "WX Gridbook", macro = "/run if GamePadX and GamePadX.SpellbookUI then if GamePadX.SpellbookUI.frame and GamePadX.SpellbookUI.frame:IsShown() then GamePadX.SpellbookUI:ReturnToPreviousContext() else GamePadX.SpellbookUI:Open(nil, \"settings\") end end" },
+    { id = "gridbook", name = "Gridbook", detail = "Open/close Gridbook", icon = "Interface\\Icons\\INV_Misc_Book_09", macroName = "WX Gridbook", macro = "/run if WoWX and WoWX.SpellbookUI then if WoWX.SpellbookUI.frame and WoWX.SpellbookUI.frame:IsShown() then WoWX.SpellbookUI:ReturnToPreviousContext() else WoWX.SpellbookUI:Open(nil, \"settings\") end end" },
     { id = "bags", name = "Bags", detail = "Toggle backpack", icon = "Interface\\Icons\\INV_Misc_Bag_08", macroName = "WX Bags", macro = "/run ToggleBackpack()", bindingCommand = "OPENALLBAGS" },
     { id = "map", name = "World Map", detail = "Open/close map", icon = "Interface\\Icons\\INV_Misc_Map02", macroName = "WX Map", macro = "/run ToggleFrame(WorldMapFrame)", bindingCommand = "TOGGLEWORLDMAP" },
     { id = "character", name = "Character", detail = "Open character panel", icon = "Interface\\Icons\\INV_Chest_Cloth_17", macroName = "WX Char", macro = "/run ToggleCharacter(\"PaperDollFrame\")", bindingCommand = "TOGGLECHARACTER0" },
@@ -298,7 +298,7 @@ local function shouldCaptureCommand(command)
 end
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
-    frame:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(frame, {
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,

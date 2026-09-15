@@ -1,9 +1,9 @@
 -- Systems/Input/Gamepad/GamepadSystem.lua
 -- Placeholder module for gamepad-only system logic.
 
-if not GamePadX then
+if not WoWX then
     return
 end
 
-local GPX = GamePadX
+local GPX = WoWX
 GPX.GamepadSystem = GPX.GamepadSystem or {}

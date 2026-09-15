@@ -1,12 +1,12 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local Menu = {}
 
 GPX.MenuNav = Menu
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
-    frame:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(frame, {
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,

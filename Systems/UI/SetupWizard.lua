@@ -1,6 +1,6 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local Wizard = {}
 
 GPX.SetupWizard = Wizard
@@ -49,7 +49,7 @@ local function normalizeKey(key)
 end
 
 local function createBackdrop(frame)
-    frame:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(frame, {
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,
@@ -794,7 +794,7 @@ function Wizard:Apply()
     end
 
     GPX:ApplySetup(self:BuildSetupPayload())
-    GPX:Print("Visual setup applied. Use /gpx status to review the active profile.")
+    GPX:Print("Visual setup applied. Use /wowx status to review the active profile.")
     self:UnbindCaptureKeys()
     self.frame:Hide()
 end

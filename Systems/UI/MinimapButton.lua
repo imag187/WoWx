@@ -1,6 +1,6 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local Button = {}
 local dropdown = CreateFrame("Frame", "WoWXMinimapDropdown", UIParent, "UIDropDownMenuTemplate")
 

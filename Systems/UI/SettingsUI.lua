@@ -1,6 +1,6 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local UI = {}
 
 local function SetFrameShown(frame, shown)
@@ -22,7 +22,7 @@ end
 GPX.SettingsUI = UI
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
-    frame:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(frame, {
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,

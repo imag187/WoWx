@@ -1,9 +1,9 @@
 -- Systems/Input/Keyboard/KeyboardSystem.lua
 -- Placeholder module for keyboard-only system logic.
 
-if not GamePadX then
+if not WoWX then
     return
 end
 
-local GPX = GamePadX
+local GPX = WoWX
 GPX.KeyboardSystem = GPX.KeyboardSystem or {}

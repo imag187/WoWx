@@ -1,7 +1,7 @@
 -- Camera.lua: Auto mouselook for controller mode
 -- Simplified from ConsolePort - only active when controller enabled
 
-local _, GPX = ...
+local GPX = WoWX
 
 local Camera = CreateFrame("Frame", "WoWXCamera")
 local cameraActive = false
@@ -44,20 +44,28 @@ local function OnMovementStart()
     end
 end
 
--- Hook all movement functions
-hooksecurefunc("MoveForwardStart", OnMovementStart)
-hooksecurefunc("MoveBackwardStart", OnMovementStart)
-hooksecurefunc("StrafeLeftStart", OnMovementStart)
-hooksecurefunc("StrafeRightStart", OnMovementStart)
-hooksecurefunc("TurnLeftStart", OnMovementStart)
-hooksecurefunc("TurnRightStart", OnMovementStart)
+local movementFunctions = {
+    "MoveForwardStart",
+    "MoveBackwardStart",
+    "StrafeLeftStart",
+    "StrafeRightStart",
+    "TurnLeftStart",
+    "TurnRightStart",
+}
+for _, functionName in ipairs(movementFunctions) do
+    if type(_G[functionName]) == "function" then
+        hooksecurefunc(functionName, OnMovementStart)
+    end
+end
 
--- Stop camera when interacting
-hooksecurefunc("InteractUnit", function()
-    blockCamera = true
-    StopCamera()
-    C_Timer.After(0.5, function() blockCamera = false end)
-end)
+-- Stop camera when interacting on clients that expose the legacy helper.
+if type(InteractUnit) == "function" then
+    hooksecurefunc("InteractUnit", function()
+        blockCamera = true
+        StopCamera()
+        C_Timer.After(0.5, function() blockCamera = false end)
+    end)
+end
 
 -- Update loop - stop camera when conditions change
 Camera:SetScript("OnUpdate", function(self, elapsed)

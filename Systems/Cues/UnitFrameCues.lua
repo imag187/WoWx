@@ -1,6 +1,6 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local Cues = {}
 
 GPX.UnitFrameCues = Cues
@@ -67,7 +67,7 @@ function Cues:CreateIndicator(parentFrame)
     indicator:SetFrameLevel(parentFrame:GetFrameLevel() + 6)
     indicator:SetPoint("TOPLEFT", parentFrame, "TOPLEFT", -3, 3)
     indicator:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", 3, -3)
-    indicator:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(indicator, {
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         edgeSize = 12,
         insets = { left = 3, right = 3, top = 3, bottom = 3 },
@@ -157,11 +157,11 @@ function Cues:UpdateAll()
     end
 end
 
-local eventFrame = CreateFrame("Frame", "GamePadXUnitFrameCueEvents")
+local eventFrame = CreateFrame("Frame", "WoWXUnitFrameCueEvents")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("SPELLS_CHANGED")
 eventFrame:RegisterEvent("UNIT_AURA")
-eventFrame:RegisterEvent("PARTY_MEMBERS_CHANGED")
+eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
 eventFrame:SetScript("OnEvent", function(self, event, unit)

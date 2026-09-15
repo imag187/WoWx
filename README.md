@@ -1,6 +1,6 @@
-﻿# WoWX
+﻿# WoWX by Tech Yeah LLC
 
-WoWX is a WotLK 3.3.5a addon aimed at couch play, reduced-button control surfaces, and accessibility-focused input. It treats controller mappings as ordinary WoW key presses so Linux tools like AntiMicroX or Steam Input can stay outside the addon.
+WoWX is a Season of Discovery addon for couch play, reduced-button control surfaces, and accessibility-focused input. It is engineered collaboratively by Tech Yeah LLC and GitHub Copilot.
 
 ## Practical Hardware Note
 
@@ -108,6 +108,7 @@ The UI-mode banner at the top of the screen shows the active window and the live
 
 - WoWX UI mode currently governs WoWX-owned windows, not the entire Blizzard UI.
 - The spellbook flow is WoWX-owned and is not yet a full cursorless wrapper around Blizzard's default spellbook.
+- Season of Discovery rune-spell assignment through the WoWX spellbook needs live verification after the modern `C_SpellBook` transition.
 - Only one stock combo page is currently wired by default: `SHIFT+ALT`.
 - Full controller navigation for arbitrary Blizzard windows, bags, quest panes, and other addons is not done yet.
 

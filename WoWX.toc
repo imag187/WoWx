@@ -1,16 +1,18 @@
-﻿## Interface: 30300
-## Title: WoWX
-## Notes: Modernized WotLK couch-play addon for controller, keyboard, and accessibility-focused input. Designed for Linux + AntiMicroX. No cloud sync.
-## Author: WoWX
-## Version: 2.1.0
+﻿## Interface: 11509
+## Title: WoWX - Season of Discovery
+## Notes: Couch-play UI, action bars, and accessibility-focused input for Season of Discovery.
+## Author: Tech Yeah LLC
+## Version: 2.1.0-sod
+## X-Credits: Engineered by Tech Yeah LLC with GitHub Copilot
+## X-WoWX-Flavor: SeasonOfDiscovery
 ## SavedVariables: WoWXProfilesDB
-## SavedVariablesPerCharacter: WoWXDB, GamePadXDB
+## SavedVariablesPerCharacter: WoWXDB
 
 WoWX.lua
+Systems\Core\Compatibility.lua
 Systems\Core\SystemRegistry.lua
-Systems\Base\GamePadX.lua
+Systems\Base\WoWXCore.lua
 Systems\Input\Gamepad\GamepadSystem.lua
-Systems\Input\Gamepad\Camera.lua
 Systems\Input\Keyboard\KeyboardSystem.lua
 Systems\Transport\ClickTransport.lua
 Systems\Transport\VisualBar.lua

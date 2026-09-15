@@ -34,13 +34,13 @@ function Registry:IsEnabled(id)
         defaultValue = true
     end
 
-    if not GamePadX or not GamePadX.db then
+    if not WoWX or not WoWX.db then
         return defaultValue
     end
 
-    GamePadX.db.ui = GamePadX.db.ui or {}
-    GamePadX.db.ui.systems = GamePadX.db.ui.systems or {}
-    local systems = GamePadX.db.ui.systems
+    WoWX.db.ui = WoWX.db.ui or {}
+    WoWX.db.ui.systems = WoWX.db.ui.systems or {}
+    local systems = WoWX.db.ui.systems
 
     if systems[key] == nil then
         systems[key] = defaultValue
@@ -55,12 +55,12 @@ function Registry:SetEnabled(id, enabled)
         return false
     end
 
-    if not GamePadX or not GamePadX.db then
+    if not WoWX or not WoWX.db then
         return false
     end
 
-    GamePadX.db.ui = GamePadX.db.ui or {}
-    GamePadX.db.ui.systems = GamePadX.db.ui.systems or {}
-    GamePadX.db.ui.systems[key] = enabled and true or false
+    WoWX.db.ui = WoWX.db.ui or {}
+    WoWX.db.ui.systems = WoWX.db.ui.systems or {}
+    WoWX.db.ui.systems[key] = enabled and true or false
     return true
 end

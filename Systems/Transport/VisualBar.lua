@@ -1,6 +1,6 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local Bar = {}
 
 GPX.VisualBar = Bar
@@ -111,7 +111,7 @@ local RANGE_UPDATE_INTERVAL = 0.08
 local GLOBAL_COOLDOWN_SPELL_ID = 61304
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
-    frame:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(frame, {
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,
@@ -121,6 +121,23 @@ local function createBackdrop(frame, borderR, borderG, borderB, borderA)
     })
     frame:SetBackdropColor(0.04, 0.06, 0.1, 0.9)
     frame:SetBackdropBorderColor(borderR or 0.2, borderG or 0.62, borderB or 0.96, borderA or 0.85)
+end
+
+local function setCooldownTimer(cooldown, start, duration, enabled)
+    if not cooldown then
+        return
+    end
+    if CooldownFrame_SetTimer then
+        CooldownFrame_SetTimer(cooldown, start or 0, duration or 0, enabled or 0)
+    elseif enabled == 0 or not duration or duration <= 0 then
+        if cooldown.Clear then
+            cooldown:Clear()
+        elseif cooldown.SetCooldown then
+            cooldown:SetCooldown(0, 0)
+        end
+    elseif cooldown.SetCooldown then
+        cooldown:SetCooldown(start or 0, duration)
+    end
 end
 
 local function ensureFrameChrome(frame)
@@ -356,6 +373,7 @@ local hiddenParent = CreateFrame("Frame", "WoWXHiddenBarParent", UIParent)
 hiddenParent:Hide()
 
 local managedBlizzardBars = {
+    "MainActionBar",
     "MainMenuBar",
     "MainMenuBarArtFrame",
     "MainMenuExpBar",
@@ -370,6 +388,7 @@ local managedBlizzardBars = {
     "ActionBarDownButton",
     "MainMenuBarPageNumber",
     "MainMenuBarPerformanceBarFrame",
+    "StatusTrackingBarManager",
     "MainMenuBarVehicleLeaveButton",
     "MainMenuBarBackpackButton",
     "CharacterBag0Slot",
@@ -1064,7 +1083,7 @@ function Bar:EnsureBindingProxyButtons()
             end
         end
     end
-    -- Keep a reference so GamePadX can still iterate .bindingButtons if needed.
+    -- Keep a reference so WoWX can still iterate .bindingButtons if needed.
     self.bindingButtons = GPX.ClickTransport.proxyButtons
 end
 
@@ -1198,7 +1217,8 @@ end
 
 function Bar:ShouldReplaceBlizzardBars()
     local config = ensureVisualBarConfig()
-    return GPX.db and GPX.db.enabled and config.enabled ~= false and config.replaceBlizzard ~= false
+    return not self.blizzardEditModeActive
+        and GPX.db and GPX.db.enabled and config.enabled ~= false and config.replaceBlizzard ~= false
 end
 
 function Bar:UpdateBlizzardBars()
@@ -1237,6 +1257,29 @@ function Bar:UpdateBlizzardBars()
                 frame:Show()
             end
         end
+    end
+end
+
+function Bar:SetBlizzardEditModeActive(active)
+    self.blizzardEditModeActive = active and true or nil
+    self:UpdateBlizzardBars()
+end
+
+function Bar:InstallBlizzardEditModeCallbacks()
+    if self.editModeCallbacksInstalled or not EventRegistry then
+        return
+    end
+
+    EventRegistry:RegisterCallback("EditMode.Enter", function()
+        Bar:SetBlizzardEditModeActive(true)
+    end, self)
+    EventRegistry:RegisterCallback("EditMode.Exit", function()
+        Bar:SetBlizzardEditModeActive(false)
+    end, self)
+    self.editModeCallbacksInstalled = true
+    if EditModeManagerFrame and EditModeManagerFrame.IsEditModeActive
+        and EditModeManagerFrame:IsEditModeActive() then
+        self.blizzardEditModeActive = true
     end
 end
 
@@ -1827,7 +1870,7 @@ function Bar:CreateLayoutEditor()
         slider:SetHeight(18)
         slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 42, -72 - ((index - 1) * 36))
         slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-        slider:SetBackdrop({
+        WoWXSystems.Compat:ApplyBackdrop(slider, {
             bgFile = "Interface\\TargetingFrame\\UI-StatusBar",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
             tile = false,
@@ -2296,6 +2339,10 @@ end
 
 function Bar:UpdateMicroMenu()
     self:CreateMicroMenuFrame()
+    if MicroMenuContainer then
+        self.microMenuFrame:Hide()
+        return
+    end
     if InCombatLockdown() then
         self.pendingAttributeRefresh = true
         return
@@ -2715,7 +2762,8 @@ function Bar:ToggleProgressBar()
 end
 
 function Bar:IsAtMaxLevel()
-    local maxPlayerLevel = MAX_PLAYER_LEVEL_TABLE and MAX_PLAYER_LEVEL_TABLE[GetExpansionLevel()] or MAX_PLAYER_LEVEL
+    local expansionLevel = GetExpansionLevel and GetExpansionLevel() or nil
+    local maxPlayerLevel = expansionLevel and MAX_PLAYER_LEVEL_TABLE and MAX_PLAYER_LEVEL_TABLE[expansionLevel] or MAX_PLAYER_LEVEL
     return UnitLevel("player") >= (maxPlayerLevel or 80)
 end
 
@@ -2731,18 +2779,61 @@ function Bar:UpdateProgressBar()
         return
     end
 
+    local progressHeight = tonumber(layout.height) or layoutDefaults.progress.height
     self.progressFrame:SetWidth(tonumber(layout.width) or layoutDefaults.progress.width)
-    self.progressFrame:SetHeight(tonumber(layout.height) or layoutDefaults.progress.height)
     self.progressFrame:SetAlpha(tonumber(layout.alpha) or layoutDefaults.progress.alpha)
 
     local progressBar = self.progressFrame.progressBar
     local progressText = self.progressFrame.progressText
+    local reputationBar = self.progressFrame.reputationBar
+    local reputationText = self.progressFrame.reputationText
     progressBar:ClearAllPoints()
+    reputationBar:ClearAllPoints()
+    reputationBar:Hide()
+
+    local name, _, standingID, min, max, value = WoWXSystems.Compat:GetWatchedFactionInfo()
+    local hasReputation = name and min and max and max > min and value
+    local xpMax = UnitXPMax("player") or 0
+    local hasExperience = xpMax > 0 and not self:IsAtMaxLevel()
+
+    if hasExperience and hasReputation then
+        self.progressFrame:SetHeight(progressHeight * 2)
+        progressBar:SetPoint("TOPLEFT", self.progressFrame, "TOPLEFT", 6, -6)
+        progressBar:SetPoint("BOTTOMRIGHT", self.progressFrame, "RIGHT", -6, 2)
+        reputationBar:SetPoint("TOPLEFT", self.progressFrame, "LEFT", 6, -2)
+        reputationBar:SetPoint("BOTTOMRIGHT", self.progressFrame, "BOTTOMRIGHT", -6, 6)
+
+        local xp = UnitXP("player") or 0
+        local xpPct = xpMax > 0 and (xp / xpMax) or 0
+        local rested = GetXPExhaustion and (GetXPExhaustion() or 0) or 0
+        local restedPct = xpMax > 0 and math.floor((rested / xpMax) * 100 + 0.5) or 0
+        progressBar:SetMinMaxValues(0, xpMax)
+        progressBar:SetValue(xp)
+        progressBar:SetStatusBarColor(0.35, 0.2, 0.8)
+        if rested > 0 then
+            progressText:SetText(string.format("XP %d%%  +%d%%", math.floor(xpPct * 100 + 0.5), restedPct))
+        else
+            progressText:SetText(string.format("XP %d%%", math.floor(xpPct * 100 + 0.5)))
+        end
+
+        local current = value - min
+        local total = max - min
+        local pct = total > 0 and (current / total) or 0
+        local color = FACTION_BAR_COLORS and FACTION_BAR_COLORS[standingID or 1] or { r = 0.0, g = 0.6, b = 1.0 }
+        reputationBar:SetMinMaxValues(0, total)
+        reputationBar:SetValue(current)
+        reputationBar:SetStatusBarColor(color.r, color.g, color.b)
+        reputationText:SetText(string.format("%s  %d%%", name, math.floor(pct * 100 + 0.5)))
+        reputationBar:Show()
+        self.progressFrame:Show()
+        return
+    end
+
+    self.progressFrame:SetHeight(progressHeight)
     progressBar:SetPoint("TOPLEFT", self.progressFrame, "TOPLEFT", 6, -6)
     progressBar:SetPoint("BOTTOMRIGHT", self.progressFrame, "BOTTOMRIGHT", -6, 6)
 
-    local name, _, standingID, min, max, value = GetWatchedFactionInfo()
-    if name and min and max and max > min and value then
+    if hasReputation then
         local current = value - min
         local total = max - min
         local pct = total > 0 and (current / total) or 0
@@ -2755,8 +2846,7 @@ function Bar:UpdateProgressBar()
         return
     end
 
-    local xpMax = UnitXPMax("player") or 0
-    if xpMax > 0 and not self:IsAtMaxLevel() then
+    if hasExperience then
         local xp = UnitXP("player") or 0
         local pct = xpMax > 0 and (xp / xpMax) or 0
         local rested = GetXPExhaustion and (GetXPExhaustion() or 0) or 0
@@ -3819,11 +3909,24 @@ function Bar:CreateProgressFrame()
     local progressText = progressBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     progressText:SetPoint("CENTER", progressBar, "CENTER", 0, 0)
 
+    local reputationBar = CreateFrame("StatusBar", nil, progressFrame)
+    reputationBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
+    reputationBar:SetMinMaxValues(0, 1)
+    reputationBar:SetValue(0)
+    reputationBar:Hide()
+
+    local reputationText = reputationBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    reputationText:SetPoint("CENTER", reputationBar, "CENTER", 0, 0)
+
     self.progressFrame = progressFrame
     self.progressFrame.progressBar = progressBar
     self.progressFrame.progressText = progressText
+    self.progressFrame.reputationBar = reputationBar
+    self.progressFrame.reputationText = reputationText
     progressBar._wowxDisableFrameDrag = true
     progressText._wowxDisableFrameDrag = true
+    reputationBar._wowxDisableFrameDrag = true
+    reputationText._wowxDisableFrameDrag = true
     self:ApplyStoredProgressPosition()
     self:AttachEditButton(progressFrame, "progress")
 end
@@ -3886,7 +3989,7 @@ function Bar:UpdateButtonVisualState(button)
 
     if display and display.slot then
         if isNativeUtility then
-            CooldownFrame_SetTimer(button.cooldown, 0, 0, 0)
+            setCooldownTimer(button.cooldown, 0, 0, 0)
             button.icon:SetVertexColor(0.95, 0.95, 0.95)
             button:SetAlpha(alpha)
             if button.countText then
@@ -3915,7 +4018,7 @@ function Bar:UpdateButtonVisualState(button)
         if maxCharges and maxCharges > 1 and chargeCount and chargeCount < maxCharges and chargeDuration and chargeDuration > 0 then
             start, duration, enable = chargeStart, chargeDuration, chargeEnable
         end
-        CooldownFrame_SetTimer(button.cooldown, start or 0, duration or 0, enable or 0)
+        setCooldownTimer(button.cooldown, start or 0, duration or 0, enable or 0)
 
         local usable, oom = IsUsableAction(display.slot)
         local inRange = IsActionInRange(display.slot)
@@ -3995,7 +4098,7 @@ function Bar:UpdateButtonVisualState(button)
         button:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
         button:SetBackdropBorderColor(borderR, borderG, borderB, 0.0)
     else
-        CooldownFrame_SetTimer(button.cooldown, 0, 0, 0)
+        setCooldownTimer(button.cooldown, 0, 0, 0)
         button.icon:SetVertexColor(0.35, 0.4, 0.46)
         button:SetAlpha(math.max(0.45, alpha * 0.9))
         if button.countText then
@@ -4226,6 +4329,7 @@ end
 function Bar:UpdateAll()
     self:CreateFrame()
     self:CreateProgressFrame()
+    self:InstallBlizzardEditModeCallbacks()
     local inCombat = InCombatLockdown()
     self:UpdateBlizzardBars()
     self:UpdateBindingProxyButtons()
@@ -4476,7 +4580,7 @@ eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")
 eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_USABLE")
 eventFrame:RegisterEvent("UPDATE_SHAPESHIFT_COOLDOWN")
 eventFrame:RegisterEvent("UPDATE_STEALTH")
-eventFrame:RegisterEvent("PLAYER_AURAS_CHANGED")
+eventFrame:RegisterEvent("UNIT_AURA")
 eventFrame:RegisterEvent("UPDATE_OVERRIDE_ACTIONBAR")
 eventFrame:RegisterEvent("UPDATE_POSSESS_BAR")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
@@ -4505,8 +4609,11 @@ local function scheduleVisualBarUpdate()
     end
 end
 
-eventFrame:SetScript("OnEvent", function(_, event)
+eventFrame:SetScript("OnEvent", function(_, event, unit)
     if not GPX.VisualBar then return end
+    if event == "UNIT_AURA" and unit ~= "player" then
+        return
+    end
     if event == "PLAYER_REGEN_DISABLED" then
         if GPX.UIMode and GPX.UIMode.activeContext == "bar" then
             GPX.UIMode:Exit()

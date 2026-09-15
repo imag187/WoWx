@@ -1,5 +1,18 @@
 # WoWX Debug Handoff
 
+## 2026-09-15 Season of Discovery Branch
+
+- Branch: `sod-1.15.9`; interface version `11509`.
+- Live test path: `C:\Program Files (x86)\World of Warcraft\_classic_era_\Interface\AddOns\WoWX`.
+- Lua errors are retained in `WTF\SavedVariables\Blizzard_Console.lua`; slash-command failures also persist to `WoWXDB.lastError`.
+- Modern Classic compatibility lives in `Systems/Core/Compatibility.lua` for container, backdrop, and watched-reputation APIs.
+- The legacy camera hook module is not loaded. `WoWXCore.lua` owns controller mouselook through movement polling.
+- Era's managed micro menu remains Blizzard-owned; do not reparent its individual buttons.
+- WoWX hides Blizzard's main action bar and status tracker during normal replacement mode, restores them for `EditMode.Enter`, and hides them again after `EditMode.Exit`.
+- The WoWX progress surface shows XP above watched reputation at equal width when both apply.
+- Remaining live-test item: a Season of Discovery rune spell could not be placed from the spellbook onto a WoWX bar before maintenance. The current Gridbook still prefers legacy spellbook APIs; modern SoD uses `C_SpellBook` with `Enum.SpellBookSpellBank.Player` and `C_Spell.PickupSpell`. Verify and adapt this path after servers return.
+- Do not infer placement failure from the maintenance outage alone; the latest console recorded `ERROR_GAME_UTILITY_SERVER_NO_SERVER`, but no placement-specific Lua error.
+
 ## Purpose
 
 This file is a continuity handoff for future work on WoWX, especially for the Runemaster / Runeshroud paging issue on Ascension PTR.
@@ -308,7 +321,7 @@ Only direct SavedVariables editing fixed the actual test session.
 
 ## Current Code State To Keep In Mind
 
-### GamePadX.lua
+### WoWXCore.lua
 
 Current intent:
 - default binding engine transport is `click`
@@ -370,7 +383,7 @@ At the end of the session, the user reported success only after the PTR SavedVar
 
 That means the effective working combination was:
 - repo code including the current `VisualBar.lua` mouse fix
-- repo code including the click-transport default/migration logic in `GamePadX.lua`
+- repo code including the click-transport default/migration logic in `WoWXCore.lua`
 - PTR SavedVariables explicitly set to:
   - `ui.bindingEngine.transport = "click"`
   - `_bindingEngineDefaultsV2 = true`
@@ -497,7 +510,7 @@ Latest practical bottom line: on the CoA fork, the current known-good Runemaster
   - **Machine state** stores controller calibration, input setup, and machine-local runtime preferences. It is not a UI layout profile or a class profile.
 - The Profiles tab should be layout-profile parity with Bartender: create, save, load, delete, and select presentation profiles. Class selection and class/resource editing belong in the Classes tab.
 - The Classes system is a data/probing surface, not a server fork. It should use the raw client APIs and manually entered observations to support arbitrary custom classes and mechanics; it must not require CoA, BronzeBeard, Ascension, realm detection, or a separate addon commit.
-- Current technical debt: `GamePadX.lua` still delegates class/resource APIs to the removed `WoWXSystems.GameTypeDB`. Restore that capability as a generic local class/resource service before expanding the Classes UI; do not reintroduce retired server-specific catalogs.
+- Current technical debt: `WoWXCore.lua` still delegates class/resource APIs to the removed `WoWXSystems.GameTypeDB`. Restore that capability as a generic local class/resource service before expanding the Classes UI; do not reintroduce retired server-specific catalogs.
 - The user has repeatedly raised that WoWX may be outgrowing a single large addon file / single-surface coordination model.
 - Future work should stay open to splitting subsystems into cleaner modules or even separate addons where that improves ownership, debugging, and controller-specific iteration.
 - The relevant design goal is not abstraction for its own sake; it is making each system easier to reason about, validate, and evolve without destabilizing unrelated systems.
@@ -603,7 +616,7 @@ Use heading search in this file to jump quickly:
 
 Load order currently expected in `WoWX.toc`:
 
-1. `GamePadX.lua`
+1. `WoWXCore.lua`
 2. `ClickTransport.lua`
 3. `UIMode.lua`
 4. `SetupWizard.lua`
@@ -622,7 +635,7 @@ Why this matters:
 
 ## File Ownership Map (PTR Fork)
 
-- `GamePadX.lua`
+- `WoWXCore.lua`
   - slash command router
   - binding engine application/clear lifecycle
   - diagnostics capture/output windows

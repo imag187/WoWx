@@ -1,5 +1,5 @@
 ﻿-- ============================================================
--- GamePadX.lua  (WoWX core, WotLK 3.3.5a)
+-- WoWXCore.lua
 -- Modernized couch-play bindings and UI helpers - no account sync
 -- ============================================================
 --
@@ -35,14 +35,14 @@
 --   (all extra bars must be enabled in the Blizzard Interface Options)
 --
 -- SLASH COMMANDS:
---   /wowx  (legacy aliases still accepted)
+--   /wowx
 -- ============================================================
 
 -- Protect against double-load
-if GamePadX then return end
+if WoWX then return end
 
-GamePadX = {}
-local GPX = GamePadX
+WoWX = {}
+local GPX = WoWX
 local mainFrame
 GPX.version = "1.0.0"
 GPX.brand = "WoWX"
@@ -379,13 +379,9 @@ GPX.defaults = {
 -- It does NOT follow your account to other machines.
 -- ============================================================
 function GPX:InitDB()
-    if not WoWXDB and GamePadXDB then
-        WoWXDB = GamePadXDB
-    end
     if not WoWXDB then
         WoWXDB = {}
     end
-    GamePadXDB = WoWXDB
     local db = WoWXDB
 
     WoWXProfilesDB = WoWXProfilesDB or {}
@@ -405,7 +401,7 @@ function GPX:InitDB()
     -- Variant builds are intended for A/B testing; force engine/page defaults
     -- from the variant file so previous SavedVariables do not mask behavior.
     local addonName = self.addonName or "WoWX"
-    local title = GetAddOnMetadata and (GetAddOnMetadata(addonName, "Title") or GetAddOnMetadata("WoWX", "Title") or GetAddOnMetadata("GamePadX", "Title")) or nil
+    local title = GetAddOnMetadata and (GetAddOnMetadata(addonName, "Title") or GetAddOnMetadata("WoWX", "Title")) or nil
     local isVariantBuild = title and string.find(string.lower(title), "variant", 1, true)
     if isVariantBuild then
         db.ui = db.ui or {}
@@ -2365,7 +2361,7 @@ function GPX:CollectDiagnosticsLines()
     add("Diagnostics:")
     add("  BuildTag: 2026-05-16-click-proxy-rescue-v2")
     add("  Enabled: " .. tostring(self.db and self.db.enabled))
-    add("  Slash: /wowx registered (legacy aliases active)")
+    add("  Slash: /wowx registered")
     add("  SetupWizard: " .. frameState(self.SetupWizard, "wizard"))
     add("  SettingsUI: " .. frameState(self.SettingsUI, "settings"))
     add("  MenuNav: " .. frameState(self.MenuNav, "menu"))
@@ -2792,7 +2788,7 @@ function GPX:EnsureDiagWindow()
     frame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
     end)
-    frame:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(frame, {
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
         tile = true,
@@ -2846,7 +2842,7 @@ function GPX:EnsureDiagWindow()
     local contentBorder = CreateFrame("Frame", nil, frame)
     contentBorder:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -72)
     contentBorder:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
-    contentBorder:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(contentBorder, {
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,
@@ -3055,7 +3051,7 @@ function GPX:EnsureOutputWindow()
     frame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
     end)
-    frame:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(frame, {
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
         tile = true,
@@ -3097,7 +3093,7 @@ function GPX:EnsureOutputWindow()
     local contentBorder = CreateFrame("Frame", nil, frame)
     contentBorder:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -72)
     contentBorder:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
-    contentBorder:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(contentBorder, {
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,
@@ -4124,18 +4120,16 @@ function GPX:ClearBindings(silent)
 end
 
 -- ============================================================
--- SLASH COMMANDS  (/wowx primary; legacy aliases supported)
+-- SLASH COMMANDS
 -- ============================================================
 function GPX:RegisterSlash()
-    SLASH_GAMEPADX1 = "/gamepadx"
-    SLASH_GAMEPADX2 = "/gpx"
-    SLASH_GAMEPADX3 = "/wowx"
-    SlashCmdList["GAMEPADX"] = function(msg)
+    SLASH_WOWX1 = "/wowx"
+    SlashCmdList["WOWX"] = function(msg)
         local ok, err = pcall(function()
             GPX:Slash(msg)
         end)
         if not ok then
-            GPX:Print("Slash command failed: " .. tostring(err))
+            GPX:LogError("Slash command failed: " .. tostring(err))
         end
 
         if ChatFrameEditBox and ChatFrameEditBox:IsShown() and ChatEdit_DeactivateChat then
@@ -4887,7 +4881,7 @@ end
 -- ============================================================
 -- MAIN FRAME / EVENT HANDLER
 -- ============================================================
-mainFrame = CreateFrame("Frame", "GamePadXMainFrame")
+mainFrame = CreateFrame("Frame", "WoWXMainFrame")
 mainFrame:RegisterEvent("ADDON_LOADED")
 mainFrame:RegisterEvent("PLAYER_LOGIN")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -4897,7 +4891,7 @@ mainFrame:RegisterEvent("UPDATE_BONUS_ACTIONBAR")
 mainFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
 mainFrame:RegisterEvent("UPDATE_SHAPESHIFT_FORMS")
 mainFrame:RegisterEvent("UPDATE_STEALTH")
-mainFrame:RegisterEvent("PLAYER_AURAS_CHANGED")
+mainFrame:RegisterEvent("UNIT_AURA")
 mainFrame:RegisterEvent("UPDATE_VEHICLE_ACTIONBAR")
 mainFrame:RegisterEvent("UPDATE_OVERRIDE_ACTIONBAR")
 mainFrame:RegisterEvent("UPDATE_POSSESS_BAR")
@@ -4917,7 +4911,7 @@ local function isThisAddon(addonName)
         return false
     end
     local name = string.lower(tostring(addonName))
-    return name == "gamepadx" or name == "wowx"
+    return name == "wowx"
 end
 
 local function ensureInitialized()
@@ -5019,12 +5013,18 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         or event == "UPDATE_SHAPESHIFT_FORM"
         or event == "UPDATE_SHAPESHIFT_FORMS"
         or event == "UPDATE_STEALTH"
-        or event == "PLAYER_AURAS_CHANGED"
+        or event == "UNIT_AURA"
         or event == "UPDATE_VEHICLE_ACTIONBAR"
         or event == "UPDATE_OVERRIDE_ACTIONBAR"
         or event == "UPDATE_POSSESS_BAR"
         or event == "PLAYER_CONTROL_GAINED"
         or event == "PLAYER_CONTROL_LOST" then
+        if event == "UNIT_AURA" then
+            local unit = ...
+            if unit ~= "player" then
+                return
+            end
+        end
         if event == "PLAYER_CONTROL_LOST" then
             GPX:SetControllerMovementState(false)
         end

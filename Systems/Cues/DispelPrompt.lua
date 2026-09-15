@@ -1,6 +1,6 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local Prompt = {}
 
 GPX.DispelPrompt = Prompt
@@ -44,11 +44,11 @@ Prompt.currentButton = nil
 function Prompt:CreateFrame()
     if self.frame then return end
 
-    local frame = CreateFrame("Frame", "GamePadXDispelPromptFrame", UIParent)
+    local frame = CreateFrame("Frame", "WoWXDispelPromptFrame", UIParent)
     frame:SetWidth(180)
     frame:SetHeight(42)
     frame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 160)
-    frame:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(frame, {
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,
@@ -340,7 +340,7 @@ function Prompt:Update()
     end
 end
 
-local eventFrame = CreateFrame("Frame", "GamePadXDispelPromptEvents")
+local eventFrame = CreateFrame("Frame", "WoWXDispelPromptEvents")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")
@@ -349,8 +349,7 @@ eventFrame:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
 eventFrame:RegisterEvent("SPELLS_CHANGED")
 eventFrame:RegisterEvent("UPDATE_BINDINGS")
 eventFrame:RegisterEvent("UNIT_AURA")
-eventFrame:RegisterEvent("PARTY_MEMBERS_CHANGED")
-eventFrame:RegisterEvent("RAID_ROSTER_UPDATE")
+eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 
 eventFrame:SetScript("OnEvent", function(self, event, unit)
     if event == "UNIT_AURA" and unit then

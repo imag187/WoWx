@@ -1,6 +1,6 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local Mode = {}
 
 GPX.UIMode = Mode
@@ -17,7 +17,7 @@ local hiddenActions = {
 }
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
-    frame:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(frame, {
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         edgeSize = 12,
         insets = { left = 3, right = 3, top = 3, bottom = 3 },
@@ -40,7 +40,7 @@ function Mode:Create()
     indicator:SetHeight(64)
     indicator:SetPoint("TOP", UIParent, "TOP", 0, -28)
     indicator:SetFrameStrata("DIALOG")
-    indicator:SetBackdrop({
+    WoWXSystems.Compat:ApplyBackdrop(indicator, {
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,

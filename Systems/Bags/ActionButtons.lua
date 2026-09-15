@@ -1,7 +1,29 @@
-if not GamePadX then return end
+if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local Buttons = {}
+local Compat = WoWXSystems and WoWXSystems.Compat
+
+local function getContainerNumSlots(bagID)
+    return Compat and Compat:GetContainerNumSlots(bagID) or 0
+end
+
+local function getContainerItemInfo(bagID, slot)
+    if Compat then
+        return Compat:GetContainerItemInfo(bagID, slot)
+    end
+    return nil, 0, false, nil
+end
+
+local function getContainerItemLink(bagID, slot)
+    return Compat and Compat:GetContainerItemLink(bagID, slot) or nil
+end
+
+local function useContainerItem(bagID, slot)
+    if Compat then
+        return Compat:UseContainerItem(bagID, slot)
+    end
+end
 
 local function SetFrameShown(frame, shown)
     if shown then
@@ -167,7 +189,7 @@ local function applyBlueChromeBackdrop(frame, border)
         return
     end
 
-    frame:SetBackdrop({
+    Compat:ApplyBackdrop(frame, {
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         tile = true,
@@ -375,11 +397,6 @@ local function ensureSlotChrome(button, borderColor)
     if button._border then
         return
     end
-
-    if button.SetNormalTexture then button:SetNormalTexture(nil) end
-    if button.SetPushedTexture then button:SetPushedTexture(nil) end
-    if button.SetHighlightTexture then button:SetHighlightTexture(nil) end
-    if button.SetDisabledTexture then button:SetDisabledTexture(nil) end
 
     local bg = button:CreateTexture(nil, "BORDER", nil, 0)
     bg:SetAllPoints(button)
@@ -671,10 +688,6 @@ function Buttons:CreateFrame()
     button:SetHeight(BAG_BUTTON_SIZE)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:RegisterForDrag("LeftButton")
-    if button.SetNormalTexture then button:SetNormalTexture(nil) end
-    if button.SetPushedTexture then button:SetPushedTexture(nil) end
-    if button.SetHighlightTexture then button:SetHighlightTexture(nil) end
-    if button.SetDisabledTexture then button:SetDisabledTexture(nil) end
 
     ensureSlotChrome(button, BLUE_BORDER)
     if button._slotBg then
@@ -697,10 +710,6 @@ function Buttons:CreateFrame()
     mouseLookButton:SetWidth(BAG_BUTTON_SIZE)
     mouseLookButton:SetHeight(BAG_BUTTON_SIZE)
     mouseLookButton:RegisterForClicks("LeftButtonUp")
-    if mouseLookButton.SetNormalTexture then mouseLookButton:SetNormalTexture(nil) end
-    if mouseLookButton.SetPushedTexture then mouseLookButton:SetPushedTexture(nil) end
-    if mouseLookButton.SetHighlightTexture then mouseLookButton:SetHighlightTexture(nil) end
-    if mouseLookButton.SetDisabledTexture then mouseLookButton:SetDisabledTexture(nil) end
 
     ensureSlotChrome(mouseLookButton, BLUE_BORDER)
     if mouseLookButton._slotBg then
@@ -1025,7 +1034,7 @@ function Buttons:CreateLayoutEditor()
         slider:SetHeight(18)
         slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 26, -48 - ((index - 1) * 38))
         slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
-        slider:SetBackdrop({
+        Compat:ApplyBackdrop(slider, {
             bgFile = "Interface\\TargetingFrame\\UI-StatusBar",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
             tile = false,
@@ -1224,10 +1233,6 @@ function Buttons:CreateBagSlotButton(parent, bagID)
     button:SetHeight(38)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:RegisterForDrag("LeftButton", "RightButton")
-    if button.SetNormalTexture then button:SetNormalTexture(nil) end
-    if button.SetPushedTexture then button:SetPushedTexture(nil) end
-    if button.SetHighlightTexture then button:SetHighlightTexture(nil) end
-    if button.SetDisabledTexture then button:SetDisabledTexture(nil) end
 
     ensureSlotChrome(button, GOLD_BORDER)
 
@@ -1286,7 +1291,7 @@ function Buttons:CreateBagSlotButton(parent, bagID)
             elseif GameTooltip.SetInventoryItem and selfBtn._invSlot then
                 GameTooltip:SetInventoryItem("player", selfBtn._invSlot)
             end
-            local slotCount = GetContainerNumSlots and (GetContainerNumSlots(selfBtn._bagID) or 0) or 0
+            local slotCount = getContainerNumSlots(selfBtn._bagID)
             GameTooltip:AddLine(" ")
             GameTooltip:AddLine(getBagLabel(selfBtn._bagID) .. " slots: " .. tostring(slotCount), 0.86, 0.9, 1.0)
             if selfBtn._isBankSelector and isBankBagID(selfBtn._bagID) and not isBankBagSlotPurchased(selfBtn._bagID) then
@@ -1412,7 +1417,7 @@ function Buttons:EnsureBagWindow()
     applyBlueChromeBackdrop(frame, BLUE_BORDER)
     frame:Hide()
 
-    if not self._stackSplitHookInstalled and hooksecurefunc then
+    if not self._stackSplitHookInstalled and hooksecurefunc and type(OpenStackSplitFrame) == "function" then
         hooksecurefunc("OpenStackSplitFrame", function()
             RaiseStackSplitFrame()
         end)
@@ -1591,10 +1596,10 @@ function Buttons:RefreshBagWindow()
     end
 
     for _, bagID in ipairs(bagIDs) do
-        local slotCount = GetContainerNumSlots and (GetContainerNumSlots(bagID) or 0) or 0
+        local slotCount = getContainerNumSlots(bagID)
         if selectedBagID == nil or selectedBagID == bagID then
             for slot = 1, slotCount do
-                local texture, itemCount, locked, quality = GetContainerItemInfo(bagID, slot)
+            local texture, itemCount, locked, quality = getContainerItemInfo(bagID, slot)
                 entries[#entries + 1] = {
                     bagID = bagID,
                     slot = slot,
@@ -1609,9 +1614,9 @@ function Buttons:RefreshBagWindow()
     end
 
     if includeKeyRingWithBags and KEYRING_BAG_ID then
-        local keySlotCount = GetContainerNumSlots and (GetContainerNumSlots(KEYRING_BAG_ID) or 0) or 0
+        local keySlotCount = getContainerNumSlots(KEYRING_BAG_ID)
         for slot = 1, keySlotCount do
-            local texture, itemCount, locked, quality = GetContainerItemInfo(KEYRING_BAG_ID, slot)
+            local texture, itemCount, locked, quality = getContainerItemInfo(KEYRING_BAG_ID, slot)
             -- Append only occupied keyring slots so keyring grows the grid without empty placeholders.
             if texture then
                 entries[#entries + 1] = {
@@ -1826,15 +1831,15 @@ function Buttons:SellAllJunkToMerchant()
     local soldCount = 0
     local soldValue = 0
     for bagID = 0, 4 do
-        local slots = GetContainerNumSlots and (GetContainerNumSlots(bagID) or 0) or 0
+        local slots = getContainerNumSlots(bagID)
         for slot = 1, slots do
-            local texture, itemCount, locked = GetContainerItemInfo(bagID, slot)
-            if texture and not locked and GetContainerItemLink then
-                local link = GetContainerItemLink(bagID, slot)
+            local texture, itemCount, locked = getContainerItemInfo(bagID, slot)
+            if texture and not locked then
+                local link = getContainerItemLink(bagID, slot)
                 local junk, sellPrice = isJunkItem(link)
-                if junk and UseContainerItem then
+                if junk then
                     local count = tonumber(itemCount) or 1
-                    pcall(UseContainerItem, bagID, slot)
+                    pcall(useContainerItem, bagID, slot)
                     soldCount = soldCount + count
                     soldValue = soldValue + (sellPrice * count)
                 end
@@ -1999,10 +2004,10 @@ function Buttons:RefreshBankWindow()
 
     local entries = {}
     for _, bagID in ipairs(bagIDs) do
-        local slotCount = GetContainerNumSlots and (GetContainerNumSlots(bagID) or 0) or 0
+        local slotCount = getContainerNumSlots(bagID)
         if selectedBagID == nil or selectedBagID == bagID then
             for slot = 1, slotCount do
-                local texture, itemCount, locked, quality = GetContainerItemInfo(bagID, slot)
+            local texture, itemCount, locked, quality = getContainerItemInfo(bagID, slot)
                 entries[#entries + 1] = {
                     bagID = bagID,
                     slot = slot,

@@ -1,10 +1,10 @@
-﻿# WoWX Runtime Order (Authoritative)
+# WoWX Runtime Order (Authoritative)
 
 This file describes the required order of operations for WoWX so behavior is deterministic and debuggable.
 
 ## 1) Load And Init
 
-1. `GamePadX.lua` loads first (see TOC order).
+1. `WoWXCore.lua` loads first (see TOC order).
 2. Main frame listens for:
    - `ADDON_LOADED`
    - `PLAYER_LOGIN`

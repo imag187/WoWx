@@ -4,13 +4,13 @@
 -- RULE: This file must never be edited for visual or layout reasons.
 --       Visual code calls into this module; this module never calls visual code.
 --
--- Load order: before VisualBar.lua and before GamePadX.lua resolves bindings.
+-- Load order: before VisualBar.lua and before WoWXCore.lua resolves bindings.
 -- GPX.ClickTransport is the single source of truth for proxy button creation,
 -- slot resolution fallbacks, and secure attribute writes.
 
-if not GamePadX then return end
+if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local CT = {}
 GPX.ClickTransport = CT
 
@@ -248,7 +248,7 @@ end
 -- ---------------------------------------------------------------------------
 -- Proxy button registry
 -- One hidden SecureActionButtonTemplate per unique command string.
--- GamePadX binds keys to these frames; they are never visible.
+-- WoWX binds keys to these frames; they are never visible.
 -- ---------------------------------------------------------------------------
 CT.proxyButtons = {}
 

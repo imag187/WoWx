@@ -1,16 +1,16 @@
-﻿if not GamePadX then return end
+﻿if not WoWX then return end
 
-local GPX = GamePadX
+local GPX = WoWX
 local Ring = {}
 
 GPX.SpellRing = Ring
 
-Ring.buttonPrefix = "GamePadXSpellRingButton"
+Ring.buttonPrefix = "WoWXSpellRingButton"
 Ring.appliedKeys = {}
 Ring.buttons = {}
 Ring.pendingRebuild = false
 
-local ringFrame = CreateFrame("Frame", "GamePadXSpellRingFrame")
+local ringFrame = CreateFrame("Frame", "WoWXSpellRingFrame")
 ringFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 local function trim(text)

@@ -1,11 +1,11 @@
 -- Systems/UnitFrames/WoWXUnitFrames.lua
 -- Foundation module for WoWX-owned unit frame surfaces.
 
-if not GamePadX then
+if not WoWX then
     return
 end
 
-local GPX = GamePadX
+local GPX = WoWX
 local UnitFrames = {}
 GPX.UnitFrames = UnitFrames
 
