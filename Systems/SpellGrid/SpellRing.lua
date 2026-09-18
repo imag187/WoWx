@@ -11,6 +11,7 @@ Ring.buttons = {}
 Ring.pendingRebuild = false
 
 local ringFrame = CreateFrame("Frame", "GamePadXSpellRingFrame")
+WoWXMakeEventRegistrationSafe(ringFrame)
 ringFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 local function trim(text)

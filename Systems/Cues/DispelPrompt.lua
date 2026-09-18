@@ -48,6 +48,7 @@ function Prompt:CreateFrame()
     frame:SetWidth(180)
     frame:SetHeight(42)
     frame:SetPoint("BOTTOM", UIParent, "BOTTOM", 0, 160)
+    WoWXEnsureBackdropSupport(frame)
     frame:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -341,6 +342,7 @@ function Prompt:Update()
 end
 
 local eventFrame = CreateFrame("Frame", "GamePadXDispelPromptEvents")
+WoWXMakeEventRegistrationSafe(eventFrame)
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_TARGET_CHANGED")
 eventFrame:RegisterEvent("PLAYER_FOCUS_CHANGED")

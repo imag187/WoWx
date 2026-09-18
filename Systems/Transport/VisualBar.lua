@@ -111,6 +111,7 @@ local RANGE_UPDATE_INTERVAL = 0.08
 local GLOBAL_COOLDOWN_SPELL_ID = 61304
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
+    WoWXEnsureBackdropSupport(frame)
     frame:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -1827,6 +1828,7 @@ function Bar:CreateLayoutEditor()
         slider:SetHeight(18)
         slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 42, -72 - ((index - 1) * 36))
         slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+        WoWXEnsureBackdropSupport(slider)
         slider:SetBackdrop({
             bgFile = "Interface\\TargetingFrame\\UI-StatusBar",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -4463,6 +4465,7 @@ function Bar:Slash(msg)
 end
 
 local eventFrame = CreateFrame("Frame", "WoWXVisualBarEvents")
+WoWXMakeEventRegistrationSafe(eventFrame)
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("MODIFIER_STATE_CHANGED")

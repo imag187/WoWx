@@ -298,6 +298,7 @@ local function shouldCaptureCommand(command)
 end
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
+    WoWXEnsureBackdropSupport(frame)
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -2266,6 +2267,7 @@ function UI:ReturnToPreviousContext()
 end
 
 local gridbookSyncFrame = CreateFrame("Frame", "WoWXGridbookSyncFrame")
+WoWXMakeEventRegistrationSafe(gridbookSyncFrame)
 gridbookSyncFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 gridbookSyncFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 gridbookSyncFrame:SetScript("OnEvent", function(_, event, ...)

@@ -1,7 +1,7 @@
 -- Camera.lua: Auto mouselook for controller mode
 -- Simplified from ConsolePort - only active when controller enabled
 
-local _, GPX = ...
+local GPX = GamePadX
 
 local Camera = CreateFrame("Frame", "WoWXCamera")
 local cameraActive = false
@@ -45,15 +45,15 @@ local function OnMovementStart()
 end
 
 -- Hook all movement functions
-hooksecurefunc("MoveForwardStart", OnMovementStart)
-hooksecurefunc("MoveBackwardStart", OnMovementStart)
-hooksecurefunc("StrafeLeftStart", OnMovementStart)
-hooksecurefunc("StrafeRightStart", OnMovementStart)
-hooksecurefunc("TurnLeftStart", OnMovementStart)
-hooksecurefunc("TurnRightStart", OnMovementStart)
+WoWXSafeHookSecureFunc("MoveForwardStart", OnMovementStart)
+WoWXSafeHookSecureFunc("MoveBackwardStart", OnMovementStart)
+WoWXSafeHookSecureFunc("StrafeLeftStart", OnMovementStart)
+WoWXSafeHookSecureFunc("StrafeRightStart", OnMovementStart)
+WoWXSafeHookSecureFunc("TurnLeftStart", OnMovementStart)
+WoWXSafeHookSecureFunc("TurnRightStart", OnMovementStart)
 
 -- Stop camera when interacting
-hooksecurefunc("InteractUnit", function()
+WoWXSafeHookSecureFunc("InteractUnit", function()
     blockCamera = true
     StopCamera()
     C_Timer.After(0.5, function() blockCamera = false end)

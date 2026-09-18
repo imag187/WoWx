@@ -46,6 +46,51 @@ local GPX = GamePadX
 local mainFrame
 GPX.version = "1.0.0"
 GPX.brand = "WoWX"
+
+-- Some events/globals get renamed or removed across client builds (e.g. legacy
+-- PLAYER_AURAS_CHANGED, PARTY_MEMBERS_CHANGED). An error here must never abort
+-- the rest of a file's top-level execution, so every frame that registers events
+-- should be wrapped once via this before its RegisterEvent calls.
+function WoWXMakeEventRegistrationSafe(frame)
+    if not frame or frame._wowxSafeRegisterEvent then
+        return frame
+    end
+    frame._wowxSafeRegisterEvent = true
+    local original = frame.RegisterEvent
+    frame.RegisterEvent = function(self, event, ...)
+        return pcall(original, self, event, ...)
+    end
+    return frame
+end
+
+-- Guards hooksecurefunc() against globals that don't exist/aren't functions on this client.
+function WoWXSafeHookSecureFunc(name, handler)
+    if type(name) ~= "string" or type(_G[name]) ~= "function" then
+        return false
+    end
+    return pcall(hooksecurefunc, name, handler)
+end
+
+-- Modern clients no longer give plain Frame widgets SetBackdrop by default;
+-- mix in BackdropTemplateMixin on demand so every existing :SetBackdrop() call keeps working.
+function WoWXEnsureBackdropSupport(frame)
+    if frame and not frame.SetBackdrop and BackdropTemplateMixin then
+        Mixin(frame, BackdropTemplateMixin)
+    end
+    return frame
+end
+
+-- Some clients reject nil for these setters (used elsewhere to strip default button textures).
+function WoWXClearButtonTextures(button)
+    if not button then
+        return
+    end
+    if button.SetNormalTexture then pcall(button.SetNormalTexture, button, nil) end
+    if button.SetPushedTexture then pcall(button.SetPushedTexture, button, nil) end
+    if button.SetHighlightTexture then pcall(button.SetHighlightTexture, button, nil) end
+    if button.SetDisabledTexture then pcall(button.SetDisabledTexture, button, nil) end
+end
+
 GPX.inputStyleAliases = {
     ps5 = "playstation",
     ps4 = "playstation",
@@ -2773,12 +2818,141 @@ function GPX:BuildDiagText(lines, runTitle)
     return table.concat(out, "\n")
 end
 
+local function WoWXDumpScalar(value)
+    local t = type(value)
+    if t == "string" then
+        return string.format("%q", value)
+    elseif t == "function" or t == "userdata" or t == "thread" then
+        return "<" .. t .. ">"
+    else
+        return tostring(value)
+    end
+end
+
+-- Recursively pretty-prints any Lua value (used for /wowx dump probing new APIs).
+local function WoWXDumpValue(value, depth, seen, lines, prefix)
+    local indent = string.rep("  ", depth)
+    if type(value) ~= "table" then
+        lines[#lines + 1] = indent .. prefix .. WoWXDumpScalar(value)
+        return lines
+    end
+
+    if seen[value] then
+        lines[#lines + 1] = indent .. prefix .. "<repeated table>"
+        return lines
+    end
+    if depth > 4 then
+        lines[#lines + 1] = indent .. prefix .. "<max depth reached>"
+        return lines
+    end
+    seen[value] = true
+
+    local keys = {}
+    for k in pairs(value) do
+        keys[#keys + 1] = k
+    end
+    table.sort(keys, function(a, b)
+        return tostring(a) < tostring(b)
+    end)
+
+    lines[#lines + 1] = indent .. prefix .. "{"
+    for _, k in ipairs(keys) do
+        local v = value[k]
+        local keyLabel = "[" .. WoWXDumpScalar(k) .. "] = "
+        if type(v) == "table" then
+            WoWXDumpValue(v, depth + 1, seen, lines, keyLabel)
+        else
+            lines[#lines + 1] = indent .. "  " .. keyLabel .. WoWXDumpScalar(v)
+        end
+    end
+    lines[#lines + 1] = indent .. "}"
+
+    return lines
+end
+
+function GPX:DumpExpression(expr)
+    expr = (expr or ""):match("^%s*(.-)%s*$")
+    if expr == "" then
+        self:Print("Usage: /wowx dump <lua expression>   e.g. /wowx dump C_GamePad")
+        return
+    end
+
+    local loader = loadstring or load
+    local chunk, loadErr = loader("return " .. expr)
+    if not chunk then
+        self:Print("Dump parse error: " .. tostring(loadErr))
+        return
+    end
+
+    local ok, result = pcall(chunk)
+    if not ok then
+        self:Print("Dump eval error: " .. tostring(result))
+        return
+    end
+
+    local lines = WoWXDumpValue(result, 0, {}, {}, "")
+    self:SetOutputWindowLines(lines, "Dump: " .. expr, true)
+    self:Print("Dumped " .. tostring(#lines) .. " lines to output window (auto-selected). Press Ctrl+C.")
+end
+
+local function WoWXStripColorCodes(text)
+    text = tostring(text or "")
+    text = text:gsub("|c%x%x%x%x%x%x%x%x", "")
+    text = text:gsub("|r", "")
+    return text
+end
+
+-- Hooks the default chat frame so output from other commands (e.g. /api) can be
+-- captured into the WoWX output window instead of scrolling past in chat.
+function GPX:StartChatCapture()
+    self._chatCaptureLines = {}
+
+    if not self._chatCaptureHooked then
+        local frame = DEFAULT_CHAT_FRAME or ChatFrame1
+        if not frame then
+            self:Print("No chat frame available to capture.")
+            return
+        end
+
+        self._chatCaptureFrame = frame
+        self._chatCaptureOriginalAddMessage = frame.AddMessage
+        local originalAddMessage = self._chatCaptureOriginalAddMessage
+        local buffer = self._chatCaptureLines
+
+        frame.AddMessage = function(f, text, ...)
+            buffer[#buffer + 1] = WoWXStripColorCodes(text)
+            return originalAddMessage(f, text, ...)
+        end
+
+        self._chatCaptureHooked = true
+    end
+
+    self:Print("Chat capture ON. Run your command now, then /wowx capture stop.")
+end
+
+function GPX:StopChatCapture()
+    if not self._chatCaptureHooked then
+        self:Print("Chat capture was not active. Use /wowx capture start first.")
+        return
+    end
+
+    if self._chatCaptureFrame and self._chatCaptureOriginalAddMessage then
+        self._chatCaptureFrame.AddMessage = self._chatCaptureOriginalAddMessage
+    end
+    self._chatCaptureHooked = false
+
+    local lines = self._chatCaptureLines or {}
+    self:SetOutputWindowLines(lines, "Chat Capture (" .. tostring(#lines) .. " lines)", true)
+    self:Print("Chat capture OFF. Captured " .. tostring(#lines) .. " lines into output window.")
+end
+
 function GPX:EnsureDiagWindow()
     if self.diagWindow then
         return self.diagWindow
     end
 
     local frame = CreateFrame("Frame", "WoWXDiagWindow", UIParent)
+    WoWXEnsureBackdropSupport(frame)
     frame:SetWidth(900)
     frame:SetHeight(560)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
@@ -2844,6 +3018,7 @@ function GPX:EnsureDiagWindow()
     statusText:SetTextColor(0.8, 0.9, 1.0)
 
     local contentBorder = CreateFrame("Frame", nil, frame)
+    WoWXEnsureBackdropSupport(contentBorder)
     contentBorder:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -72)
     contentBorder:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
     contentBorder:SetBackdrop({
@@ -3042,6 +3217,7 @@ function GPX:EnsureOutputWindow()
     end
 
     local frame = CreateFrame("Frame", "WoWXOutputWindow", UIParent)
+    WoWXEnsureBackdropSupport(frame)
     frame:SetWidth(900)
     frame:SetHeight(460)
     frame:SetPoint("CENTER", UIParent, "CENTER", 0, -30)
@@ -3095,6 +3271,7 @@ function GPX:EnsureOutputWindow()
     statusText:SetTextColor(0.8, 0.9, 1.0)
 
     local contentBorder = CreateFrame("Frame", nil, frame)
+    WoWXEnsureBackdropSupport(contentBorder)
     contentBorder:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -72)
     contentBorder:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
     contentBorder:SetBackdrop({
@@ -4493,6 +4670,21 @@ function GPX:Slash(msg)
     elseif cmd == "diagshow" then
         self:PrintLastDiagnosticRun()
 
+    elseif cmd == "dump" or cmd == "probe" then
+        self:DumpExpression(rest)
+
+    elseif cmd == "capture" then
+        local arg = string.lower((rest or ""):match("^%s*(.-)%s*$"))
+        if arg == "start" or arg == "on" then
+            self:StartChatCapture()
+        elseif arg == "stop" or arg == "off" then
+            self:StopChatCapture()
+        elseif arg == "status" or arg == "" then
+            self:Print("Chat capture: " .. (self._chatCaptureHooked and "ON" or "OFF"))
+        else
+            self:Print("Usage: /wowx capture [start|stop|status]")
+        end
+
     elseif cmd == "diagwin" or cmd == "diagwindow" then
         self:ToggleOutputWindow()
 
@@ -4667,6 +4859,8 @@ function GPX:PrintHelp()
     self:Print("  "..c.."/wowx diagshow"..r.."           Load most recent saved diagnostic run into output window")
     self:Print("  "..c.."/wowx diagwin"..r.."            Toggle selectable output window")
     self:Print("  "..c.."/wowx diagauto [on|off]"..r.."   Toggle auto diagnostics on login/state changes")
+    self:Print("  "..c.."/wowx dump <expr>"..r.."        Dump a Lua expression (e.g. C_GamePad) into output window")
+    self:Print("  "..c.."/wowx capture start|stop"..r.."  Capture other commands' chat output (e.g. /api) into output window")
     self:Print("  "..c.."/wowx out [window|toggle|clear|copy]"..r.." Open/copy selectable output mirror")
     self:Print("  "..c.."/wowx spelldb export"..r.."    Export class/resource/reactive DB into output window")
     self:Print("  "..c.."/wowx spelldb import merge"..r.." Import from output window (merge by profile id)")
@@ -4888,6 +5082,7 @@ end
 -- MAIN FRAME / EVENT HANDLER
 -- ============================================================
 mainFrame = CreateFrame("Frame", "GamePadXMainFrame")
+WoWXMakeEventRegistrationSafe(mainFrame)
 mainFrame:RegisterEvent("ADDON_LOADED")
 mainFrame:RegisterEvent("PLAYER_LOGIN")
 mainFrame:RegisterEvent("PLAYER_ENTERING_WORLD")

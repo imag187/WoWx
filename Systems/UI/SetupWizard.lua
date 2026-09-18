@@ -49,6 +49,7 @@ local function normalizeKey(key)
 end
 
 local function createBackdrop(frame)
+    WoWXEnsureBackdropSupport(frame)
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",

@@ -6,6 +6,7 @@ local Menu = {}
 GPX.MenuNav = Menu
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
+    WoWXEnsureBackdropSupport(frame)
     frame:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",

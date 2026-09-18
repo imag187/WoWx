@@ -67,6 +67,7 @@ function Cues:CreateIndicator(parentFrame)
     indicator:SetFrameLevel(parentFrame:GetFrameLevel() + 6)
     indicator:SetPoint("TOPLEFT", parentFrame, "TOPLEFT", -3, 3)
     indicator:SetPoint("BOTTOMRIGHT", parentFrame, "BOTTOMRIGHT", 3, -3)
+    WoWXEnsureBackdropSupport(indicator)
     indicator:SetBackdrop({
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         edgeSize = 12,
@@ -158,6 +159,7 @@ function Cues:UpdateAll()
 end
 
 local eventFrame = CreateFrame("Frame", "GamePadXUnitFrameCueEvents")
+WoWXMakeEventRegistrationSafe(eventFrame)
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("SPELLS_CHANGED")
 eventFrame:RegisterEvent("UNIT_AURA")

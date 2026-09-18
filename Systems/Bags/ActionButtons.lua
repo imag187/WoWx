@@ -39,8 +39,10 @@ local defaultConfig = {
 }
 
 local updateFrame = CreateFrame("Frame", "WoWXActionButtonsEventFrame")
+WoWXMakeEventRegistrationSafe(updateFrame)
 local lockTickerFrame = CreateFrame("Frame", "WoWXActionButtonsLockTicker")
 local hotkeyEventFrame = CreateFrame("Frame", "WoWXActionButtonsHotkeyEvents")
+WoWXMakeEventRegistrationSafe(hotkeyEventFrame)
 local ITEM_BUTTON_SIZE = 42
 local ITEM_BUTTON_GAP = 4
 local ITEM_BUTTON_COLUMNS = 8
@@ -167,6 +169,7 @@ local function applyBlueChromeBackdrop(frame, border)
         return
     end
 
+    WoWXEnsureBackdropSupport(frame)
     frame:SetBackdrop({
         bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -376,10 +379,7 @@ local function ensureSlotChrome(button, borderColor)
         return
     end
 
-    if button.SetNormalTexture then button:SetNormalTexture(nil) end
-    if button.SetPushedTexture then button:SetPushedTexture(nil) end
-    if button.SetHighlightTexture then button:SetHighlightTexture(nil) end
-    if button.SetDisabledTexture then button:SetDisabledTexture(nil) end
+    WoWXClearButtonTextures(button)
 
     local bg = button:CreateTexture(nil, "BORDER", nil, 0)
     bg:SetAllPoints(button)
@@ -671,10 +671,7 @@ function Buttons:CreateFrame()
     button:SetHeight(BAG_BUTTON_SIZE)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:RegisterForDrag("LeftButton")
-    if button.SetNormalTexture then button:SetNormalTexture(nil) end
-    if button.SetPushedTexture then button:SetPushedTexture(nil) end
-    if button.SetHighlightTexture then button:SetHighlightTexture(nil) end
-    if button.SetDisabledTexture then button:SetDisabledTexture(nil) end
+    WoWXClearButtonTextures(button)
 
     ensureSlotChrome(button, BLUE_BORDER)
     if button._slotBg then
@@ -697,10 +694,7 @@ function Buttons:CreateFrame()
     mouseLookButton:SetWidth(BAG_BUTTON_SIZE)
     mouseLookButton:SetHeight(BAG_BUTTON_SIZE)
     mouseLookButton:RegisterForClicks("LeftButtonUp")
-    if mouseLookButton.SetNormalTexture then mouseLookButton:SetNormalTexture(nil) end
-    if mouseLookButton.SetPushedTexture then mouseLookButton:SetPushedTexture(nil) end
-    if mouseLookButton.SetHighlightTexture then mouseLookButton:SetHighlightTexture(nil) end
-    if mouseLookButton.SetDisabledTexture then mouseLookButton:SetDisabledTexture(nil) end
+    WoWXClearButtonTextures(mouseLookButton)
 
     ensureSlotChrome(mouseLookButton, BLUE_BORDER)
     if mouseLookButton._slotBg then
@@ -1025,6 +1019,7 @@ function Buttons:CreateLayoutEditor()
         slider:SetHeight(18)
         slider:SetPoint("TOPLEFT", frame, "TOPLEFT", 26, -48 - ((index - 1) * 38))
         slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+        WoWXEnsureBackdropSupport(slider)
         slider:SetBackdrop({
             bgFile = "Interface\\TargetingFrame\\UI-StatusBar",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -1224,10 +1219,7 @@ function Buttons:CreateBagSlotButton(parent, bagID)
     button:SetHeight(38)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:RegisterForDrag("LeftButton", "RightButton")
-    if button.SetNormalTexture then button:SetNormalTexture(nil) end
-    if button.SetPushedTexture then button:SetPushedTexture(nil) end
-    if button.SetHighlightTexture then button:SetHighlightTexture(nil) end
-    if button.SetDisabledTexture then button:SetDisabledTexture(nil) end
+    WoWXClearButtonTextures(button)
 
     ensureSlotChrome(button, GOLD_BORDER)
 

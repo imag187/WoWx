@@ -184,6 +184,7 @@ function Button:Toggle()
 end
 
 local eventFrame = CreateFrame("Frame", "WoWXMinimapButtonEvents")
+WoWXMakeEventRegistrationSafe(eventFrame)
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:SetScript("OnEvent", function()

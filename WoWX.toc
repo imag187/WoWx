@@ -1,6 +1,6 @@
-﻿## Interface: 30300
+﻿## Interface: 16001
 ## Title: WoWX
-## Notes: Modernized WotLK couch-play addon for controller, keyboard, and accessibility-focused input. Designed for Linux + AntiMicroX. No cloud sync.
+## Notes: WoW Forever couch-play addon reskin for the native controller UI, plus keyboard and accessibility-focused input. Designed for Linux + AntiMicroX. No cloud sync.
 ## Author: WoWX
 ## Version: 2.1.0
 ## SavedVariables: WoWXProfilesDB

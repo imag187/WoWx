@@ -17,6 +17,7 @@ local hiddenActions = {
 }
 
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
+    WoWXEnsureBackdropSupport(frame)
     frame:SetBackdrop({
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
         edgeSize = 12,
@@ -40,6 +41,7 @@ function Mode:Create()
     indicator:SetHeight(64)
     indicator:SetPoint("TOP", UIParent, "TOP", 0, -28)
     indicator:SetFrameStrata("DIALOG")
+    WoWXEnsureBackdropSupport(indicator)
     indicator:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
