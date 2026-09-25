@@ -2320,3 +2320,4 @@ gridbookSyncFrame:SetScript("OnEvent", function(_, event, ...)
         end
     end
 end)
+WoWXWrapOnEventSafe(gridbookSyncFrame)

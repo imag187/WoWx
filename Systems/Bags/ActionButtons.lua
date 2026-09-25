@@ -2625,6 +2625,7 @@ updateFrame:SetScript("OnEvent", function(_, event)
 
     GPX.ActionButtons:UpdateAll()
 end)
+WoWXWrapOnEventSafe(updateFrame)
 
 hotkeyEventFrame:RegisterEvent("PLAYER_LOGIN")
 hotkeyEventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
@@ -2641,6 +2642,7 @@ hotkeyEventFrame:SetScript("OnEvent", function(_, event)
 
     GPX.ActionButtons:ApplyHotkeys()
 end)
+WoWXWrapOnEventSafe(hotkeyEventFrame)
 
 lockTickerFrame:SetScript("OnUpdate", function(_, elapsed)
     if not GPX.ActionButtons then

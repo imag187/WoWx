@@ -183,3 +183,4 @@ eventFrame:SetScript("OnEvent", function(self, event, unit)
 
     Cues:UpdateAll()
 end)
+WoWXWrapOnEventSafe(eventFrame)

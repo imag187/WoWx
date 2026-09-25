@@ -350,3 +350,4 @@ ringFrame:SetScript("OnEvent", function()
         Ring:ApplyBindings()
     end
 end)
+WoWXWrapOnEventSafe(ringFrame)

@@ -192,3 +192,4 @@ eventFrame:SetScript("OnEvent", function()
         GPX.MinimapButton:Refresh()
     end
 end)
+WoWXWrapOnEventSafe(eventFrame)

@@ -19,9 +19,11 @@ Systems\UI\SetupWizard.lua
 Systems\UI\SettingsUI.lua
 Systems\UI\MenuNav.lua
 Systems\UI\MinimapButton.lua
-Systems\Bags\ActionButtons.lua
-Systems\SpellGrid\SpellbookUI.lua
-Systems\SpellGrid\SpellRing.lua
+# Retired 2026-09-25: Blizzard's native gamepad UI now owns bags/bank/spellbook grid/spell ring
+# functionality on this client - WoWX is a visual reskin, not a functional replacement. See Agents.md.
+# Systems\Bags\ActionButtons.lua
+# Systems\SpellGrid\SpellbookUI.lua
+# Systems\SpellGrid\SpellRing.lua
 Systems\Cues\DispelPrompt.lua
 Systems\Cues\UnitFrameCues.lua
 Systems\UnitFrames\WoWXUnitFrames.lua

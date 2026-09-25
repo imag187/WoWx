@@ -377,3 +377,4 @@ eventFrame:SetScript("OnEvent", function(self, event, unit)
 
     Prompt:Update()
 end)
+WoWXWrapOnEventSafe(eventFrame)

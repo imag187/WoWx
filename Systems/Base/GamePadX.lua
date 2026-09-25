@@ -91,6 +91,44 @@ function WoWXClearButtonTextures(button)
     if button.SetDisabledTexture then pcall(button.SetDisabledTexture, button, nil) end
 end
 
+-- Records a caught runtime error so it survives even after Blizzard's error UI is gone.
+-- Readable later via /wowx dump WoWXRuntimeErrors or the /wowx out window.
+function WoWXLogRuntimeError(source, event, err)
+    local line = string.format("|cffff5555[WoWX ERROR]|r %s (%s): %s", tostring(source), tostring(event), tostring(err))
+    if DEFAULT_CHAT_FRAME then
+        DEFAULT_CHAT_FRAME:AddMessage(line)
+    end
+    if GamePadX and GamePadX.AppendOutputLine then
+        pcall(GamePadX.AppendOutputLine, GamePadX, line)
+    end
+    _G.WoWXRuntimeErrors = _G.WoWXRuntimeErrors or {}
+    table.insert(_G.WoWXRuntimeErrors, { time = date and date("%H:%M:%S") or "?", source = tostring(source), event = tostring(event), err = tostring(err) })
+    while #_G.WoWXRuntimeErrors > 50 do
+        table.remove(_G.WoWXRuntimeErrors, 1)
+    end
+end
+
+-- Wraps an already-assigned OnEvent handler in pcall so a bug in one event never
+-- reaches Blizzard's global error handler (that's what triggers the "disable this
+-- addon" prompt and, on some clients, a hang). Call this AFTER frame:SetScript("OnEvent", ...).
+function WoWXWrapOnEventSafe(frame)
+    if not frame or frame._wowxSafeOnEvent then
+        return frame
+    end
+    local original = frame:GetScript("OnEvent")
+    if not original then
+        return frame
+    end
+    frame._wowxSafeOnEvent = true
+    frame:SetScript("OnEvent", function(self, event, ...)
+        local ok, err = pcall(original, self, event, ...)
+        if not ok then
+            WoWXLogRuntimeError(frame:GetName() or "?", event, err)
+        end
+    end)
+    return frame
+end
+
 GPX.inputStyleAliases = {
     ps5 = "playstation",
     ps4 = "playstation",
@@ -5227,4 +5265,5 @@ mainFrame:SetScript("OnEvent", function(self, event, ...)
         GPX:RunAutomaticDiagnosticCapture(string.lower(event))
     end
 end)
+WoWXWrapOnEventSafe(mainFrame)
 

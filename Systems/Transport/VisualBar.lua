@@ -4541,3 +4541,4 @@ eventFrame:SetScript("OnEvent", function(_, event)
     -- All other events trigger an immediate full update.
     GPX.VisualBar:UpdateAll()
 end)
+WoWXWrapOnEventSafe(eventFrame)
