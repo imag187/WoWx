@@ -121,7 +121,6 @@ local systemSpecs = {
     { id = "transport", label = "Action Transport", hint = "Click/proxy action execution layer.", locked = true },
     { id = "gamepad", label = "Gamepad Input", hint = "Controller mappings and mouselook tools." },
     { id = "keyboard", label = "Keyboard Input", hint = "Keyboard-focused mapping surfaces." },
-    { id = "bags", label = "Bags System", hint = "WoWX bag action button and bag window." },
     { id = "spellgrid", label = "Spell Grid", hint = "Gridbook and spell-ring assignment surfaces." },
     { id = "cues", label = "Combat Cues", hint = "Dispel prompts and unit frame cue overlays." },
     { id = "unitframes", label = "Unit Frames", hint = "WoWX-owned unit frame system foundation." },
@@ -992,9 +991,8 @@ function UI:CreateFrame()
         { key = "focusBar", label = "Focus Bar", x = 266, y = -122, width = 140, click = function() if GPX.UIMode then GPX.UIMode:Enter("bar", { returnContext = "settings" }) end end },
         { key = "spellbook", label = "Open Spellbook", x = 14, y = -162, width = 116, click = function() if GPX.SpellbookUI then GPX.SpellbookUI:Open(nil, "settings") end end },
         { key = "menuNav", label = "Menu Navigator", x = 140, y = -162, width = 140, click = function() GPX:OpenMenuNav("settings") end },
-        { key = "buttonEdit", label = "Button Edit", x = 290, y = -162, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash((GPX.db.ui.visualBar.buttonLocked ~= false) and "buttonunlock" or "buttonlock") end UI:Refresh() end },
+        { key = "buttonEdit", label = "Button Lock", x = 290, y = -162, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash((GPX.db.ui.visualBar.buttonLocked ~= false) and "buttonunlock" or "buttonlock") end UI:Refresh() end },
         { key = "gridbook", label = "Open Gridbook", x = 14, y = -202, width = 116, click = function() GPX:Slash("gridbook") end },
-        { key = "toggleBags", label = "WoWX Bags", x = 140, y = -202, width = 116, click = function() if GPX.ActionButtons and GPX.ActionButtons.Slash then GPX.ActionButtons:Slash("toggle") end UI:Refresh() end },
         { key = "layoutProfiles", label = "Layout Profiles", x = 266, y = -202, width = 140, click = function() if setTab then setTab("profiles") end end },
         { key = "close", label = "Close", x = 290, y = -242, width = 116, click = function() frame:Hide() end },
     }
@@ -1262,19 +1260,26 @@ function UI:CreateFrame()
     end
 
     frame.barOptions = {}
-    local optionSpecs = {
-        { key = "toggleProgress", label = "XP/Rep Bar", x = 266, y = -202, width = 140, click = function() if GPX.VisualBar then GPX.VisualBar:Slash("progress") end UI:Refresh() end },
-    }
-
-    for _, spec in ipairs(optionSpecs) do
-        local button = CreateFrame("Button", nil, actionPanel, "UIPanelButtonTemplate")
-        button:SetWidth(spec.width or 104)
-        button:SetHeight(30)
-        button:SetPoint("TOPLEFT", actionPanel, "TOPLEFT", spec.x, spec.y or -202)
-        button:SetText(spec.label)
-        button:SetScript("OnClick", spec.click)
-        frame.barOptions[spec.key] = button
-        frame.navOrder[#frame.navOrder + 1] = button
+    do
+        local check = CreateFrame("CheckButton", nil, actionPanel, "UICheckButtonTemplate")
+        check:SetWidth(24)
+        check:SetHeight(24)
+        check:SetPoint("TOPLEFT", actionPanel, "TOPLEFT", 266, -204)
+        local label = actionPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        label:SetPoint("LEFT", check, "RIGHT", 4, 0)
+        label:SetText("Show XP/Rep Bar")
+        check.label = label
+        check:SetScript("OnClick", function(btn)
+            local cfg = GPX.db and GPX.db.ui and GPX.db.ui.visualBar
+            local checked = btn:GetChecked()
+            local wantShown = (checked == 1 or checked == true)
+            if cfg and GPX.VisualBar and ((cfg.showProgress ~= false) ~= wantShown) then
+                GPX.VisualBar:ToggleProgressBar()
+            end
+            UI:Refresh()
+        end)
+        frame.barOptions.toggleProgress = check
+        frame.navOrder[#frame.navOrder + 1] = check
     end
 
     frame.mappingButtons = {}
@@ -1459,7 +1464,7 @@ function UI:RefreshUtilityButtons()
             self.frame.barOptions.petBigger:SetText("Pet +")
         end
         if self.frame.barOptions.toggleProgress then
-            self.frame.barOptions.toggleProgress:SetText((cfg.showProgress ~= false) and "XP/Rep: On" or "XP/Rep: Off")
+            self.frame.barOptions.toggleProgress:SetChecked(cfg.showProgress ~= false)
         end
     end
 end
@@ -2527,15 +2532,13 @@ function UI:BuildStatusText()
     elseif controllerCfg.mouseLookMode == "off" then
         mouseLookMode = "Off"
     end
-    local bagsCfg = GPX.db and GPX.db.ui and GPX.db.ui.actionButtons
-    local wowxBags = (bagsCfg and bagsCfg.enabled ~= false and bagsCfg.showBags ~= false) and "On" or "Off"
     local lastError = GPX.db and GPX.db.lastError and GPX.db.lastError ~= "" and GPX.db.lastError or "None"
     local gameType = descriptor and descriptor.gameType or "classic"
     local realmType = descriptor and descriptor.realmType or "unknown"
     local expansionType = descriptor and descriptor.expansionType or "wotlk_full"
 
     return string.format(
-        "Mode: %s\nProfile: %s\nGame Type: %s\nRealm Type: %s\nExpansion Type: %s\nInput Style: %s\nController Mode: %s\nMouselook Mode: %s\nVisual Bar: %s\nWoWX Bags: %s\nLayout Edit: %s\nButton Edit: %s\nMinimap Button: %s\nLast Error: %s",
+        "Mode: %s\nProfile: %s\nGame Type: %s\nRealm Type: %s\nExpansion Type: %s\nInput Style: %s\nController Mode: %s\nMouselook Mode: %s\nVisual Bar: %s\nLayout Edit: %s\nButton Edit: %s\nMinimap Button: %s\nLast Error: %s",
         mode,
         profileName,
         gameType,
@@ -2545,7 +2548,6 @@ function UI:BuildStatusText()
         controllerMode,
         mouseLookMode,
         visualBar,
-        wowxBags,
         layoutLockState,
         buttonLockState,
         minimap,
@@ -2564,11 +2566,7 @@ function UI:Refresh()
         self.frame.buttons.lockBar:SetText((GPX.db.ui.visualBar.locked ~= false) and "Layout Edit: Off" or "Layout Edit: On")
     end
     if self.frame.buttons and self.frame.buttons.buttonEdit and GPX.db and GPX.db.ui and GPX.db.ui.visualBar then
-        self.frame.buttons.buttonEdit:SetText((GPX.db.ui.visualBar.buttonLocked ~= false) and "Button Edit: Off" or "Button Edit: On")
-    end
-    if self.frame.buttons and self.frame.buttons.toggleBags and GPX.db and GPX.db.ui and GPX.db.ui.actionButtons then
-        local cfg = GPX.db.ui.actionButtons
-        self.frame.buttons.toggleBags:SetText((cfg.enabled ~= false and cfg.showBags ~= false) and "WoWX Bags: On" or "WoWX Bags: Off")
+        self.frame.buttons.buttonEdit:SetText((GPX.db.ui.visualBar.buttonLocked ~= false) and "Button Lock: On" or "Button Lock: Off")
     end
     if not self.captureField and self.frame.inputHint then
         if GPX:IsControllerEnabled() then

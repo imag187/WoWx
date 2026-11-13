@@ -22,7 +22,8 @@ end
 local function StartCamera()
     if not IsControllerMode() then return end
     if ShouldBlockCamera() then return end
-    if GetMouseFocus() ~= WorldFrame then return end
+    local focus = GetMouseFocus and GetMouseFocus() or nil
+    if focus and focus ~= WorldFrame then return end
     
     if not cameraActive and not IsMouselooking() then
         MouselookStart()

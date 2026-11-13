@@ -110,6 +110,24 @@ local layoutTitles = {
 local RANGE_UPDATE_INTERVAL = 0.08
 local GLOBAL_COOLDOWN_SPELL_ID = 61304
 
+-- Secret-value helpers (see Agents.md SECRET VALUES). Must stay above every use.
+local function isSecret(value)
+    return WoWXIsSecret and WoWXIsSecret(value) or false
+end
+
+local function anySecret(...)
+    for i = 1, select("#", ...) do
+        if isSecret((select(i, ...))) then return true end
+    end
+    return false
+end
+
+-- Returns nil for secret values so callers can branch safely.
+local function clean(value)
+    if isSecret(value) then return nil end
+    return value
+end
+
 local function createBackdrop(frame, borderR, borderG, borderB, borderA)
     WoWXEnsureBackdropSupport(frame)
     frame:SetBackdrop({
@@ -176,6 +194,7 @@ local function getLayoutProfileSnapshot()
         stanceScale = tonumber(config.stanceScale) or nil,
         petScale = tonumber(config.petScale) or nil,
         vehicleScale = tonumber(config.vehicleScale) or nil,
+        progressScale = tonumber(config.progressScale) or nil,
     }
 end
 
@@ -244,6 +263,7 @@ function Bar:ApplyLayoutProfile(profileName)
     if snapshot.stanceScale ~= nil then config.stanceScale = snapshot.stanceScale end
     if snapshot.petScale ~= nil then config.petScale = snapshot.petScale end
     if snapshot.vehicleScale ~= nil then config.vehicleScale = snapshot.vehicleScale end
+    if snapshot.progressScale ~= nil then config.progressScale = snapshot.progressScale end
     config.layoutProfile = name
     self:UpdateAll()
     return true
@@ -357,6 +377,18 @@ local hiddenParent = CreateFrame("Frame", "WoWXHiddenBarParent", UIParent)
 hiddenParent:Hide()
 
 local managedBlizzardBars = {
+    -- Modern engine (WoW Forever) frames. Missing names are skipped at runtime.
+    "MainActionBar",
+    "MultiBar5",
+    "MultiBar6",
+    "MultiBar7",
+    "StanceBar",
+    "PossessActionBar",
+    "PetActionBar",
+    -- MicroMenu is intentionally NOT managed: WoWX leaves Blizzard's micro menu (and its
+    -- Edit Mode layout) alone. BagsBar is native in keyboard mode, hidden in controller mode.
+    "BagsBar",
+    -- Legacy (3.3.5-era) frames.
     "MainMenuBar",
     "MainMenuBarArtFrame",
     "MainMenuExpBar",
@@ -371,23 +403,13 @@ local managedBlizzardBars = {
     "ActionBarDownButton",
     "MainMenuBarPageNumber",
     "MainMenuBarPerformanceBarFrame",
-    "MainMenuBarVehicleLeaveButton",
+    -- MainMenuBarVehicleLeaveButton is intentionally NOT managed: Blizzard owns the vehicle
+    -- exit button (Edit Mode positioned). Reparenting it is protected and breaks leaving vehicles.
     "MainMenuBarBackpackButton",
     "CharacterBag0Slot",
     "CharacterBag1Slot",
     "CharacterBag2Slot",
     "CharacterBag3Slot",
-    "CharacterMicroButton",
-    "SpellbookMicroButton",
-    "TalentMicroButton",
-    "QuestLogMicroButton",
-    "SocialsMicroButton",
-    "WorldMapMicroButton",
-    "MainMenuMicroButton",
-    "HelpMicroButton",
-    "AchievementMicroButton",
-    "CompanionsMicroButton",
-    "EJMicroButton",
     "MultiBarBottomLeft",
     "MultiBarBottomRight",
     "MultiBarRight",
@@ -398,22 +420,8 @@ local managedBlizzardBars = {
     "PetActionBarFrame",
 }
 
-local microMenuFrames = {
-    CharacterMicroButton = true,
-    SpellbookMicroButton = true,
-    TalentMicroButton = true,
-    QuestLogMicroButton = true,
-    SocialsMicroButton = true,
-    WorldMapMicroButton = true,
-    MainMenuMicroButton = true,
-    HelpMicroButton = true,
-    AchievementMicroButton = true,
-    LFGMicroButton = true,
-    CompanionsMicroButton = true,
-    EJMicroButton = true,
-}
-
 local bagFrames = {
+    BagsBar = true,
     MainMenuBarBackpackButton = true,
     CharacterBag0Slot = true,
     CharacterBag1Slot = true,
@@ -422,27 +430,26 @@ local bagFrames = {
 }
 
 local stanceFrames = {
+    StanceBar = true,
+    PossessActionBar = true,
     StanceBarFrame = true,
     ShapeshiftBarFrame = true,
     PossessBarFrame = true,
 }
 
 local petFrames = {
+    PetActionBar = true,
     PetActionBarFrame = true,
 }
 
-local orderedMicroButtons = {
-    "CharacterMicroButton",
-    "SpellbookMicroButton",
-    "TalentMicroButton",
-    "AchievementMicroButton",
-    "QuestLogMicroButton",
-    "SocialsMicroButton",
-    "LFGMicroButton",
-    "CompanionsMicroButton",
-    "EJMicroButton",
-    "MainMenuMicroButton",
-    "HelpMicroButton",
+-- Legacy individual bag slot buttons; on Forever they live inside BagsBar and must not be
+-- reparented individually (that breaks the native bag bar layout).
+local legacyBagChildren = {
+    MainMenuBarBackpackButton = true,
+    CharacterBag0Slot = true,
+    CharacterBag1Slot = true,
+    CharacterBag2Slot = true,
+    CharacterBag3Slot = true,
 }
 
 local vehicleLeaveButtonCandidates = {
@@ -965,8 +972,14 @@ local function hideAuxPlaceholderButtons(frame, key)
 end
 
 local function isCursorCarryingActionPayload()
-    local cursorType = GetCursorInfo and select(1, GetCursorInfo()) or nil
-    return cursorType or CursorHasItem() or CursorHasSpell() or CursorHasMacro() or CursorHasMoney()
+    if GetCursorInfo and GetCursorInfo() ~= nil then
+        return true
+    end
+    return (CursorHasItem and CursorHasItem())
+        or (CursorHasSpell and CursorHasSpell())
+        or (CursorHasMacro and CursorHasMacro())
+        or (CursorHasMoney and CursorHasMoney())
+        or false
 end
 
 local function getFrameMouseFocus(frame)
@@ -1004,7 +1017,7 @@ end
 
 local function getActiveStanceFrames()
     local frames = {}
-    local candidates = { _G.StanceBarFrame, _G.ShapeshiftBarFrame, _G.PossessBarFrame }
+    local candidates = { _G.StanceBarFrame, _G.ShapeshiftBarFrame, _G.PossessBarFrame, _G.StanceBar, _G.PossessActionBar }
     for _, frame in ipairs(candidates) do
         if frame and not frame._wowxListed then
             frame._wowxListed = true
@@ -1202,23 +1215,51 @@ function Bar:ShouldReplaceBlizzardBars()
     return GPX.db and GPX.db.enabled and config.enabled ~= false and config.replaceBlizzard ~= false
 end
 
+function Bar:UpdateNativeGamepadBar(hide)
+    -- WoW Forever's native gamepad bar. Blizzard re-shows it on interface style
+    -- changes and when its binding editor closes, so keep a persistent OnShow guard.
+    local frame = _G.GamepadMainActionBarFrame
+    if not frame then
+        return
+    end
+
+    self.nativeGamepadBarHidden = hide and true or false
+    if not self.nativeGamepadBarHooked then
+        self.nativeGamepadBarHooked = true
+        frame:HookScript("OnShow", function(shown)
+            if Bar.nativeGamepadBarHidden and not InCombatLockdown() then
+                shown:Hide()
+            end
+        end)
+    end
+
+    if self.nativeGamepadBarHidden and frame:IsShown() and not InCombatLockdown() then
+        frame:Hide()
+    end
+end
+
 function Bar:UpdateBlizzardBars()
     if InCombatLockdown() then
+        -- Reparenting Blizzard frames is combat-protected; retry on PLAYER_REGEN_ENABLED.
+        self.pendingAttributeRefresh = true
         return
     end
 
     self.originalParents = self.originalParents or {}
     local hideBars = self:ShouldReplaceBlizzardBars()
-    local config = ensureVisualBarConfig()
-    local keepMicro = config.keepMicroMenu ~= false
-    local keepBags = false
+    local controllerMode = GPX:IsControllerEnabled()
+    self:UpdateNativeGamepadBar(hideBars and controllerMode)
+    -- Blizzard owns bags (BagsBar, combined bags, bank) in every mode.
+    local keepBags = true
     local keepStance = true
     local keepPet = true
     for _, frameName in ipairs(managedBlizzardBars) do
         local frame = _G[frameName]
+        if frame and legacyBagChildren[frameName] and _G.BagsBar then
+            frame = nil
+        end
         if frame then
-            local keepFrame = (keepMicro and microMenuFrames[frameName])
-                or (keepBags and bagFrames[frameName])
+            local keepFrame = (keepBags and bagFrames[frameName])
                 or (keepStance and stanceFrames[frameName])
                 or (keepPet and petFrames[frameName])
             if hideBars then
@@ -1552,6 +1593,10 @@ function Bar:GetScaleForKind(kind)
         local scale = tonumber(config.vehicleScale) or 1.0
         return clamp(scale, 0.5, 2.0), 0.5, 2.0, "vehicleScale"
     end
+    if kind == "progress" then
+        local scale = tonumber(config.progressScale) or 1.0
+        return clamp(scale, 0.5, 2.0), 0.5, 2.0, "progressScale"
+    end
     return 1.0, 0.5, 2.0, nil
 end
 
@@ -1587,6 +1632,8 @@ function Bar:SetScaleForKind(kind, newScale)
         end
     elseif kind == "vehicle" and self.vehicleFrame then
         self.vehicleFrame:SetScale(finalScale)
+    elseif kind == "progress" and self.progressFrame then
+        self.progressFrame:SetScale(finalScale)
     end
 end
 
@@ -1926,8 +1973,8 @@ function Bar:GetEditorControls(kind)
                 layout.buttonWidth = size
                 layout.buttonHeight = size
                 if self.layoutEditor and self.layoutEditor.controls then
-                    local widthSlider = self.layoutEditor.controls[3]
-                    local heightSlider = self.layoutEditor.controls[4]
+                    local widthSlider = self.layoutEditor.controls[2]
+                    local heightSlider = self.layoutEditor.controls[3]
                     if widthSlider and widthSlider ~= axis then
                         widthSlider._suspend = true
                         widthSlider:SetValue(size)
@@ -1947,9 +1994,6 @@ function Bar:GetEditorControls(kind)
             function() return select(1, self:GetScaleForKind("main")) end,
             function(value) self:SetScaleForKind("main", value) end,
             formatScaleValue)
-        add("Visible Buttons", 1, 12, 1,
-            function() return self:GetVisibleButtonCount() end,
-            function(value) layout.buttonCount = clamp(math.floor(value + 0.5), 1, BAR_BUTTON_COUNT) end)
         add("Button Width", 42, 120, 1,
             function() return tonumber(layout.buttonWidth) or layoutDefaults.main.buttonWidth end,
             function(value) syncMainSize("buttonWidth", value) end)
@@ -1983,6 +2027,10 @@ function Bar:GetEditorControls(kind)
             function() return tonumber(layout.alpha) or layoutDefaults.bag.alpha end,
             function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
     elseif kind == "progress" then
+        add("Scale", 0.5, 2.0, 0.01,
+            function() return select(1, self:GetScaleForKind("progress")) end,
+            function(value) self:SetScaleForKind("progress", value) end,
+            formatScaleValue)
         add("Width", 260, 960, 2,
             function() return tonumber(layout.width) or layoutDefaults.progress.width end,
             function(value) layout.width = math.floor(value + 0.5) end)
@@ -2296,67 +2344,13 @@ function Bar:UpdateModifierIndicator(state)
     self.modifierFrame:SetHeight(30)
 end
 
+-- WoWX no longer replaces or reparents the micro menu. Blizzard's MicroMenu (including the
+-- Forever additions and Edit Mode positioning) is used as-is. The legacy WoWX micro frame
+-- is only ever hidden, never created or populated.
 function Bar:UpdateMicroMenu()
-    self:CreateMicroMenuFrame()
-    if InCombatLockdown() then
-        self.pendingAttributeRefresh = true
-        return
-    end
-    local layout = self:GetLayoutConfig("micro")
-    local config = ensureVisualBarConfig()
-    local show = self:ShouldReplaceBlizzardBars() and config.keepMicroMenu ~= false
-    if not show then
+    if self.microMenuFrame and self.microMenuFrame:IsShown() then
         self.microMenuFrame:Hide()
-        return
     end
-
-    local point = self:GetStoredMicroPosition()
-    self.microMenuFrame:ClearAllPoints()
-    self.microMenuFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
-    self.microMenuFrame:SetScale(select(1, self:GetScaleForKind("micro")))
-    self.microMenuFrame:SetAlpha(tonumber(layout.alpha) or 1.0)
-
-    local prev
-    local visibleButtons = {}
-    local buttonCount = 0
-    local contentWidth = 16
-    for _, name in ipairs(orderedMicroButtons) do
-        local btn = _G[name]
-        if btn then
-            btn:SetParent(self.microMenuFrame)
-            btn:ClearAllPoints()
-            if not prev then
-                btn:SetPoint("LEFT", self.microMenuFrame, "LEFT", 8, 0)
-            else
-                btn:SetPoint("LEFT", prev, "RIGHT", -2, 0)
-            end
-            btn._wowxShellAnchorTarget = (btn.GetNormalTexture and btn:GetNormalTexture()) or btn
-            btn:Show()
-            visibleButtons[#visibleButtons + 1] = btn
-            prev = btn
-            buttonCount = buttonCount + 1
-            contentWidth = contentWidth + getEffectiveFrameWidth(btn)
-            if buttonCount > 1 then
-                contentWidth = contentWidth - 2
-            end
-        end
-    end
-
-    if buttonCount == 0 then
-        self.microMenuFrame:Hide()
-        return
-    end
-
-    self.microMenuFrame:SetWidth(math.max(36, contentWidth + 8))
-    self.microMenuFrame:SetHeight(26)
-    self:ApplyChromeBackdrop(self.microMenuFrame, 0.12)
-    updateShellAroundButtons(self.microMenuFrame, visibleButtons, 4, 4)
-    if self.microMenuFrame._wowxShell then
-        self.microMenuFrame._wowxShell:SetBackdropColor(0.0, 0.0, 0.0, 0.0)
-        self.microMenuFrame._wowxShell:SetBackdropBorderColor(0.0, 0.0, 0.0, 0.0)
-    end
-
-    self.microMenuFrame:Show()
 end
 
 function Bar:UpdateDetachedClassBars()
@@ -2557,84 +2551,13 @@ function Bar:GetVehicleLeaveButton()
     return nil
 end
 
+-- Blizzard owns the vehicle exit button. WoWX never reparents, repositions, shows or hides
+-- it (all protected / anchor-connected in combat). The legacy WoWX host frame is never
+-- created; if one exists from older code it is only hidden (it is unprotected now).
 function Bar:UpdateVehicleLeaveButton()
-    local hostFrame = self:GetVehicleHostFrame()
-    local layout = self:GetLayoutConfig("vehicle")
-    local point = self:GetStoredVehiclePosition()
-    local button = self:GetVehicleLeaveButton()
-    local active = (CanExitVehicle and CanExitVehicle())
-        or (UnitHasVehicleUI and UnitHasVehicleUI("player"))
-        or (HasVehicleActionBar and HasVehicleActionBar())
-
-    hostFrame:SetParent(UIParent)
-    hostFrame:ClearAllPoints()
-    hostFrame:SetPoint(point.anchor, UIParent, point.relativePoint, point.x, point.y)
-    hostFrame:SetScale(select(1, self:GetScaleForKind("vehicle")))
-    hostFrame:SetAlpha(tonumber(layout.alpha) or 1.0)
-
-    if active and button then
-        hideAuxPlaceholderButtons(hostFrame, "vehicle")
-        if hostFrame._wowxPlaceholderLabel then
-            hostFrame._wowxPlaceholderLabel:Hide()
-        end
-
-        ensureFrameChrome(hostFrame)
-        self:ApplyChromeBackdrop(hostFrame, 0.12)
-        button:SetParent(hostFrame)
-        button:ClearAllPoints()
-        button:SetPoint("CENTER", hostFrame, "CENTER", 0, 0)
-        hostFrame:SetWidth(math.max(40, getEffectiveFrameWidth(button) + 12))
-        hostFrame:SetHeight(math.max(40, (button.GetHeight and button:GetHeight() or 24) + 12))
-        updateShellAroundButtons(hostFrame, { button }, 6, 6)
-        if hostFrame._wowxShell then
-            hostFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
-            self:ApplyChromeBackdrop(hostFrame._wowxShell, 0.12)
-        end
-        hostFrame:Show()
-        button:SetFrameStrata("HIGH")
-        button:Show()
-        self:EnsureAuxMovable(hostFrame, function(selfFrame)
-            GPX.VisualBar:SaveAuxFramePosition(selfFrame, "vehiclePoint", "BOTTOM", "BOTTOM")
-        end)
-        self:AttachMoveHandle(hostFrame, "vehicle")
-        self:AttachResizeHandle(hostFrame, "vehicle")
-        self:AttachEditButton(hostFrame, "vehicle")
-        self:EnableFrameDrag(hostFrame, "vehicle")
-        return
-    end
-
-    if not self:IsLayoutEditLocked() then
-        ensureFrameChrome(hostFrame)
-        self:ApplyChromeBackdrop(hostFrame, 0.12)
-        local placeholderButtons = ensureAuxPlaceholderButtons(hostFrame, "vehicle", 1, 30)
-        layoutAuxButtons(hostFrame, placeholderButtons, 8, 0)
-        updateShellAroundButtons(hostFrame, placeholderButtons, 8, 8)
-        if hostFrame._wowxShell then
-            hostFrame:SetBackdropBorderColor(0.22, 0.66, 0.98, 0.0)
-            self:ApplyChromeBackdrop(hostFrame._wowxShell, 0.12)
-        end
-        hostFrame:Show()
-        local placeholder = ensurePlaceholderLabel(hostFrame)
-        if placeholder then
-            placeholder:SetText("Vehicle Exit")
-            placeholder:Show()
-        end
-        self:EnsureAuxMovable(hostFrame, function(selfFrame)
-            GPX.VisualBar:SaveAuxFramePosition(selfFrame, "vehiclePoint", "BOTTOM", "BOTTOM")
-        end)
-        self:AttachMoveHandle(hostFrame, "vehicle")
-        self:AttachResizeHandle(hostFrame, "vehicle")
-        self:AttachEditButton(hostFrame, "vehicle")
-        self:EnableFrameDrag(hostFrame, "vehicle")
-    else
+    local hostFrame = self.vehicleFrame
+    if hostFrame and hostFrame:IsShown() then
         hostFrame:Hide()
-        hideAuxPlaceholderButtons(hostFrame, "vehicle")
-        if hostFrame._wowxPlaceholderLabel then
-            hostFrame._wowxPlaceholderLabel:Hide()
-        end
-        if hostFrame._wowxShell then
-            hostFrame._wowxShell:Hide()
-        end
     end
 end
 
@@ -2666,10 +2589,7 @@ function Bar:ToggleKeepBags()
 end
 
 function Bar:ToggleKeepMicroMenu()
-    local config = ensureVisualBarConfig()
-    config.keepMicroMenu = not (config.keepMicroMenu ~= false)
-    self:UpdateAll()
-    GPX:Print("Micro menu: " .. ((config.keepMicroMenu ~= false) and "shown" or "hidden"))
+    GPX:Print("Micro menu is always Blizzard's native menu (position it with Edit Mode).")
 end
 
 function Bar:ToggleKeepStanceBar()
@@ -2735,6 +2655,7 @@ function Bar:UpdateProgressBar()
 
     self.progressFrame:SetWidth(tonumber(layout.width) or layoutDefaults.progress.width)
     self.progressFrame:SetHeight(tonumber(layout.height) or layoutDefaults.progress.height)
+    self.progressFrame:SetScale(select(1, self:GetScaleForKind("progress")))
     self.progressFrame:SetAlpha(tonumber(layout.alpha) or layoutDefaults.progress.alpha)
 
     local progressBar = self.progressFrame.progressBar
@@ -3038,99 +2959,15 @@ function Bar:GetButtonCandidates(command)
     return nil
 end
 
-local function getCurrentMainActionPage()
-    if GPX and GPX.GetMainActionPageState then
-        local page = GPX:GetMainActionPageState("player")
-        return tonumber(page) or 1
-    end
-    return 1
-end
-
 function Bar:ResolveCommand(command)
+    -- Base row: the secure Pager (engine bar indices, ConsolePort method) is the
+    -- single authority for which slot ACTIONBUTTONn addresses.
     local mainIndex = tonumber(command and command:match("^ACTIONBUTTON(%d+)$"))
     if mainIndex then
-        local liveButton = _G["ActionButton" .. mainIndex]
-        local liveAction = liveButton and liveButton.action or nil
-        local _, classFile = UnitClass("player")
-        local stealthed = IsStealthed and IsStealthed() or false
-        local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
-        local page = getCurrentMainActionPage()
-        local slot = ((page - 1) * 12) + mainIndex
-
-        if GPX and GPX.IsCoAStealthPageClass and GPX:IsCoAStealthPageClass("player") then
-            if stealthed then
-                local bonusButton = _G["BonusActionButton" .. mainIndex]
-                local bonusAction = bonusButton and tonumber(bonusButton.action)
-                if bonusAction and bonusAction > 0 then
-                    return bonusAction
-                end
-                if liveAction and liveAction ~= mainIndex then
-                    return liveAction
-                end
-                if HasAction and HasAction(mainIndex) then
-                    return mainIndex
-                end
-                return slot
-            end
-            return mainIndex
+        if GPX.Pager then
+            return GPX.Pager:GetSlot(mainIndex)
         end
-
-        -- On CoA realms, hasOverride can remain noisy while bonusOffset is the
-        -- reliable signal for Runeshroud page routing. Treat bonusOffset as
-        -- authoritative when present for ACTIONBUTTON slot resolution.
-        if bonusOffset > 0 then
-            if GPX and GPX.IsDruidDualStealthPagerClass and GPX:IsDruidDualStealthPagerClass("player") then
-                local bonusButton = _G["BonusActionButton" .. mainIndex]
-                local bonusAction = bonusButton and tonumber(bonusButton.action)
-                if bonusAction and bonusAction > 0 then
-                    return bonusAction
-                end
-                if HasAction and HasAction(slot) then
-                    return slot
-                end
-            end
-            return slot
-        end
-
-        if classFile == "DRUID" and GPX and GPX.IsDruidDualStealthPagerClass and GPX:IsDruidDualStealthPagerClass("player") then
-            if stealthed then
-                local prowlSlot = (7 * 12) + mainIndex
-                if HasAction and HasAction(prowlSlot) then
-                    return prowlSlot
-                end
-                return prowlSlot
-            end
-            if GPX.IsDruidCatFormActive and GPX:IsDruidCatFormActive() then
-                local catSlot = (6 * 12) + mainIndex
-                if HasAction and HasAction(catSlot) then
-                    return catSlot
-                end
-                return catSlot
-            end
-        end
-
-        if page > 1 then
-            if liveAction then
-                return liveAction
-            end
-            if HasAction and HasAction(slot) then
-                return slot
-            end
-            return slot
-        end
-
-        if liveAction and liveAction ~= mainIndex then
-            return liveAction
-        end
-
-        if HasAction and HasAction(slot) then
-            return slot
-        end
-
-        if liveButton and liveButton.action then
-            return liveButton.action
-        end
-        return slot
+        return mainIndex
     end
 
     -- Modifier rows are modeled as deterministic Blizzard page slot ranges.
@@ -3175,7 +3012,7 @@ function Bar:IsReactiveSpellActive(actionSlot, actionType, actionID, isUsable)
         return false
     end
 
-    if IsSpellOverlayed and IsSpellOverlayed(actionID) then
+    if IsSpellOverlayed and clean(IsSpellOverlayed(actionID)) then
         return true
     end
 
@@ -3639,7 +3476,7 @@ function Bar:CreateFrame()
         button:SetWidth(56)
         button:SetHeight(90)
         button:SetPoint("TOPLEFT", frame, "TOPLEFT", 16 + ((index - 1) * 62), -44)
-        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        GPX.ClickTransport:ConfigureClicks(button)
         button:RegisterForDrag("LeftButton")
         createBackdrop(button, 0.14, 0.18, 0.24, 0.85)
         button:SetBackdropColor(0.05, 0.07, 0.12, 0.1)
@@ -3730,8 +3567,8 @@ function Bar:CreateFrame()
         button:SetScript("OnDragStart", function(self)
             GPX.VisualBar:PickupFromButton(self)
         end)
-        button:HookScript("OnClick", function(self, mouseButton)
-            if mouseButton == "RightButton" then
+        button:HookScript("OnClick", function(self, mouseButton, down)
+            if mouseButton == "RightButton" and not down then
                 GPX.VisualBar:HandleRightClickEdit(self)
             end
         end)
@@ -3827,14 +3664,89 @@ function Bar:CreateProgressFrame()
     progressBar._wowxDisableFrameDrag = true
     progressText._wowxDisableFrameDrag = true
     self:ApplyStoredProgressPosition()
+    self:AttachResizeHandle(progressFrame, "progress")
     self:AttachEditButton(progressFrame, "progress")
+end
+
+-- Cooldown for the spell behind an action slot, used when GetActionCooldown
+-- reports nothing (spells whose action reports no cooldown on this client).
+local function getSpellActionCooldown(slot)
+    if not (GetActionInfo and GetSpellCooldown) then return nil end
+    local actionType, actionID = GetActionInfo(slot)
+    if actionType ~= "spell" or not actionID then return nil end
+    local ids = { actionID }
+    if C_Spell and C_Spell.GetOverrideSpell then
+        local ok, override = pcall(C_Spell.GetOverrideSpell, actionID)
+        if ok and override and override ~= actionID then ids[#ids + 1] = override end
+    end
+    for _, id in ipairs(ids) do
+        local s, d, e = GetSpellCooldown(id)
+        if not anySecret(s, d, e) and s and d and d > 1.7 then
+            return s, d, e
+        end
+    end
+    return nil
+end
+
+-- Cooldown display. Non-secret values go through the numeric path. In combat the values
+-- are secret and tainted code may not pass them to Cooldown:SetCooldown (that call errors,
+-- and the old pcall hid it, leaving the swipe blank until combat ended). The sanctioned
+-- path is a duration object handed to Cooldown:SetCooldownFromDurationObject.
+function Bar:ApplyCooldown(button, slot, start, duration, enable)
+    local cooldown = button.cooldown
+    if not cooldown then return end
+    if anySecret(start, duration, enable) then
+        local getDuration = C_ActionBar and C_ActionBar.GetActionCooldownDuration
+        if getDuration and cooldown.SetCooldownFromDurationObject then
+            local ok, obj = pcall(getDuration, slot)
+            if ok and obj then
+                local ok2, err2 = pcall(cooldown.SetCooldownFromDurationObject, cooldown, obj)
+                if ok2 then
+                    Bar._cdLastPath, Bar._cdLastErr = "durationobject", nil
+                    return
+                end
+                Bar._cdLastErr = "SetCooldownFromDurationObject: " .. tostring(err2)
+            else
+                Bar._cdLastErr = "GetActionCooldownDuration: " .. tostring(ok and "nil object" or obj)
+            end
+        else
+            Bar._cdLastErr = "duration-object API missing"
+        end
+        Bar._cdLastPath = "settimer-secret"
+    else
+        Bar._cdLastPath = "plain"
+    end
+    CooldownFrame_SetTimer(cooldown, start or 0, duration or 0, enable or 0)
 end
 
 function Bar:GetResolvedCooldown(slot)
     local start, duration, enable = GetActionCooldown(slot)
+    if type(start) == "table" then
+        local info = start
+        local enabledField = info.isEnabled
+        if isSecret(enabledField) then
+            enable = enabledField
+        else
+            enable = (enabledField == false) and 0 or 1
+        end
+        start, duration = info.startTime, info.duration
+    end
+    -- Secret in combat: no logic possible, display-only pass-through.
+    if anySecret(start, duration, enable) then
+        return start, duration, enable
+    end
+    if not duration or duration <= 1.7 then
+        local ss, sd, se = getSpellActionCooldown(slot)
+        if ss then
+            start, duration, enable = ss, sd, se
+        end
+    end
 
     if GetSpellCooldown then
         local gcdStart, gcdDuration, gcdEnable = GetSpellCooldown(GLOBAL_COOLDOWN_SPELL_ID)
+        if anySecret(gcdStart, gcdDuration, gcdEnable) then
+            return start, duration, enable
+        end
         if gcdEnable and gcdEnable ~= 0 and gcdDuration and gcdDuration > 0 and gcdDuration <= 1.7 then
             if (not duration or duration <= 0) or gcdDuration > duration then
                 return gcdStart, gcdDuration, gcdEnable
@@ -3852,6 +3764,9 @@ function Bar:GetActionChargeState(slot)
 
     if GetActionCharges then
         local current, maxCharges, cooldownStart, cooldownDuration = GetActionCharges(slot)
+        if anySecret(current, maxCharges, cooldownStart, cooldownDuration) then
+            return nil
+        end
         if maxCharges and maxCharges > 1 then
             return current or maxCharges, maxCharges, cooldownStart or 0, cooldownDuration or 0, 1
         end
@@ -3860,6 +3775,9 @@ function Bar:GetActionChargeState(slot)
     local actionType, actionID = GetActionInfo(slot)
     if actionType == "spell" and GetSpellCharges then
         local current, maxCharges, cooldownStart, cooldownDuration = GetSpellCharges(actionID)
+        if anySecret(current, maxCharges, cooldownStart, cooldownDuration) then
+            return nil
+        end
         if maxCharges and maxCharges > 1 then
             return current or maxCharges, maxCharges, cooldownStart or 0, cooldownDuration or 0, 1
         end
@@ -3917,17 +3835,19 @@ function Bar:UpdateButtonVisualState(button)
         if maxCharges and maxCharges > 1 and chargeCount and chargeCount < maxCharges and chargeDuration and chargeDuration > 0 then
             start, duration, enable = chargeStart, chargeDuration, chargeEnable
         end
-        CooldownFrame_SetTimer(button.cooldown, start or 0, duration or 0, enable or 0)
+        self:ApplyCooldown(button, display.slot, start, duration, enable)
 
         local usable, oom = IsUsableAction(display.slot)
-        local inRange = IsActionInRange(display.slot)
+        local inRange = clean(IsActionInRange(display.slot))
+        if isSecret(usable) then usable = true end
+        oom = clean(oom)
         local actionType, actionID = nil, nil
         if GetActionInfo then
             actionType, actionID = GetActionInfo(display.slot)
         end
-        local actionCount = GetActionCount and (GetActionCount(display.slot) or 0) or 0
-        local stackCount = (actionType == "spell") and 0 or actionCount
-        local equippedAction = IsEquippedAction and IsEquippedAction(display.slot)
+        local actionCount = GetActionCount and clean(GetActionCount(display.slot) or 0) or 0
+        local stackCount = (actionType == "spell") and 0 or (actionCount or 0)
+        local equippedAction = IsEquippedAction and clean(IsEquippedAction(display.slot))
         local reactiveGlow = self:IsReactiveSpellActive(display.slot, actionType, actionID, usable)
         local red, green, blue = 1.0, 1.0, 1.0
         local finalAlpha = alpha
@@ -3964,7 +3884,7 @@ function Bar:UpdateButtonVisualState(button)
             end
         end
         if button.shine then
-            local isQueued = IsCurrentAction and IsCurrentAction(display.slot)
+            local isQueued = IsCurrentAction and clean(IsCurrentAction(display.slot))
             if isQueued then
                 button.shine:SetVertexColor(1.0, 0.82, 0.0, 0.55)
                 button.shine:Show()
@@ -4318,8 +4238,17 @@ function Bar:UpdateAll()
     self:UpdateResizeHandles()
     self:UpdateAlignmentGrid()
 
+    -- One button failing must never leave the others showing stale icons.
     for index = 1, BAR_BUTTON_COUNT do
-        self:UpdateButton(index, state)
+        local ok, err = pcall(self.UpdateButton, self, index, state)
+        if not ok then
+            -- Log each distinct error once; repeating it every update floods chat.
+            local text = tostring(err)
+            if self._lastButtonError ~= text then
+                self._lastButtonError = text
+                if WoWXLogRuntimeError then WoWXLogRuntimeError("VisualBar:UpdateButton", index, err) end
+            end
+        end
     end
 
     updateShellAroundButtons(self.frame, self.frame.buttons, 4, 4)
@@ -4500,7 +4429,18 @@ local function scheduleVisualBarUpdate()
     if C_Timer and C_Timer.After then
         C_Timer.After(0.15, function()
             _vbUpdatePending = false
-            if GPX.VisualBar then GPX.VisualBar:UpdateAll() end
+            if GPX.VisualBar then
+                -- Timer callbacks bypass the OnEvent pcall wrapper; an uncaught error here would
+                -- reach Blizzard's handler on every coalesced update and trigger the error flood.
+                local ok, err = pcall(GPX.VisualBar.UpdateAll, GPX.VisualBar)
+                if not ok then
+                    local text = tostring(err)
+                    if GPX.VisualBar._lastTimerError ~= text then
+                        GPX.VisualBar._lastTimerError = text
+                        if WoWXLogRuntimeError then WoWXLogRuntimeError("VisualBar:timer", "UpdateAll", err) end
+                    end
+                end
+            end
         end)
     else
         _vbUpdatePending = false
@@ -4542,3 +4482,8 @@ eventFrame:SetScript("OnEvent", function(_, event)
     GPX.VisualBar:UpdateAll()
 end)
 WoWXWrapOnEventSafe(eventFrame)
+
+-- The secure Pager flips the base row's page in-combat; refresh the visuals to match.
+if GPX.Pager then
+    GPX.Pager:AddListener(scheduleVisualBarUpdate)
+end

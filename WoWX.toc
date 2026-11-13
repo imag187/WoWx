@@ -3,15 +3,20 @@
 ## Notes: WoW Forever couch-play addon reskin for the native controller UI, plus keyboard and accessibility-focused input. Designed for Linux + AntiMicroX. No cloud sync.
 ## Author: WoWX
 ## Version: 2.1.0
+## IconTexture: Interface\AddOns\WoWx\Textures\Icon.tga
 ## SavedVariables: WoWXProfilesDB
 ## SavedVariablesPerCharacter: WoWXDB, GamePadXDB
 
 WoWX.lua
+Systems\Core\Compat.lua
 Systems\Core\SystemRegistry.lua
 Systems\Base\GamePadX.lua
+Systems\Base\Diagnostics.lua
 Systems\Input\Gamepad\GamepadSystem.lua
 Systems\Input\Gamepad\Camera.lua
+Systems\Input\Gamepad\NativeTargeting.lua
 Systems\Input\Keyboard\KeyboardSystem.lua
+Systems\Transport\Pager.lua
 Systems\Transport\ClickTransport.lua
 Systems\Transport\VisualBar.lua
 Systems\UI\UIMode.lua
@@ -19,9 +24,10 @@ Systems\UI\SetupWizard.lua
 Systems\UI\SettingsUI.lua
 Systems\UI\MenuNav.lua
 Systems\UI\MinimapButton.lua
-# Retired 2026-09-25: Blizzard's native gamepad UI now owns bags/bank/spellbook grid/spell ring
-# functionality on this client - WoWX is a visual reskin, not a functional replacement. See Agents.md.
+# Bags: Blizzard owns bags/bank/combined bags (Edit Mode positions them). The old WoWX bag
+# module is parked in Systems\Bags\ActionButtons.lua and is NOT loaded (no switch, no hooks).
 # Systems\Bags\ActionButtons.lua
+# Retired 2026-09-25: Blizzard's native gamepad UI owns the spellbook grid/spell ring on this client.
 # Systems\SpellGrid\SpellbookUI.lua
 # Systems\SpellGrid\SpellRing.lua
 Systems\Cues\DispelPrompt.lua

@@ -2,11 +2,33 @@
 
 local GPX = GamePadX
 local Button = {}
-local dropdown = CreateFrame("Frame", "WoWXMinimapDropdown", UIParent, "UIDropDownMenuTemplate")
 
 GPX.MinimapButton = Button
 
 local radius = 78
+
+local function atan2(y, x)
+    if math.atan2 then
+        return math.atan2(y, x)
+    end
+    if x > 0 then
+        return math.atan(y / x)
+    elseif x < 0 then
+        return math.atan(y / x) + ((y >= 0) and math.pi or -math.pi)
+    end
+    return (y >= 0) and (math.pi / 2) or (-math.pi / 2)
+end
+
+local function safeCall(source, fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        if WoWXLogRuntimeError then
+            WoWXLogRuntimeError("MinimapButton", source, err)
+        end
+        GPX:Print("Minimap button error (" .. source .. "): " .. tostring(err))
+    end
+    return ok
+end
 
 local function ensureConfig()
     GPX.db.ui = GPX.db.ui or GPX:DeepCopy(GPX.defaults.ui)
@@ -60,6 +82,7 @@ function Button:Create()
     button:SetWidth(31)
     button:SetHeight(31)
     button:SetFrameStrata("MEDIUM")
+    button:SetFrameLevel((Minimap:GetFrameLevel() or 1) + 8)
     button:SetMovable(true)
     button:EnableMouse(true)
     button:RegisterForDrag("LeftButton")
@@ -87,30 +110,30 @@ function Button:Create()
     button.icon = icon
 
     button:SetScript("OnEnter", function(self)
-        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
-        GameTooltip:AddLine(GPX.brand, 1.0, 0.96, 0.7)
-        local wowxEnabled = GPX.db and GPX.db.enabled
-        local controllerEnabled = GPX.IsControllerEnabled and GPX:IsControllerEnabled()
-        GameTooltip:AddLine("WoWX: " .. (wowxEnabled and "Enabled" or "Disabled"), 0.85, 0.9, 1.0)
-        GameTooltip:AddLine("Input Mode: " .. (controllerEnabled and "Controller" or "Keyboard"), 0.85, 0.9, 1.0)
-        GameTooltip:AddLine("Left-click: toggle control center", 0.85, 0.9, 1.0)
-        GameTooltip:AddLine("Right-click: quick menu", 0.85, 0.9, 1.0)
-        GameTooltip:AddLine("Drag: move around the minimap", 0.75, 0.82, 0.9)
-        GameTooltip:Show()
+        GPX.MinimapButton:ShowTooltip(self, "ANCHOR_LEFT")
     end)
     button:SetScript("OnLeave", function()
         GameTooltip:Hide()
     end)
 
-    button:SetScript("OnClick", function(_, mouseButton)
+    button:SetScript("OnClick", function(self, mouseButton)
         if mouseButton == "RightButton" then
-            GPX.MinimapButton:ShowMenu()
+            safeCall("menu", function() GPX.MinimapButton:ShowMenu() end)
+        elseif IsShiftKeyDown() then
+            safeCall("layout edit", function() GPX.MinimapButton:ToggleLayoutEdit() end)
+        elseif IsControlKeyDown() then
+            safeCall("button edit", function() GPX.MinimapButton:ToggleButtonEdit() end)
         else
-            if GPX.ToggleSettings then
-                GPX:ToggleSettings()
-            else
-                GPX:OpenSettings()
-            end
+            safeCall("settings", function()
+                if GPX.ToggleSettings then
+                    GPX:ToggleSettings()
+                else
+                    GPX:OpenSettings()
+                end
+            end)
+        end
+        if GameTooltip:IsOwned(self) then
+            GPX.MinimapButton:ShowTooltip(self, "ANCHOR_LEFT")
         end
     end)
 
@@ -121,7 +144,7 @@ function Button:Create()
             x = x / scale
             y = y / scale
             local centerX, centerY = Minimap:GetCenter()
-            local angle = math.deg(math.atan2(y - centerY, x - centerX))
+            local angle = math.deg(atan2(y - centerY, x - centerX))
             ensureConfig().angle = angle
             GPX.MinimapButton:UpdatePosition()
         end)
@@ -135,7 +158,94 @@ function Button:Create()
     self:UpdatePosition()
 end
 
-function Button:ShowMenu()
+function Button:ToggleLayoutEdit()
+    local bar = GPX.VisualBar
+    if bar then
+        bar:Slash((bar:IsLocked() and "unlock") or "lock")
+    end
+end
+
+function Button:ToggleButtonEdit()
+    local bar = GPX.VisualBar
+    if bar then
+        bar:Slash((bar:IsButtonLockEnabled() and "buttonunlock") or "buttonlock")
+    end
+end
+
+function Button:ShowTooltip(owner, anchor)
+    local bar = GPX.VisualBar
+    local tip = GameTooltip
+    local function onOff(value)
+        return value and "|cff66ff66On|r" or "|cffaaaaaaOff|r"
+    end
+
+    tip:SetOwner(owner, anchor or "ANCHOR_LEFT")
+    tip:ClearLines()
+
+    local getMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+    local version = getMeta and getMeta("WoWx", "Version") or nil
+    tip:AddLine((GPX.brand or "WoWX") .. (version and ("  |cff9999aav" .. version .. "|r") or ""), 1.0, 0.96, 0.7)
+
+    local wowxEnabled = GPX.db and GPX.db.enabled
+    if not wowxEnabled then
+        tip:AddLine("Disabled on this character", 1.0, 0.45, 0.35)
+        tip:AddLine("/wowx enable, then /reload", 0.75, 0.82, 0.9)
+    else
+        local controllerEnabled = GPX.IsControllerEnabled and GPX:IsControllerEnabled()
+        tip:AddDoubleLine("Input mode", controllerEnabled and "Controller" or "Keyboard", 0.8, 0.85, 0.95, 1, 1, 1)
+        if bar then
+            local state = bar.GetCurrentState and bar:GetCurrentState() or ""
+            tip:AddDoubleLine("Modifier row", (state and state ~= "") and state or "base", 0.8, 0.85, 0.95, 1, 1, 1)
+            if GPX.Pager and GPX.Pager.GetCurrentPage then
+                local ok, page = pcall(GPX.Pager.GetCurrentPage, GPX.Pager)
+                if ok and page then
+                    tip:AddDoubleLine("Base page", tostring(page), 0.8, 0.85, 0.95, 1, 1, 1)
+                end
+            end
+            tip:AddDoubleLine("Layout Edit", onOff(not bar:IsLocked()), 0.8, 0.85, 0.95)
+            tip:AddDoubleLine("Button Lock", onOff(bar:IsButtonLockEnabled()), 0.8, 0.85, 0.95)
+        end
+    end
+
+    tip:AddLine(" ")
+    tip:AddDoubleLine("Left-click", "Control center", 1, 0.82, 0.2, 0.9, 0.9, 0.9)
+    tip:AddDoubleLine("Right-click", "Quick menu", 1, 0.82, 0.2, 0.9, 0.9, 0.9)
+    tip:AddDoubleLine("Shift-click", "Toggle Layout Edit (move/size bar)", 1, 0.82, 0.2, 0.9, 0.9, 0.9)
+    tip:AddDoubleLine("Ctrl-click", "Toggle Button Lock (place spells)", 1, 0.82, 0.2, 0.9, 0.9, 0.9)
+    tip:AddDoubleLine("Drag", "Move this icon", 1, 0.82, 0.2, 0.9, 0.9, 0.9)
+    tip:Show()
+end
+
+function Button:RegisterCompartment()
+    if self.compartmentRegistered or not _G.AddonCompartmentFrame or not AddonCompartmentFrame.RegisterAddon then
+        return
+    end
+    self.compartmentRegistered = true
+    AddonCompartmentFrame:RegisterAddon({
+        text = "WoWX",
+        icon = "Interface\\AddOns\\WoWx\\Textures\\Icon.tga",
+        notCheckable = true,
+        registerForAnyClick = true,
+        func = function(_, menuInputData)
+            local mouseButton = menuInputData and menuInputData.buttonName
+            safeCall("compartment", function()
+                if mouseButton == "RightButton" then
+                    GPX.MinimapButton:ShowMenu(AddonCompartmentFrame)
+                else
+                    GPX:ToggleSettings()
+                end
+            end)
+        end,
+        funcOnEnter = function(owner)
+            GPX.MinimapButton:ShowTooltip(owner, "ANCHOR_LEFT")
+        end,
+        funcOnLeave = function()
+            GameTooltip:Hide()
+        end,
+    })
+end
+
+function Button:ShowMenu(ownerOverride)
     local bar = GPX.VisualBar
     local settingsOpen = GPX.SettingsUI and GPX.SettingsUI.frame and GPX.SettingsUI.frame:IsShown()
     local layoutLabel = "Layout Edit"
@@ -147,25 +257,44 @@ function Button:ShowMenu()
         layoutLabel = "Layout Edit: On (Disable)"
     end
     if bar and bar.IsButtonLockEnabled and bar:IsButtonLockEnabled() then
-        buttonEditLabel = "Button Edit: Off (Enable)"
+        buttonEditLabel = "Button Lock: On (Unlock)"
     else
-        buttonEditLabel = "Button Edit: On (Disable)"
+        buttonEditLabel = "Button Lock: Off (Lock)"
     end
-    local menu = {
-        { text = GPX.brand, isTitle = true, notCheckable = true },
-        { text = configLabel, notCheckable = true, func = function() if GPX.ToggleSettings then GPX:ToggleSettings() else GPX:OpenSettings() end end },
-        { text = "Open Gridbook", notCheckable = true, func = function() if GPX.SpellbookUI then GPX.SpellbookUI:Open(nil, "settings") end end },
-        { text = "Run Setup Wizard", notCheckable = true, func = function() GPX:OpenSetupWizard("init") end },
-        { text = layoutLabel, notCheckable = true, func = function() if bar then bar:Slash((bar:IsLocked() and "unlock") or "lock") end end },
-        { text = buttonEditLabel, notCheckable = true, func = function() if bar then bar:Slash((bar:IsButtonLockEnabled() and "buttonunlock") or "buttonlock") end end },
-        { text = "Toggle XP/Rep Bar", notCheckable = true, func = function() if bar then bar:Slash("progress") end end },
-        { text = "Layout Edit uses chrome drag + Edit sizing", notCheckable = true, disabled = true },
+    local entries = {
+        { text = configLabel, func = function() if GPX.ToggleSettings then GPX:ToggleSettings() else GPX:OpenSettings() end end },
+        { text = "Run Setup Wizard", func = function() GPX:OpenSetupWizard("init") end },
+        { text = layoutLabel, func = function() if bar then bar:Slash((bar:IsLocked() and "unlock") or "lock") end end },
+        { text = buttonEditLabel, func = function() if bar then bar:Slash((bar:IsButtonLockEnabled() and "buttonunlock") or "buttonlock") end end },
     }
-    EasyMenu(menu, dropdown, "cursor", 0, 0, "MENU")
+
+    local owner = ownerOverride or self.button
+    if _G.MenuUtil and MenuUtil.CreateContextMenu then
+        MenuUtil.CreateContextMenu(owner, function(_, root)
+            root:CreateTitle(GPX.brand)
+            for _, entry in ipairs(entries) do
+                root:CreateButton(entry.text, function() safeCall("menu action", entry.func) end)
+            end
+        end)
+        return
+    end
+
+    if _G.EasyMenu then
+        local dropdown = _G.WoWXMinimapDropdown or CreateFrame("Frame", "WoWXMinimapDropdown", UIParent, "UIDropDownMenuTemplate")
+        local menu = { { text = GPX.brand, isTitle = true, notCheckable = true } }
+        for _, entry in ipairs(entries) do
+            menu[#menu + 1] = { text = entry.text, notCheckable = true, func = function() safeCall("menu action", entry.func) end }
+        end
+        EasyMenu(menu, dropdown, "cursor", 0, 0, "MENU")
+        return
+    end
+
+    GPX:Print("No menu API available. Use /wowx unlock, /wowx lock, /wowx buttonunlock, /wowx buttonlock.")
 end
 
 function Button:Refresh()
     self:Create()
+    self:RegisterCompartment()
     local config = ensureConfig()
     if config.enabled == false then
         self.button:Hide()

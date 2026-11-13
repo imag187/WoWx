@@ -158,10 +158,32 @@ function Mode:HideFocus(frame)
     end
 end
 
+local nativePadKeys = {
+    up = "PADDUP",
+    down = "PADDDOWN",
+    left = "PADDLEFT",
+    right = "PADDRIGHT",
+    confirm = "PAD1",
+    cancel = "PAD2",
+    prevWindow = "PADLSHOULDER",
+    nextWindow = "PADRSHOULDER",
+}
+
+local function isNativeGamepadActive()
+    return C_GamePad and C_GamePad.IsEnabled and C_GamePad.IsEnabled() and true or false
+end
+
 function Mode:GetNavigationKeys()
     local profile = GPX:GetProfile()
     local setup = profile and profile.setup or nil
     if not setup then
+        if isNativeGamepadActive() then
+            local nav = {}
+            for field, key in pairs(nativePadKeys) do
+                nav[field] = key
+            end
+            return nav
+        end
         return {}
     end
 
@@ -303,6 +325,10 @@ function Mode:SetFocus(index)
     self.index = index
     if self.currentFrame then
         self:ShowFocus(self.currentFrame)
+        local context = self:GetContext(self.activeContext)
+        if context and context.onFocus then
+            context.onFocus(self.currentFrame)
+        end
     end
     self:UpdateIndicator()
 end
@@ -417,6 +443,11 @@ end
 
 function Mode:HandleAction(action)
     if not self.activeContext then
+        return
+    end
+
+    local context = self:GetContext(self.activeContext)
+    if context and context.onAction and context.onAction(self, action, self.currentFrame) then
         return
     end
 

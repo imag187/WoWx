@@ -6,7 +6,161 @@ This file is a continuity handoff for future work on WoWX, especially for the Ru
 
 Primary goal: avoid retracing dead ends and preserve the actual discoveries from the debugging session.
 
+## 2026-11-13 Current Target: WoW Forever Client (READ BEFORE ANYTHING BELOW)
+
+- Everything below this section was written for Ascension PTR / 3.3.5a. The working copy now lives at `d:\Games\World of Warcraft\_forever_\Interface\AddOns\WoWx` and targets the **WoW Forever** client (`.flavor.info` = `wowf`, TOC `## Interface: 16001`).
+- That client is a modern-engine build (D3D12, Edit Mode, Housing/Professions logs, native gamepad UI, Questie also loads at 16001), NOT 3.3.5a. 3.3.5-era assumptions in older notes (global-function bag hooks, `ContainerFrameItemButtonTemplate` behavior, `SetBackdrop` on plain frames) must be re-verified in-game before trusting them.
+- 2026-09-18 / 09-25 commits retired the WoWX bag, spellbook grid and spell ring in `WoWX.toc` because the native gamepad UI covered them. 2026-11-13: the bag (`Systems/Bags/ActionButtons.lua`) was RE-ENABLED in the TOC (the WoWX bag system already existed; dropping it was a mistake). It is still untested on this client; expect modern-engine breakage (global `ToggleBackpack`/`OpenAllBags` overrides, `ContainerFrameItemButtonTemplate`, backdrops) and verify in-game via `/wowx out window` / `WoWXRuntimeErrors`. Spellbook grid and spell ring remain retired.
+- Decision (user, 2026-11-13): the native gamepad-mode bag is bad (it was good in early beta, then regressed). WoWX should either OWN the bag or force/reuse Blizzard's keyboard-mode unified (combined) bag with controller navigation. General rule: any surface that needs controller workarounds should be owned by WoWX.
+- Clarification (user, 2026-11-13): the native gamepad UI otherwise works great and STAYS ENABLED. The only parts to replace are the bag (and bank) and how spells are presented (spellbook). Do NOT plan around turning native gamepad UI off or around the older "controller = plain key presses, UIMode owns navigation" model for these surfaces; the WoWX bag must coexist with native gamepad mode (open/close routing, input/focus while native gamepad UI is active). How WoWX bag navigation should work under native gamepad mode is still to be designed.
+- Repo-root `ActionButtons.lua`, `Camera.lua`, `ClickTransport.lua` are stale duplicates; the TOC loads only `Systems\...` paths.
+
+### Project Direction (user, 2026-11-13) - READ FIRST
+
+- Two products, in order: (1) **WoWX-ABP** (Action Bar Pager): keyboard + controller cross-play action bar with modifier paging and good visual indicators; will live in its own directory/addon `WoWX-ABP` and be tracked there. (2) A greater **WoWX UI**, the long-term "final boss". This is a MAJOR REVISION and is NOT being started now.
+- This repo is currently the bits and parts that make both possible. Do not restructure it for that split yet.
+- Current work for the next several days (user is leveling): keep the keyboard feel of the bar right, iron out bugs, fix the minimap icon so WoWX's edit mode (Layout Edit / Button Edit) is reachable.
+- Blizzard owns, in all modes: bags, bank, combined-bag option, micro menu, vehicle exit button. No feature switches for these; the WoWX bag module is not loaded.
+- Native gamepad UI stays enabled.
+
+### Gamepad Strategy (user + analysis, 2026-11-13)
+
+- Immediate focus: WoWX-ABP (action bar pager + XP bar) with mouse + keyboard working as designed. Controller comes after.
+- Leaning (user): own the controller bindings instead of living with Blizzard's. Blizzard's native gamepad mode binds buttons 5-8 to fixed game actions (auto attack, cancel, jump...) and leaves the center (PS/Xbox) button alone or to Steam; WoWX should define these itself (possible keybind/menu on the center button, different L3 use instead of auto-run).
+- Working model: keep the engine gamepad layer ENABLED (stick/movement/camera, cursor, `C_GamepadTargeting`), but WoWX owns the binding table (strip `GAMEPADACTIONBUTTON*` etc. and rebind). This is what ConsolePort does ("native gamepad controls", strips native keys, hides the native gamepad bar). Do not turn native gamepad off and re-implement input.
+- Muscle memory: ship a "Blizzard native layout" preset as the default so players coming from the native controller UI do not relearn; WoWX layout/custom is opt-in.
+- Order: ABP kb+mouse -> ABP controller bindings (native-layout preset) -> targeting (`NativeTargeting.lua`) -> bags/bank -> spell presentation -> D-pad frame navigation (largest piece; ConsolePort_Cursor equivalent).
+- ConsolePort license is Artistic-2.0 (verified on GitHub): reuse/modification is allowed with attribution, change notes and no use of the ConsolePort name. Still default to original code that follows its patterns; alternative is to coexist with ConsolePort modules rather than fork.
+- Release: ship WoWX-ABP as its own addon on CurseForge (Interface 16001, Forever only), separate from the future WoWX UI.
+
+### North Star (user, 2026-11-13)
+
+Be the best lightweight controller UI that has ever existed. Old-school 3.3.5 operation was perfect and has been moved to a branch; the goal is to get that feel back on WoW Forever.
+
+- Minimal drawing of tools: no flashy chrome, no bloated menus, no strange text, no badly drawn outlines, low RAM/CPU.
+- Practical, modifier-state-driven, swappable action bars that behave exactly like Blizzard bars even in "controller" mode (placing spells etc. stays 1:1 with the native Blizzard bars/slots).
+- Account for multiple input methods.
+- Owning 100% of a surface (bags, bank, spell presentation, even a full UI replacement) is acceptable IF it stays minimal and slot/spell placement remains 1:1 with Blizzard's native bars. Native gamepad UI stays enabled for everything not replaced.
+- Action paging: do not diverge from the method ConsolePort uses (user already had us dig into why it works and stop being "x% different" from it). Prefer ConsolePort's proven approach over novel routing. Priority is the action bar pager first, then bags/bank, then spell presentation.
+- Look in the right places: ConsolePort (paging, navigation), Bartender4 (bar replacement/hiding), Bagnon-style addons (bags) for patterns, but write original code.
+
+### Mouse + Modifier Click Requirement (user, 2026-11-13)
+
+Why click transport exists (and why WoWX differs from ConsolePort): the user constantly CLICKS bar slots (or taps a controller trackpad) while a modifier is held, e.g. Shift held, click the slot under "-" and expect the SHIFT-row action, exactly like a macro bound to "-" with `[mod:shift]` or a Blizzard bar where hold-mod + click works. Controller/trackpad taps that were not planned for must behave the same way.
+- Current mechanism: every visible `WoWXActionButtonN` gets secure attributes for ALL modifier prefixes (`ClickTransport:ApplyButtonModifiers` writes base, `shift-`, `alt-`, `ctrl-`, `shift-alt-`/`alt-shift-`), so the secure handler resolves hold-mod + click to the right slot in and out of combat. The base row is Pager-owned (pages in combat); modifier rows are static slots.
+- Known gaps to verify in-game once keyboard mode works: (1) clicks register `LeftButtonUp`/`RightButtonUp` only while right-click `type2/action2` is wiped on purpose, so right-click does nothing; (2) the Forever client may cast bar keys on key DOWN (`ActionButtonUseKeyDown` cvar), so click vs key timing can feel different; (3) verify hold-Shift+click on a far-right slot casts the shift-row spell, and that drag/place (`PlaceAction`/`PickupAction`) with a modifier held targets the same slot Blizzard's bars would.
+- Order of work: keyboard mode + usable diag output first, then kb+mouse together (this section), then controller trackpad taps.
+
+### ConsolePort Paging Findings (verified against GitHub master, 2026-11-13)
+
+ConsolePort already supports WoW Forever (its TOCs list `16001`; recent commits "Add the gamepad action storage backend for Forever", "Page the gamepad bar onto vehicle, override and temp shapeshift pages", "Hide the native gamepad bar, strip its keys"). Files: `ConsolePort/Controller/Pager.lua`, `ConsolePort_Bar/Widget/Button/Button.lua`, `ConsolePort_Bar/Widget/Page/Page.lua`.
+
+- Buttons are real secure action buttons (LibActionButton), `type='action'` + `action=<slot>` attributes. No `/click` proxy macros.
+- One secure Pager frame owns a state driver on `actionpage`. Its condition is only a TRIGGER list: `[possessbar] 1; [overridebar] 2; [shapeshift] 3; [bar:2..6]; [bonusbar:1..5]; <default>`. The values are meaningless.
+- The `_onstate-actionpage` response (restricted env) is a replica of `ActionBarController_UpdateAll`: vehicle bar -> override bar -> temp-shapeshift bar -> `GetBonusBarOffset()+NUM_ACTIONBAR_PAGES` -> `GetActionBarPage()`. The engine APIs are the authority, not the condition values.
+- The response writes `actionpage` on the pager and on every registered header (`Pager:RegisterHeader`), runs each header's `ActionPageChanged` snippet, and headers push `ChildUpdate('actionpage', page)` to buttons. Each button's secure `UpdateState` recomputes its `action` (`slot + (page-1)*12`, or Forever gamepad-storage offsets for stance pages). Page swaps therefore work IN COMBAT because they happen inside secure snippets.
+- Modifier layers are a separate axis: per-state `labtype-<state>` / `labaction-<state>` attributes, state driven by a modifier driver (their `db.Layers` input controller owns `[mod:]` conditions; never call global `RegisterStateDriver` with `[mod:]` there).
+- Stances/shapeshift/stealth/prowl are NOT detected by aura or spell ID. They ride the engine's bonusbar/shapeshift/override indices. `UPDATE_BONUS_ACTIONBAR` only feeds an insecure notification (`OnUpdateShapeshiftForm(spellID, bonusBarIndex, formIndex)`).
+- Gap / caveat: a page swap that is driven only by an aura/spell ID with NO bonusbar/form/override change (Ascension Runeshroud-style) is not covered by the default; ConsolePort exposes `Settings/actionPageCondition` and `Settings/actionPageResponse` as the extension point. Restricted env cannot read auras directly, so the usual answer is a macro-condition trigger plus engine-index response, or an out-of-combat insecure attribute update.
+- Tension to resolve: the CoA-fork "never use direct" rule below was learned on Ascension 3.3.5a. ConsolePort's secure-button approach is proven on 16001. Re-test on WoW Forever with a small isolated spike before deciding; do not assume either way.
+- Not yet read: ConsolePort `db.Actionbar.Gamepad` model (Forever native gamepad slot storage: BarOffset/Width/Stance.Bar/Stance.Count) and `Controller/Layers.lua`, `Controller/GamepadActions.lua`.
+
+### 2026-11-13 Forever Implementation Status (NOTHING BELOW HAS BEEN RUN IN-GAME)
+
+Superseded: the "Non-Negotiable Agent Rules (CoA Fork)" and all Ascension click/macro notes do NOT apply on Forever. `BonusActionButtonN` macros do not exist here.
+
+- `Systems/Core/Compat.lua`: install-if-missing shims for legacy globals (`GetMouseFocus`, `GetSpellInfo`, container functions, `UnitBuff`...). Loads first.
+- `Systems/Transport/Pager.lua` (`GPX.Pager`): ConsolePort-style secure pager. Trigger-only `actionpage` macro-condition driver; the secure response replicates `ActionBarController_UpdateAll` (vehicle -> override -> temp shapeshift -> bonus offset -> `GetActionBarPage()`), rewrites `action` attributes inside the secure env so paging works in combat. Register out of combat only. API: `GetCurrentPage`, `GetSlot`, `Register/Unregister`, `Refresh`, `AddListener`.
+- `ClickTransport.lua`: macro routing removed. `ACTIONBUTTONn` proxies are secure `type=action` buttons registered with the Pager; modifier rows stay static (SHIFT 13-24, ALT 25-36, CTRL 37-48, SHIFT-ALT 49-60). Base keys bind to visible `WoWXActionButtonN`, modifier keys to `WoWXBindButton_<command>`.
+- `VisualBar.lua`: `Bar:UpdateNativeGamepadBar` hides `GamepadMainActionBarFrame` (OnShow guard) and `GamePadX` strips `GAMEPADACTIONBUTTON1..8`/`GAMEPADLEFTMOD/RIGHTMOD` bindings ONLY when controller mode is enabled. `managedBlizzardBars` now also lists the modern frames (`MainActionBar`, `StanceBar`, `PossessActionBar`, `PetActionBar`, `MicroMenu`, `BagsBar`, `MultiBar5-7`); missing names are skipped. Hide method mirrors ConsolePort/Bartender (reparent to a hidden frame, out of combat only).
+- `Systems/Input/Gamepad/NativeTargeting.lua` + `Bindings.xml`: `WoWXTargetFriendly` / `WoWXTargetHostile` hold-to-target buttons over `C_GamepadTargeting` (bind `CLICK WoWXTargetHostile:LeftButton` in Key Bindings, `runOnUp`). Stripping `GAMEPADACTIONBUTTON5..8` may remove native Interact/Inspect; bind `INTERACTTARGET` (or the key-bindings UI) if missing. OPEN: confirm in-game.
+- Bags (`Systems/Bags/ActionButtons.lua`): Blizzard bag opening is now handled with `hooksecurefunc` post-hooks (the old global overrides tainted the secure keybind path), debounced per frame because the wrappers call each other. `HideBlizzardContainerFrames` also hides `ContainerFrameCombinedBags`. Controller nav: `UIMode` context `"bags"` (D-pad move, Confirm = use/drop, window shoulders = pick up/put down, Cancel closes). `UIMode:GetNavigationKeys` falls back to native pad keys (`PADDUP`... `PAD1`/`PAD2`, `PADLSHOULDER`/`PADRSHOULDER`) when `C_GamePad.IsEnabled()` and no WoWX setup profile exists. Bank uses the same context. Auto-open for merchant/mail does not grab navigation.
+- Spellbook grid / spell ring remain retired. Spell presentation under native gamepad UI is NOT yet designed.
+- In-game test checklist: `/wowx diag verbose`, `/wowx out window`, `/wowx dump WoWXRuntimeErrors`, `/wowx dump GamePadX.Pager:GetCurrentPage()`. Verify: base keys page on stance/stealth/vehicle in AND out of combat; modifier rows static; visuals match; native gamepad bar hidden with controller mode on and untouched with it off; bag opens via B key / vendor / bank and does not taint (`ADDON_ACTION_BLOCKED`); bag D-pad navigation works with native gamepad UI enabled.
+
+## 2026-11-13 In-game findings (first real run on Forever)
+
+- Diag works. Fixed: `CooldownFrame_SetTimer` missing (Compat shim) aborted `Bar:UpdateAll` before `Show()`. After that: bar visible, 12 buttons, 60 proxies, bindings routed, pager registered, zero errors, BUT keys/clicks fired nothing.
+- Suspected cause (fix applied, UNVERIFIED): modern secure action buttons act on key DOWN by default (`useOnKeyDown` attribute / cvar `ActionButtonUseKeyDown`); WoWX buttons were registered `LeftButtonUp` only so the down click was never seen. Now `ClickTransport:ConfigureClicks` registers `AnyUp`+`AnyDown` and syncs `useOnKeyDown` to the cvar (CVAR_UPDATE + post-combat). Diag "Action buttons" line prints cvar + `btn1.useOnKeyDown`. If it still does nothing, next suspects: the `type=action` secure path on Forever, tainted `action` writes, or bindings clobbered by native gamepad UI.
+- Visual overlaps seen: detached stance buttons and the WoWX bag button sit on top of action slot 11/12 area.
+
+### SECRET VALUES (critical Forever rule, found 2026-11-13)
+
+- The client returns opaque "secret" values (cooldowns, charges, aura data, possibly range/count/usable) in combat/restricted state. Insecure (addon) code CANNOT compare, branch on, or do arithmetic with them; it throws `attempt to compare local 'duration' (a secret number value, while execution tainted by 'WoWx')`. Values may only be PASSED to widget APIs (`cooldown:SetCooldown`).
+- Symptom that exposed it: bar icons stuck on the pre-combat/pre-modifier state until combat dropped (keys still fired correctly, because secure execution is unaffected). Cause: `Compat.lua` `CooldownFrame_SetTimer` compared `duration` -> error aborted `Bar:UpdateAll` mid-loop, leaving later buttons stale. 50 captured errors were all this or aura reads (`GetDebuffDataByIndex` in DispelPrompt/UnitFrameCues).
+- Fix: `WoWXIsSecret()` (Compat.lua, wraps `issecretvalue`); `CooldownFrame_SetTimer` passes secrets straight to the widget; VisualBar `isSecret/anySecret/clean` guard cooldown, GCD, charges, usable, range, count, equipped, queued, overlay reads; `UpdateAll` runs each `UpdateButton` in pcall (logged via `WoWXLogRuntimeError`); `UnitBuff/UnitDebuff` shims pcall and return nil when secret.
+- RULE: any new code reading cooldown/aura/charge/health-style API results must go through `WoWXIsSecret`/`clean` before comparing. Possible better path (untested): `C_ActionBar.GetActionCooldownDuration` + `Cooldown:SetCooldownFromDurationObject`.
+- Diag has an "Action slot probe" INFO line (skipped in combat) for per-slot action/spell cooldown + override IDs; added to investigate "new Forever spells don't show cooldown" (unresolved, may also be this issue).
+
+## 2026-11-13 Confirmed in-game (Grell, Paladin, Forever)
+
+- CONFIRMED: keys fire (AnyUp+AnyDown, useOnKeyDown); modifier rows swap visually; combat feels "very good".
+- CONFIRMED: combat cooldown swipes work after `Bar:ApplyCooldown` (VisualBar.lua): when `GetActionCooldown` returns secrets, use `C_ActionBar.GetActionCooldownDuration(slot)` + `Cooldown:SetCooldownFromDurationObject`. The old `pcall(cooldown.SetCooldown, secret...)` failed silently, so swipes only appeared after combat. Diag line "Combat cooldown path" shows `lastPath` (durationobject / settimer-secret / plain) and `lastErr`.
+- Charge-based spell cooldowns in combat still use the old path (untested, likely blank in combat).
+- Pager audit vs ConsolePort: trigger-only condition + engine-index secure response match ConsolePort. Differences: modifier rows are static slots (intentional), no `actionPageCondition` extension point. Untested on this character: stance/stealth/vehicle/override paging (needs druid/rogue; shaman at level 8 has no forms).
+
+## Failure capture (added after a transient protected-action popup was lost)
+
+- `Systems/Core/Compat.lua` now listens for `ADDON_ACTION_BLOCKED/FORBIDDEN` and `MACRO_ACTION_*` (all addons; addon name, function, combat flag, held modifiers, bounded `debugstack`), deduplicated with counts, max 40. It also chains `seterrorhandler` and records any Lua error mentioning "wowx" (also appended to `WoWXRuntimeErrors`), then calls the previous handler unchanged.
+- Persisted in `WoWXDB.captures` (this session); the previous session is rotated to `WoWXDB.previousCaptures` at PLAYER_LOGIN (chat notice if non-empty). `/wowx diag dump` prints both plus a "No blocked protected actions (WoWX)" check. Memory view: `/dump WoWXBlockedActions`.
+- First `[WoWX BLOCKED]` occurrence per function is also printed to chat.
+- VisualBar's coalescing timer (`scheduleVisualBarUpdate`) now pcalls `UpdateAll` (timer callbacks bypass the OnEvent wrapper, a likely error-flood source).
+- UNVERIFIED suspect for the protected-action popup: `Bar:UpdateVehicleLeaveButton` has no combat guard and mutates `hostFrame` (SetParent/SetPoint/SetScale/Show) on every `UpdateAll`, including in combat; the protected vehicle leave button is parented to that host. Do not guard it until the capture names the actual blocked function.
+
+## 2026-11-13 Diagnostics, Debug Macros, Icon (NOT RUN IN-GAME YET)
+
+- `Systems/Base/Diagnostics.lua` (`GPX.Diag`): `/wowx diag` runs a self-test suite (enabled, runtime errors, shims, system toggles, visual bar config/frame/visibility, buttons, pager, proxies, bindings, native bars, bags, targeting). Failed checks run a repair (UpdateAll, Pager:Refresh, re-bind, enable config toggle...) and are re-tested: PASS / FIXED / FAIL / INFO. `/wowx diag dump` does the same and puts the report + runtime errors + `CollectDiagnosticsLines()` into the output window. `diag verbose` was removed. Also kept: `diag stance`, `diag window`.
+- Output window: `SetOutputWindowLines` PINS the window (`GPX.outputPinned`); chat mirroring is suspended so text stays selectable. `/wowx out live` (or Clear) resumes mirroring.
+- The addon is opt-in per character: bar stays hidden until `/wowx enable` (+ `/reload`). Diag reports this explicitly.
+- Icon: `Textures/Icon.tga` (128x128 32-bit TGA, infinity + X in a gold-stroked navy circle/square badge), referenced by `## IconTexture` in the TOC. Generated with PowerShell System.Drawing (no source file kept).
+- Debug macros (create in /macro, paste body):
+  - `WX_Test`: `/wowx diag`
+  - `WX_Dump`: `/wowx diag dump`
+  - `WX_On`: `/wowx enable`
+  - `WX_Off`: `/wowx disable`
+  - `WX_Redo`: `/wowx reload`
+  - `WX_Errs`: `/wowx dump WoWXRuntimeErrors`
+  - `WX_Page`: `/wowx dump GamePadX.Pager:GetCurrentPage()`
+  - `WX_Out`: `/wowx out toggle`
+  - `WX_Live`: `/wowx out live`
+  - `WX_Kbd`: `/wowx toggle keyboard`
+  - `WX_Pad`: `/wowx toggle controller`
+  - `WX_Edit`: `/wowx unlock` / `WX_Lock`: `/wowx lock`
+  - `WX_Stat`: `/wowx status`
+
+## 2026-11-13 Mode-dependent bag ownership + native micro menu (NOT RUN IN-GAME)
+
+User decision: keyboard mode uses Blizzard's bags, bank, micro menu and Edit Mode positioning (Forever additions included). WoWX replaces the bag/bank ONLY when controller mode is enabled. Native gamepad UI stays enabled everywhere else.
+
+- Single predicate: `Buttons:GetShowState()` (ActionButtons.lua) now also requires `GPX:IsControllerEnabled()`. It gates the utility bag button + mouselook button, B / SHIFT-B override bindings, `ToggleBackpack`/`OpenAllBags`/... post-hooks, MERCHANT_SHOW / MAIL_SHOW auto-open, and BANKFRAME_OPENED (WoWX bank). In keyboard mode all of these are inert.
+- `Buttons:SetBlizzardBankSuppressed(false)` is a no-op unless WoWX previously suppressed (no more alpha/mouse writes on Blizzard bank frames every `UpdateAll`).
+- `GPX:SetControllerEnabled` now calls `ActionButtons:UpdateAll()` and `VisualBar:UpdateBlizzardBars()` (pcall, logged). `UpdateAll` hides WoWX bag/bank windows and the button when leaving controller mode; both defer in combat (`pendingRefresh`, `pendingAttributeRefresh` now also set by `UpdateBlizzardBars` in combat).
+- Micro menu: WoWX never touches it. `MicroMenu` and the legacy `*MicroButton` frames were removed from `managedBlizzardBars`; `Bar:UpdateMicroMenu` only hides the legacy `WoWXMicroMenuFrame` (never created now). The old code reparented Forever's native micro buttons out of `MicroMenu`, which broke Edit Mode and showed red question marks for entries not in the legacy list. `keepMicroMenu`, `microPoint` saved settings are ignored; `/wowx bar keepmenu` just prints a note. Reparenting was runtime-only, so `/reload` restores the native layout.
+- `BagsBar`: native in keyboard mode, reparented to the hidden parent in controller mode (restored out of combat on toggle back). Legacy `CharacterBag*Slot` / `MainMenuBarBackpackButton` are skipped when `BagsBar` exists (they live inside it).
+- Diag: new "Bag / micro menu ownership (mode-dependent)" check (MicroMenu/BagsBar parent+shown, WoWX bag button/window state). FAIL means native menu hidden/reparented, or WoWX bag UI visible in keyboard mode.
+- Tests (all unverified):
+  1. Keyboard mode, `/reload`: native micro menu complete (no red `?`), movable in Edit Mode; B / bag bar opens Blizzard bags; vendor, mail, bank are Blizzard's; no WoWX bag button or window. `/wowx diag` bag/micro line = PASS.
+  2. `/wowx toggle controller` (out of combat): WoWX bag button appears, BagsBar hides, B / vendor / bank open WoWX windows, Blizzard containers hidden. D-pad nav in the bag untested.
+  3. Toggle back to keyboard: WoWX windows close, BagsBar returns, B opens Blizzard bags. Repeat the toggle in combat; it must apply after combat ends with no `ADDON_ACTION_BLOCKED` (`/wowx diag dump`).
+
+## 2026-11-13 Vehicle exit native, bag-hook crash, capture gap (NOT RUN IN-GAME)
+
+- SUPERSEDES the mode-dependent bag section above (user, 2026-11-13): Blizzard owns bags, bank and the "Use Combined Bags" option in ALL modes, controller included; Edit Mode places them. FINAL (same day): the `WOWX_OWNS_BAGS` flag was REMOVED (user: no switch that can be messed up). `Systems\Bags\ActionButtons.lua` is simply NOT in `WoWX.toc` (parked reference file only). Also removed: `bindWoWXBagHotkeys` in GamePadX (it bound B/SHIFT-B to `WoWXUtilityBagButton` regardless of the flag, the likely source of the stray WoWX bag window), the Settings "WoWX Bags" button/status line/system toggle, and the Diagnostics bag-module checks (replaced by "Native bags / micro menu"). `keepBags` in VisualBar is always true. Note: the controller mouselook button was hosted by that parked module and is therefore also not loaded; re-home it if controller mouselook is needed.
+- Minimap button (WoWX edit mode entry): previously `CreateFrame(..., "UIDropDownMenuTemplate")` at file load and `EasyMenu` (removed from modern clients) broke it. Now: no load-time template, menu via `MenuUtil.CreateContextMenu` (fallback `EasyMenu`, fallback chat hint with slash commands), `atan2` fallback, pcall + `WoWXLogRuntimeError` on click/menu actions, frame level raised above the Minimap. Gridbook entry removed (spellbook retired). Slash fallbacks: `/wowx unlock` / `lock` (Layout Edit), `/wowx buttonunlock` / `buttonlock` (Button Edit). UNVERIFIED in-game.
+- Minimap button follow-up (user, 2026-11-13): the icon DID appear after a full client restart (the earlier hide was likely a stale client session, not only the EasyMenu/template bug). Forever has two UI modes (Modern / Enhanced); the user runs Enhanced. Questie (`Questie/Libs/LibDBIcon-1.0`) is the working reference: LibDBIcon button on `Minimap`, fixed frame strata/level, `GetMinimapShape`, `AddonCompartmentFrame:RegisterAddon`. WoWX now has a rich tooltip (`Button:ShowTooltip`: version, input mode, modifier row, base page, Layout/Button Edit state, click hints), Shift-click = Layout Edit toggle, Ctrl-click = Button Edit toggle, and an Addon Compartment entry (`Button:RegisterCompartment`, no-op if `AddonCompartmentFrame` is absent). UNVERIFIED: whether Forever's Game Menu exposes the compartment; Options > AddOns canvas panel (`Settings.RegisterCanvasLayoutCategory`) is the fallback idea if not.
+- XP/Rep bar: user says it is fine as is (WoWX bar look and feel stays). No XP bar changes were made. Possible later: Blizzard-like rest/honor behavior and 20 "bubble" dividers, only if requested.
+- Fixed: `GetUnitSpeed("player")` returns a secret value in combat; the controller mouselook poll in `GamePadX.lua` compared it (1769 captured errors in WoWx.lua). It now uses `WoWXIsSecret` and keeps the last known moving state.
+- Roadmap notes (user): Bartender-style layout profiles plus size/move for the pager, but NOT button count editing. Future option: show the pager in 1, 2 or 3 rows that still swap; controller mode (8 buttons) would be 1 or 2 rows.
+- CONFIG MENU DIRECTION (user, 2026-11-13, "we've gone over this over and over"): model the config like Bartender (sidebar or hamburger sections for optional bits). Action Bar 1 = the base pager bar, the only movable bar; modifier rows are not separate bars. Button counts are NOT editable. Wanted per-bar options: position and (maybe) rows. Only two distinct actions exist: (1) WoWX Layout Edit on/off (`config.locked`, moves/scales everything) and (2) Button Lock on/off (`config.buttonLocked`, slot placement; labelled "Button Lock: On" = locked in Settings and minimap menu; requires Layout Edit off). Optional features (e.g. XP/Rep bar visibility, checkbox "Show XP/Rep Bar") live ONLY in the config menu, not the minimap menu. Not built yet: sidebar layout, rows setting (needs main-bar layout metrics around `GetLayoutMetrics`/`GetVisibleButtonCount` in VisualBar.lua).
+- Layout Edit is ONE mode (user: "make it like Bartender"): `/wowx unlock` / minimap Shift-click unlocks every element (bar, modifier indicator, stance, pet, vehicle, micro, XP/Rep bar) with drag, corner scale handle and an Edit panel. The XP/Rep bar now has a Scale (`progressScale`, saved in layout profiles) and corner scale handle like the rest, plus Width/Height/Opacity in its Edit panel. `/wowx bar progresslock` is just an alias of Layout Edit. The "Visible Buttons" slider was removed from the main bar Edit panel (button count is not user-editable; controller mode still uses its own 8-button count).
+
+- User decision: Blizzard owns the vehicle exit button (Forever Edit Mode positions it). `MainMenuBarVehicleLeaveButton` removed from `managedBlizzardBars`; `Bar:UpdateVehicleLeaveButton` now only hides a legacy `WoWXVehicleHostFrame` if one exists and never creates it or touches the button (the old version reparented/moved/showed the protected button every `UpdateAll`, including in combat = prime popup suspect). Diag check "Vehicle exit button is native" (parent, visible, canExit). Test: enter a vehicle/mount-with-exit, button appears, click leaves it, in and out of combat; Edit Mode moves it.
+- Bug found from live diag (2 Lua errors): `hooksecurefunc("OpenStackSplitFrame")` threw because the global does not exist on Forever; it ran inside `EnsureBagWindow`, aborting bag window creation (every bag open in controller mode errored). Now hooks `StackSplitFrame` OnShow, or the global only if it is a function. RULE: guard every `hooksecurefunc` on a global with `type(_G[name])=="function"` (or `WoWXSafeHookSecureFunc`).
+- Capture gap: user saw a popup but `ADDON_ACTION_BLOCKED/FORBIDDEN` handler recorded nothing (all addons: 0), so either the popup is not that event or Forever fires other names. Added: (1) `StaticPopup_Show` / `C_StaticPopup.Show` hook recording popups whose name has ADDON/BLOCK/FORBID/TAINT/PROTECT (chat `[WoWX POPUP]`); (2) `/wowx diag probe` toggles an all-events listener recording event names matching BLOCK/FORBID/TAINT/PROTECT/ADDON_ACTION/SECRET (turn OFF afterwards; costs CPU). Diag blocked check now reads `WoWXDB.captures.blocked`. Next popup: run `/wowx diag probe` first, reproduce, `/wowx diag dump`.
+- Unconfirmed: the popup may also have been the Lua-error display from the bag hook crash (died while errors flooded).
+
 ## 2026-05-17 Bag Module and Per-Character Profiles
+
 
 ### Issues Resolved
 

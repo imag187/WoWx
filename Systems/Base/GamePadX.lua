@@ -1755,66 +1755,13 @@ function GPX:IsDruidCatFormActive()
 end
 
 function GPX:GetMainActionPageState(unit)
-    unit = unit or "player"
-    local _, classFile = UnitClass(unit)
-    local stealthed = IsStealthed and IsStealthed() or false
-    local bonusOffset = GetBonusBarOffset and (tonumber(GetBonusBarOffset()) or 0) or 0
-    local actionPage = GetActionBarPage and (tonumber(GetActionBarPage()) or 1) or 1
-
-    if WoWXSystems and WoWXSystems.GameTypeDB and WoWXSystems.GameTypeDB.EvaluatePagerRules then
-        local page, reason = WoWXSystems.GameTypeDB:EvaluatePagerRules({
-            unit = unit,
-            classFile = classFile,
-            stealthed = stealthed,
-            bonusOffset = bonusOffset,
-            actionPage = actionPage,
-        })
-        if page then
-            return page, reason or "manual-rule"
-        end
+    -- The secure Pager's engine-index replica is the single page authority.
+    if self.Pager and self.Pager.GetCurrentPage then
+        local page = tonumber(self.Pager:GetCurrentPage()) or 1
+        local reason = page > 1 and "engine-page" or "base"
+        return page, reason
     end
-
-    if self:IsCoAStealthPageClass(unit) then
-        return stealthed and 7 or 1, "coa-stealth"
-    end
-
-    if self:IsDruidDualStealthPagerClass(unit) then
-        if stealthed then
-            return 8, "druid-prowl"
-        end
-        if bonusOffset > 0 then
-            if bonusOffset == 1 then
-                return 7, "druid-cat"
-            elseif bonusOffset == 2 then
-                return 8, "druid-stealth"
-            elseif bonusOffset == 3 then
-                return 9, "druid-bear"
-            elseif bonusOffset == 4 then
-                return 10, "druid-moonkin"
-            end
-            return 6 + bonusOffset, "druid-bonus"
-        end
-        if actionPage >= 7 and actionPage <= 10 then
-            return actionPage, "druid-actionpage"
-        end
-        if self:IsDruidCatFormActive() then
-            return 7, "druid-cat-form"
-        end
-        return 1, "druid-base"
-    end
-
-    if bonusOffset > 0 then
-        return 6 + bonusOffset, "bonus"
-    end
-
-    if not self:IsCoARealm() then
-        if actionPage < 1 then
-            actionPage = 1
-        end
-        return actionPage, "native"
-    end
-
-    return 1, "coa-base"
+    return 1, "base"
 end
 
 function GPX:GetControllerConfig()
@@ -1857,6 +1804,21 @@ function GPX:SetControllerEnabled(enabled)
 
     if self.MinimapButton and self.MinimapButton.Refresh then
         self.MinimapButton:Refresh()
+    end
+
+    -- Bag/bank ownership and BagsBar visibility depend on controller mode. Both updaters
+    -- defer themselves until PLAYER_REGEN_ENABLED when called in combat.
+    if self.ActionButtons and self.ActionButtons.UpdateAll then
+        local ok, err = pcall(self.ActionButtons.UpdateAll, self.ActionButtons)
+        if not ok and WoWXLogRuntimeError then
+            WoWXLogRuntimeError("ActionButtons", "SetControllerEnabled", err)
+        end
+    end
+    if self.VisualBar and self.VisualBar.UpdateBlizzardBars then
+        local ok, err = pcall(self.VisualBar.UpdateBlizzardBars, self.VisualBar)
+        if not ok and WoWXLogRuntimeError then
+            WoWXLogRuntimeError("VisualBar", "SetControllerEnabled", err)
+        end
     end
 
     self:SaveMachineScopedState("controller-toggle", true)
@@ -2118,7 +2080,13 @@ do
 
         pollTimer = 0
         local speed = GetUnitSpeed and GetUnitSpeed("player") or 0
-        local isMoving = speed > speedThreshold
+        local isMoving
+        if WoWXIsSecret and WoWXIsSecret(speed) then
+            -- Forever returns a secret speed in combat; it cannot be compared, keep the last known state.
+            isMoving = wasMoving
+        else
+            isMoving = speed > speedThreshold
+        end
         local cfg = GPX:GetControllerConfig()
         local mode = cfg.mouseLookMode or "move"
 
@@ -2446,7 +2414,7 @@ function GPX:CollectDiagnosticsLines()
     end
 
     add("Diagnostics:")
-    add("  BuildTag: 2026-05-16-click-proxy-rescue-v2")
+    add("  BuildTag: 2026-11-13-forever-pager-v1")
     add("  Enabled: " .. tostring(self.db and self.db.enabled))
     add("  Slash: /wowx registered (legacy aliases active)")
     add("  SetupWizard: " .. frameState(self.SetupWizard, "wizard"))
@@ -2744,7 +2712,7 @@ function GPX:CollectStanceDiagnosticsLines()
     local currentForm = GetShapeshiftForm and (GetShapeshiftForm() or 0) or 0
     add("  ShapeshiftForms: count=" .. tostring(formCount) .. " current=" .. tostring(currentForm))
 
-    local frameNames = { "StanceBarFrame", "ShapeshiftBarFrame", "PossessBarFrame" }
+    local frameNames = { "StanceBar", "PossessActionBar", "StanceBarFrame", "ShapeshiftBarFrame", "PossessBarFrame" }
     for _, name in ipairs(frameNames) do
         local frame = _G[name]
         if frame then
@@ -2835,7 +2803,7 @@ end
 function GPX:PrintLastDiagnosticRun()
     local run = self.db and self.db.lastDiagRun or nil
     if not run or not run.lines then
-        self:Print("No saved diag run. Use /wowx diag verbose first.")
+        self:Print("No saved diag run. Use /wowx diag dump first.")
         return
     end
 
@@ -3119,7 +3087,7 @@ function GPX:EnsureDiagWindow()
             edit:SetText(GPX:BuildDiagText(run.lines, header))
             statusText:SetText("Loaded latest run.")
         else
-            edit:SetText(GPX:BuildDiagText({ "No diagnostic run captured yet.", "Use Capture or /wowx diag verbose." }, ""))
+            edit:SetText(GPX:BuildDiagText({ "No diagnostic run captured yet.", "Use Capture or /wowx diag dump." }, ""))
             statusText:SetText("No run captured yet.")
         end
         edit:SetCursorPosition(0)
@@ -3193,7 +3161,9 @@ function GPX:SetOutputWindowLines(lines, title, autoSelect)
         merged[#merged + 1] = tostring(line)
     end
 
+    -- Pinned: reports stay put (no chat-mirror re-render) so text can be selected/copied.
     self.outputLog = merged
+    self.outputPinned = true
     local frame = self:ShowOutputWindow()
     if frame and frame._wowxOutputRender then
         frame._wowxOutputRender()
@@ -3231,6 +3201,9 @@ function GPX:EndOutputRenderBatch()
 end
 
 function GPX:AppendOutputLine(line)
+    if self.outputPinned then
+        return
+    end
     self.outputLog = self.outputLog or {}
     self.outputLogMax = tonumber(self.outputLogMax) or 500
 
@@ -3369,13 +3342,20 @@ function GPX:EnsureOutputWindow()
     local function renderOutput()
         local lines = GPX.outputLog or {}
         edit:SetText(GPX:BuildOutputText(lines))
-        edit:SetCursorPosition(string.len(edit:GetText() or ""))
-        scroll:SetVerticalScroll(edit:GetHeight())
-        statusText:SetText("Lines: " .. tostring(#lines))
+        if GPX.outputPinned then
+            edit:SetCursorPosition(0)
+            scroll:SetVerticalScroll(0)
+            statusText:SetText("Lines: " .. tostring(#lines) .. " (pinned report; /wowx out live resumes chat mirror)")
+        else
+            edit:SetCursorPosition(string.len(edit:GetText() or ""))
+            scroll:SetVerticalScroll(edit:GetHeight())
+            statusText:SetText("Lines: " .. tostring(#lines))
+        end
     end
 
     clearButton:SetScript("OnClick", function()
         GPX.outputLog = {}
+        GPX.outputPinned = false
         renderOutput()
         statusText:SetText("Cleared output.")
     end)
@@ -3440,6 +3420,22 @@ local blizzardPageCommands = {
     "ACTIONPAGE6",
     "NEXTACTIONPAGE",
     "PREVACTIONPAGE",
+}
+
+-- WoW Forever native gamepad bar: its keys still fire the (hidden) native
+-- buttons, so they are cleared while WoWX controller mode owns the bar
+-- (same approach as ConsolePort).
+local blizzardGamepadBarCommands = {
+    "GAMEPADACTIONBUTTON1",
+    "GAMEPADACTIONBUTTON2",
+    "GAMEPADACTIONBUTTON3",
+    "GAMEPADACTIONBUTTON4",
+    "GAMEPADACTIONBUTTON5",
+    "GAMEPADACTIONBUTTON6",
+    "GAMEPADACTIONBUTTON7",
+    "GAMEPADACTIONBUTTON8",
+    "GAMEPADLEFTMOD",
+    "GAMEPADRIGHTMOD",
 }
 
 local blizzardCombatUiCommands = {
@@ -3910,7 +3906,16 @@ function GPX:ApplyBindings(silent)
     end
 
     local function suppressBlizzardPageSwitchBinds()
+        local commands = {}
         for _, command in ipairs(blizzardPageCommands) do
+            commands[#commands + 1] = command
+        end
+        if self:IsControllerEnabled() then
+            for _, command in ipairs(blizzardGamepadBarCommands) do
+                commands[#commands + 1] = command
+            end
+        end
+        for _, command in ipairs(commands) do
             local keys = { GetBindingKey(command) }
             for _, key in ipairs(keys) do
                 if key and key ~= "" then
@@ -3979,27 +3984,6 @@ function GPX:ApplyBindings(silent)
                     end
                 end
             end
-        end
-    end
-
-    local function bindWoWXBagHotkeys()
-        if not self.ActionButtons or not self.ActionButtons.bagButton then
-            return
-        end
-
-        local cfg = self.db and self.db.ui and self.db.ui.actionButtons or nil
-        if not cfg or cfg.enabled == false or cfg.showBags == false then
-            return
-        end
-
-        rememberPrevious("B")
-        if SetBindingClick("B", "WoWXUtilityBagButton", "LeftButton") then
-            self.appliedBindings["B"] = { mode = "binding", command = "CLICK WoWXUtilityBagButton LeftButton" }
-        end
-
-        rememberPrevious("SHIFT-B")
-        if SetBindingClick("SHIFT-B", "WoWXUtilityBagButton", "RightButton") then
-            self.appliedBindings["SHIFT-B"] = { mode = "binding", command = "CLICK WoWXUtilityBagButton RightButton" }
         end
     end
 
@@ -4230,8 +4214,6 @@ function GPX:ApplyBindings(silent)
             end
         end
     end
-
-    bindWoWXBagHotkeys()
 
     if engine.bindMenu and self:IsControllerEnabled() and activeMenuKey and activeMenuKey ~= "" then
         self:EnsureMenuLauncherButtons()
@@ -4691,18 +4673,33 @@ function GPX:Slash(msg)
 
     elseif cmd == "diag" then
         local arg = string.lower((rest or ""):match("^%s*(.-)%s*$"))
-        if arg == "" or arg == "now" then
-            self:PrintDiagnostics()
+        if arg == "" or arg == "now" or arg == "test" or arg == "run" then
+            if self.Diag then
+                self.Diag:Run(false)
+            else
+                self:PrintDiagnostics()
+            end
+        elseif arg == "dump" then
+            if self.Diag then
+                self.Diag:Run(true)
+            else
+                self:Print("Diagnostics module not loaded.")
+            end
         elseif arg == "window" or arg == "win" or arg == "ui" then
             self:ShowOutputWindow()
+        elseif arg == "probe" or arg == "probe on" or arg == "probe off" then
+            if not _G.WoWXSetEventProbe then
+                self:Print("Event probe unavailable.")
+            else
+                local on = arg == "probe on" or (arg == "probe" and not _G.WoWXEventProbeOn)
+                _G.WoWXSetEventProbe(on)
+                self:Print("Event probe " .. (on and "ON (records BLOCK/FORBID/TAINT/PROTECT/ADDON_ACTION/SECRET events; turn off when done)" or "OFF"))
+            end
         elseif arg == "stance" or arg == "aura" or arg == "forms" then
             local lines = self:CollectStanceDiagnosticsLines()
             self:SetOutputWindowLines(lines, "Stance Diagnostics", true)
-        elseif arg == "verbose" or arg == "save" or arg == "run" then
-            self:RunDiagnosticSpeedRun("verbose")
-            self:PrintLastDiagnosticRun()
         else
-            self:Print("Usage: /wowx diag [stance|verbose|window]")
+            self:Print("Usage: /wowx diag [dump|stance|window|probe]")
         end
 
     elseif cmd == "diagshow" then
@@ -4747,8 +4744,16 @@ function GPX:Slash(msg)
             self:ShowOutputWindow()
         elseif arg == "toggle" then
             self:ToggleOutputWindow()
+        elseif arg == "live" then
+            self.outputPinned = false
+            self.outputLog = {}
+            if self.outputWindow and self.outputWindow._wowxOutputRender then
+                self.outputWindow._wowxOutputRender()
+            end
+            self:Print("Output window is live again (mirrors chat).")
         elseif arg == "clear" then
             self.outputLog = {}
+            self.outputPinned = false
             if self.outputWindow and self.outputWindow._wowxOutputRender then
                 self.outputWindow._wowxOutputRender()
             end
@@ -4765,7 +4770,7 @@ function GPX:Slash(msg)
                 end
             end
         else
-            self:Print("Usage: /wowx out [window|toggle|clear|copy]")
+            self:Print("Usage: /wowx out [window|toggle|clear|live|copy]")
         end
 
     elseif cmd == "spelldb" or cmd == "spellsdb" then
@@ -4892,7 +4897,8 @@ function GPX:PrintHelp()
     self:Print("  "..c.."/wowx bindsync ..."..r.."       Save WoWX binding changes (on/off/character/now)")
     self:Print("  "..c.."/wowx diag"..r.."               Capture diagnostics into selectable output window")
     self:Print("  "..c.."/wowx diag stance"..r.."        Capture aura/stance frame diagnostics into output window")
-    self:Print("  "..c.."/wowx diag verbose"..r.."       Save a timestamped diag + load it into output window")
+    self:Print("  "..c.."/wowx diag"..r.."               Run self-test, auto-repair failures, print pass/fail")
+    self:Print("  "..c.."/wowx diag dump"..r.."          Self-test + full state report in the selectable output window")
     self:Print("  "..c.."/wowx diag window"..r.."        Open selectable output window")
     self:Print("  "..c.."/wowx diagshow"..r.."           Load most recent saved diagnostic run into output window")
     self:Print("  "..c.."/wowx diagwin"..r.."            Toggle selectable output window")
@@ -4905,7 +4911,7 @@ function GPX:PrintHelp()
     self:Print("  "..c.."/wowx spelldb import replace"..r.." Replace SpellDB profiles from output window")
     self:Print("  "..c.."/wowx bar toggle"..r.."         Show or hide the visual WoWX bar")
     self:Print("  "..c.."/wowx bar progress"..r.."       Toggle XP/Rep tracker strip")
-    self:Print("  "..c.."/wowx bar progresslock"..r.."   Lock/unlock XP/Rep bar placement")
+    self:Print("  "..c.."/wowx bar progresslock"..r.."   Same as Layout Edit (XP/Rep bar moves and scales with every other element)")
     self:Print("  "..c.."/wowx bar keepmenu"..r.."       Keep/hide Blizzard micro menu")
     self:Print("  "..c.."/wowx bar keepbags"..r.."       Keep/hide Blizzard bag buttons")
     self:Print("  "..c.."/wowx bar keepstance"..r.."     Keep/hide Blizzard stance bars")

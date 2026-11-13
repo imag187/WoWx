@@ -3,6 +3,8 @@ if not GamePadX then return end
 local GPX = GamePadX
 local Buttons = {}
 
+-- PARKED: not listed in WoWX.toc. Blizzard owns bags/bank/combined bags. Kept only as reference.
+
 local function SetFrameShown(frame, shown)
     if shown then
         frame:Show()
@@ -199,6 +201,10 @@ local function RaiseStackSplitFrame()
 end
 
 local function HideBlizzardContainerFrames()
+    local combined = _G.ContainerFrameCombinedBags
+    if combined and combined:IsShown() then
+        combined:Hide()
+    end
     for index = 1, 13 do
         local frame = _G["ContainerFrame" .. tostring(index)]
         if frame and frame:IsShown() then
@@ -1140,6 +1146,11 @@ function Buttons:RefreshBagButtonChrome(force)
 end
 
 function Buttons:SetBlizzardBankSuppressed(suppressed)
+    -- Never touch Blizzard's bank frames unless we previously suppressed them.
+    if not suppressed and not self._bankSuppressedActive then
+        return
+    end
+    self._bankSuppressedActive = suppressed and true or nil
     self._bankSuppressedState = self._bankSuppressedState or {}
     for _, frameName in ipairs(BLIZZARD_BANK_FRAME_NAMES) do
         local frame = _G[frameName]
@@ -1404,11 +1415,17 @@ function Buttons:EnsureBagWindow()
     applyBlueChromeBackdrop(frame, BLUE_BORDER)
     frame:Hide()
 
-    if not self._stackSplitHookInstalled and hooksecurefunc then
-        hooksecurefunc("OpenStackSplitFrame", function()
-            RaiseStackSplitFrame()
-        end)
-        self._stackSplitHookInstalled = true
+    if not self._stackSplitHookInstalled then
+        -- Forever has no global OpenStackSplitFrame (it is a StackSplitFrame method / absent),
+        -- and hooksecurefunc() on a missing global throws and aborts window creation.
+        local split = _G.StackSplitFrame
+        if split and split.HookScript then
+            split:HookScript("OnShow", RaiseStackSplitFrame)
+            self._stackSplitHookInstalled = true
+        elseif type(_G.OpenStackSplitFrame) == "function" and hooksecurefunc then
+            hooksecurefunc("OpenStackSplitFrame", RaiseStackSplitFrame)
+            self._stackSplitHookInstalled = true
+        end
     end
 
     local title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
@@ -1523,6 +1540,7 @@ function Buttons:EnsureBagWindow()
 
     self.bagWindow = frame
     registerAsEscapeClosable("WoWXCombinedBagWindow")
+    self:HookNavigation(frame)
     return frame
 end
 
@@ -1532,7 +1550,8 @@ function Buttons:GetShowState()
         return false
     end
     local enabled = GPX.db and GPX.db.enabled
-    return enabled and cfg.enabled and cfg.showBags
+    local controller = GPX.IsControllerEnabled and GPX:IsControllerEnabled()
+    return (enabled and cfg.enabled and cfg.showBags and controller) and true or false
 end
 
 function Buttons:ApplyHotkeys()
@@ -1975,6 +1994,7 @@ function Buttons:EnsureBankWindow()
 
     self.bankWindow = frame
     registerAsEscapeClosable("WoWXBankWindow")
+    self:HookNavigation(frame)
     return frame
 end
 
@@ -2307,6 +2327,130 @@ function Buttons:UpdateAll()
     self:InstallBlizzardBagHooks()
 end
 
+-- Controller navigation over the WoWX bag/bank windows via GPX.UIMode (context "bags").
+-- D-pad moves focus, Confirm uses the item (or drops the carried item), the window
+-- shoulder keys pick up / put down an item, Cancel closes the window.
+local function shouldNavigate()
+    if GPX.IsControllerEnabled and GPX:IsControllerEnabled() then
+        return true
+    end
+    return (C_GamePad and C_GamePad.IsEnabled and C_GamePad.IsEnabled()) and true or false
+end
+
+local function getNavWindow()
+    if Buttons.bankWindow and Buttons.bankWindow:IsShown() then
+        return Buttons.bankWindow, Buttons.bankItemButtons
+    end
+    if Buttons.bagWindow and Buttons.bagWindow:IsShown() then
+        return Buttons.bagWindow, Buttons.itemButtons
+    end
+    return nil, nil
+end
+
+local function ensureNavButtonVisible(button)
+    local scroll = button and button:GetParent()
+    while scroll and not scroll.SetVerticalScroll do
+        scroll = scroll:GetParent()
+    end
+    if not scroll then
+        return
+    end
+    local top, bottom = button:GetTop(), button:GetBottom()
+    local viewTop, viewBottom = scroll:GetTop(), scroll:GetBottom()
+    if not (top and bottom and viewTop and viewBottom) then
+        return
+    end
+    local current = scroll:GetVerticalScroll() or 0
+    local maxScroll = scroll:GetVerticalScrollRange() or 0
+    if top > viewTop then
+        current = current - (top - viewTop)
+    elseif bottom < viewBottom then
+        current = current + (viewBottom - bottom)
+    else
+        return
+    end
+    scroll:SetVerticalScroll(math.max(0, math.min(maxScroll, current)))
+end
+
+local function isCarryingItem()
+    return CursorHasItem and CursorHasItem() or (GetCursorInfo and GetCursorInfo() == "item")
+end
+
+function Buttons:RegisterNavigationContext()
+    if self._navRegistered or not GPX.UIMode then
+        return
+    end
+    self._navRegistered = true
+
+    GPX.UIMode:RegisterContext("bags", {
+        label = "Inventory",
+        columns = ITEM_BUTTON_COLUMNS,
+        getItems = function()
+            local _, list = getNavWindow()
+            return list or {}
+        end,
+        isAvailable = function()
+            return getNavWindow() ~= nil
+        end,
+        onFocus = ensureNavButtonVisible,
+        onAction = function(_, action, focused)
+            if not focused then
+                return false
+            end
+            if action == "CONFIRM" then
+                focused:Click(isCarryingItem() and "LeftButton" or "RightButton")
+                return true
+            end
+            if action == "NEXT_WINDOW" or action == "PREV_WINDOW" then
+                focused:Click("LeftButton")
+                return true
+            end
+            return false
+        end,
+        onCancel = function()
+            local window = getNavWindow()
+            if window then
+                window:Hide()
+            end
+            if GPX.UIMode.activeContext == "bags" then
+                GPX.UIMode:Exit()
+            end
+        end,
+        getIndicatorText = function(_, baseText)
+            return "Confirm: use / drop   Shoulder: pick up / put down   " .. baseText
+        end,
+    })
+end
+
+function Buttons:HookNavigation(frame)
+    if not frame or frame._wowxNavHooked then
+        return
+    end
+    frame._wowxNavHooked = true
+    self:RegisterNavigationContext()
+
+    frame:HookScript("OnShow", function()
+        if not shouldNavigate() or not GPX.UIMode or InCombatLockdown() then
+            return
+        end
+        if Buttons._openedByMerchant or Buttons._openedByMail then
+            return
+        end
+        if GPX.UIMode.activeContext == nil or GPX.UIMode.activeContext == "bags" then
+            GPX.UIMode:Enter("bags")
+        end
+    end)
+    frame:HookScript("OnHide", function()
+        if GPX.UIMode and GPX.UIMode.activeContext == "bags" then
+            if getNavWindow() then
+                GPX.UIMode:Enter("bags")
+            else
+                GPX.UIMode:Exit()
+            end
+        end
+    end)
+end
+
 function Buttons:InstallBlizzardBagHooks()
     if self._hooksInstalled then
         return
@@ -2318,126 +2462,72 @@ function Buttons:InstallBlizzardBagHooks()
         return
     end
 
-    -- Hook ToggleBackpack to open WoWX bags instead
-    if ToggleBackpack and not self._originalToggleBackpack then
-        self._originalToggleBackpack = ToggleBackpack
-        ToggleBackpack = function()
-            if Buttons:GetShowState() then
-                if Buttons._bankIsOpen then
-                    return
-                end
-                Buttons:ToggleBagWindow()
-            else
-                Buttons._originalToggleBackpack()
-            end
+    -- Post-hooks only (never replace the globals): replacing them taints the secure
+    -- keybinding path and the Blizzard container code it calls. Blizzard's container
+    -- frames still open for a moment; we hide them and show the WoWX window instead.
+    local lastHandled = -1
+    -- Blizzard wrappers call each other (ToggleAllBags -> OpenAllBags/CloseAllBags),
+    -- so only the innermost hook per frame acts.
+    local function claimFrame()
+        local now = GetTime()
+        if now == lastHandled then
+            return false
+        end
+        lastHandled = now
+        return true
+    end
+
+    local function showWoWXBags()
+        if not Buttons:GetShowState() or Buttons._bankIsOpen or not claimFrame() then
+            return
+        end
+        local frame = Buttons:EnsureBagWindow()
+        if frame and not frame:IsShown() then
+            Buttons:RefreshBagWindow()
+            frame:Show()
+            frame:Raise()
+        end
+        HideBlizzardContainerFrames()
+    end
+
+    local function toggleWoWXBags()
+        if not Buttons:GetShowState() or Buttons._bankIsOpen or not claimFrame() then
+            return
+        end
+        local frame = Buttons:EnsureBagWindow()
+        if frame and frame:IsShown() then
+            frame:Hide()
+            Buttons._openedByMerchant = nil
+        elseif frame then
+            Buttons:RefreshBagWindow()
+            frame:Show()
+            frame:Raise()
+        end
+        HideBlizzardContainerFrames()
+    end
+
+    local function closeWoWXBags()
+        claimFrame()
+        if Buttons:GetShowState() and Buttons.bagWindow and Buttons.bagWindow:IsShown() then
+            Buttons.bagWindow:Hide()
+            Buttons._openedByMerchant = nil
         end
     end
 
-    -- Hook OpenAllBags to open WoWX bags instead
-    if OpenAllBags and not self._originalOpenAllBags then
-        self._originalOpenAllBags = OpenAllBags
-        OpenAllBags = function()
-            if Buttons:GetShowState() then
-                if Buttons._bankIsOpen then
-                    return
-                end
-                local frame = Buttons:EnsureBagWindow()
-                if frame and not frame:IsShown() then
-                    Buttons:RefreshBagWindow()
-                    frame:Show()
-                    frame:Raise()
-                    HideBlizzardContainerFrames()
-                end
-            else
-                Buttons._originalOpenAllBags()
-            end
-        end
-    end
-
-    -- Some interactions (altars, special objects) call OpenBackpack/OpenBag directly.
-    -- Redirect those paths too so Blizzard container windows do not open under WoWX.
-    if OpenBackpack and not self._originalOpenBackpack then
-        self._originalOpenBackpack = OpenBackpack
-        OpenBackpack = function()
-            if Buttons:GetShowState() then
-                if Buttons._bankIsOpen then
-                    return
-                end
-                local frame = Buttons:EnsureBagWindow()
-                if frame and not frame:IsShown() then
-                    Buttons:RefreshBagWindow()
-                    frame:Show()
-                    frame:Raise()
-                    HideBlizzardContainerFrames()
-                end
-            else
-                Buttons._originalOpenBackpack()
-            end
-        end
-    end
-
-    if OpenBag and not self._originalOpenBag then
-        self._originalOpenBag = OpenBag
-        OpenBag = function(_)
-            if Buttons:GetShowState() then
-                if Buttons._bankIsOpen then
-                    return
-                end
-                local frame = Buttons:EnsureBagWindow()
-                if frame and not frame:IsShown() then
-                    Buttons:RefreshBagWindow()
-                    frame:Show()
-                    frame:Raise()
-                    HideBlizzardContainerFrames()
-                end
-            else
-                Buttons._originalOpenBag(_)
-            end
-        end
-    end
-
-    if ToggleBag and not self._originalToggleBag then
-        self._originalToggleBag = ToggleBag
-        ToggleBag = function(_)
-            if Buttons:GetShowState() then
-                Buttons:ToggleBagWindow()
-            else
-                Buttons._originalToggleBag(_)
-            end
-        end
-    end
-
-    -- Hook CloseAllBags to close WoWX bags
-    if CloseAllBags and not self._originalCloseAllBags then
-        self._originalCloseAllBags = CloseAllBags
-        CloseAllBags = function()
-            if Buttons:GetShowState() and Buttons.bagWindow and Buttons.bagWindow:IsShown() then
-                Buttons.bagWindow:Hide()
-                Buttons._openedByMerchant = nil
-            end
-            Buttons._originalCloseAllBags()
-        end
-    end
-
-    if CloseBackpack and not self._originalCloseBackpack then
-        self._originalCloseBackpack = CloseBackpack
-        CloseBackpack = function()
-            if Buttons:GetShowState() and Buttons.bagWindow and Buttons.bagWindow:IsShown() then
-                Buttons.bagWindow:Hide()
-                Buttons._openedByMerchant = nil
-            end
-            Buttons._originalCloseBackpack()
-        end
-    end
-
-    if CloseBag and not self._originalCloseBag then
-        self._originalCloseBag = CloseBag
-        CloseBag = function(bag)
-            if Buttons:GetShowState() and Buttons.bagWindow and Buttons.bagWindow:IsShown() then
-                Buttons.bagWindow:Hide()
-                Buttons._openedByMerchant = nil
-            end
-            Buttons._originalCloseBag(bag)
+    local hooks = {
+        ToggleBackpack = toggleWoWXBags,
+        ToggleBag = toggleWoWXBags,
+        ToggleAllBags = toggleWoWXBags,
+        OpenAllBags = showWoWXBags,
+        OpenBackpack = showWoWXBags,
+        OpenBag = showWoWXBags,
+        CloseAllBags = closeWoWXBags,
+        CloseBackpack = closeWoWXBags,
+        CloseBag = closeWoWXBags,
+    }
+    for name, handler in pairs(hooks) do
+        if type(_G[name]) == "function" then
+            hooksecurefunc(name, handler)
         end
     end
 end
@@ -2505,9 +2595,8 @@ updateFrame:SetScript("OnEvent", function(_, event)
     end
 
     if event == "MERCHANT_SHOW" then
-        -- Auto-open WoWX bags when talking to a merchant/vendor
-        local cfg = ensureConfig()
-        if cfg and cfg.enabled and cfg.showBags and GPX.db and GPX.db.enabled then
+        -- Auto-open WoWX bags when talking to a merchant/vendor (controller mode only)
+        if GPX.ActionButtons:GetShowState() then
             local frame = GPX.ActionButtons:EnsureBagWindow()
             if frame and not frame:IsShown() then
                 GPX.ActionButtons:RefreshBagWindow()
@@ -2532,8 +2621,7 @@ updateFrame:SetScript("OnEvent", function(_, event)
     end
 
     if event == "MAIL_SHOW" then
-        local cfg = ensureConfig()
-        if cfg and cfg.enabled and cfg.showBags and GPX.db and GPX.db.enabled then
+        if GPX.ActionButtons:GetShowState() then
             local frame = GPX.ActionButtons:EnsureBagWindow()
             if frame and not frame:IsShown() then
                 GPX.ActionButtons:RefreshBagWindow()
@@ -2557,6 +2645,10 @@ updateFrame:SetScript("OnEvent", function(_, event)
     end
 
     if event == "BANKFRAME_OPENED" then
+        -- Keyboard mode: leave Blizzard's bank alone.
+        if not GPX.ActionButtons:GetShowState() then
+            return
+        end
         GPX.ActionButtons._bankIsOpen = true
         GPX.ActionButtons._reopenBagAfterBank = GPX.ActionButtons.bagWindow and GPX.ActionButtons.bagWindow:IsShown() or false
         if GPX.ActionButtons.bagWindow and GPX.ActionButtons.bagWindow:IsShown() then

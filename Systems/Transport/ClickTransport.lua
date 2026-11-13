@@ -89,49 +89,11 @@ function CT:CellFor(state, columnIndex, useModifierPages)
     }
 end
 
--- Returns the bonusbar-conditional macro text for ACTIONBUTTON commands so
--- Runeshroud / bonus-bar page swaps execute the correct slot without needing
--- combat-time attribute rewrites.
--- Returns nil for all multibar commands (those use direct slot action).
-function CT:ConditionalMacroForCommand(command)
-    if not command then return nil end
-    local actionIndex = tonumber(command:match("^ACTIONBUTTON(%d+)$"))
-    if actionIndex then
-        if GPX and GPX.IsCoAStealthPageClass and GPX:IsCoAStealthPageClass("player") then
-            return "/click [stealth] BonusActionButton" .. actionIndex .. "; ActionButton" .. actionIndex
-        end
-
-        if GPX and GPX.IsDruidDualStealthPagerClass and GPX:IsDruidDualStealthPagerClass("player") then
-            return "/click [stealth] BonusActionButton" .. actionIndex
-                .. "; [bonusbar:5] BonusActionButton" .. actionIndex
-                .. "; [bonusbar:4] BonusActionButton" .. actionIndex
-                .. "; [bonusbar:3] BonusActionButton" .. actionIndex
-                .. "; [bonusbar:2] BonusActionButton" .. actionIndex
-                .. "; [bonusbar:1] BonusActionButton" .. actionIndex
-                .. "; [stance] BonusActionButton" .. actionIndex
-                .. "; ActionButton" .. actionIndex
-        end
-
-        local _, classFile = UnitClass("player")
-        local isCoA = GPX and GPX.IsCoARealm and GPX:IsCoARealm()
-
-        local macro = "/click [bonusbar:5] BonusActionButton" .. actionIndex
-            .. "; [bonusbar:4] BonusActionButton" .. actionIndex
-            .. "; [bonusbar:3] BonusActionButton" .. actionIndex
-            .. "; [bonusbar:2] BonusActionButton" .. actionIndex
-            .. "; [bonusbar:1] BonusActionButton" .. actionIndex
-        if classFile == "DRUID" and not isCoA then
-            -- Non-CoA fallback: some realms expose bonus offset reliably but do not
-            -- always honor [bonusbar] at cast time during form swaps.
-            macro = macro .. "; [stance] BonusActionButton" .. actionIndex
-        end
-        macro = macro .. "; ActionButton" .. actionIndex
-        return macro
-    end
-    -- Multibar buttons must NOT route through native Blizzard bar frames;
-    -- UpdateBlizzardBars() reparents those to a hidden frame so "/click" silently
-    -- fails. Direct action slot execution is used instead.
-    return nil
+-- Returns the base-row index (1..12) when `command` is an ACTIONBUTTONn command.
+-- Only those commands page with the engine's action bar state; the modifier
+-- rows are fixed slot ranges (see multibarStaticOffset).
+function CT:PagedIndexForCommand(command)
+    return tonumber(command and command:match("^ACTIONBUTTON(%d+)$"))
 end
 
 function CT:IsNativeUtilitySlot(slot)
@@ -185,8 +147,24 @@ end
 function CT:WriteAttribute(button, prefix, command, resolvedSlot)
     if not button then return end
     local p = prefix and (prefix .. "-") or ""
-    local proxyMacro = self:ConditionalMacroForCommand(command)
-    local slot = resolvedSlot or self:StaticSlotForCommand(command)
+    local pagedIndex = self:PagedIndexForCommand(command)
+    local pager = GPX.Pager
+    local slot
+    if pagedIndex then
+        slot = (pager and pager:GetSlot(pagedIndex)) or resolvedSlot or pagedIndex
+    else
+        slot = resolvedSlot or self:StaticSlotForCommand(command)
+    end
+
+    -- Pager ownership: base-row buttons follow the engine page inside the secure
+    -- environment (works in combat); everything else is static.
+    if pager then
+        if pagedIndex then
+            pager:Register(button, p, pagedIndex)
+        else
+            pager:Unregister(button, p)
+        end
+    end
 
     -- Clear all variants so no stale state can bleed through.
     button:SetAttribute(p .. "type",        nil)
@@ -207,12 +185,7 @@ function CT:WriteAttribute(button, prefix, command, resolvedSlot)
         return
     end
 
-    if proxyMacro then
-        button:SetAttribute(p .. "type",       "macro")
-        button:SetAttribute(p .. "macrotext",  proxyMacro)
-        button:SetAttribute(p .. "type1",      "macro")
-        button:SetAttribute(p .. "macrotext1", proxyMacro)
-    elseif slot then
+    if slot then
         button:SetAttribute(p .. "type",    "action")
         button:SetAttribute(p .. "action",  slot)
         button:SetAttribute(p .. "type1",   "action")
@@ -246,6 +219,56 @@ function CT:ApplyButtonModifiers(button, slotMap, commandMap)
 end
 
 -- ---------------------------------------------------------------------------
+-- Click registration (modern-engine secure templates)
+-- Key bindings (SetBindingClick) deliver a DOWN click on key press and an UP click
+-- on release. Secure action buttons only act on one of them, chosen by the
+-- `useOnKeyDown` attribute (Blizzard bars: cvar ActionButtonUseKeyDown). A button
+-- registered for LeftButtonUp only never sees the down click, so with useOnKeyDown
+-- defaulting to true nothing fired. Same pattern as Blizzard / LibActionButton.
+-- ---------------------------------------------------------------------------
+CT.clickButtons = setmetatable({}, { __mode = "k" })
+
+function CT:UseKeyDown()
+    return (GetCVarBool and GetCVarBool("ActionButtonUseKeyDown")) and true or false
+end
+
+function CT:ConfigureClicks(button)
+    if not button then return end
+    button:RegisterForClicks("AnyUp", "AnyDown")
+    self.clickButtons[button] = true
+    if not InCombatLockdown() then
+        button:SetAttribute("useOnKeyDown", self:UseKeyDown())
+    else
+        self.pendingClickSync = true
+    end
+end
+
+function CT:SyncClickMode()
+    if InCombatLockdown() then
+        self.pendingClickSync = true
+        return
+    end
+    self.pendingClickSync = nil
+    local value = self:UseKeyDown()
+    for button in pairs(self.clickButtons) do
+        button:SetAttribute("useOnKeyDown", value)
+    end
+end
+
+local clickSyncFrame = CreateFrame("Frame")
+clickSyncFrame:RegisterEvent("CVAR_UPDATE")
+clickSyncFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+clickSyncFrame:SetScript("OnEvent", function(_, event, name)
+    if event == "CVAR_UPDATE" then
+        if name == "ActionButtonUseKeyDown" then
+            CT:SyncClickMode()
+        end
+    elseif CT.pendingClickSync then
+        CT:SyncClickMode()
+    end
+end)
+
+-- ---------------------------------------------------------------------------
 -- Proxy button registry
 -- One hidden SecureActionButtonTemplate per unique command string.
 -- GamePadX binds keys to these frames; they are never visible.
@@ -265,7 +288,7 @@ function CT:EnsureProxyButton(command)
     local name = self:ProxyButtonName(command)
     if not name then return end
     local button = CreateFrame("CheckButton", name, hiddenParent, "SecureActionButtonTemplate")
-    button:RegisterForClicks("LeftButtonUp")
+    self:ConfigureClicks(button)
     button:Hide()
     button:SetAttribute("unit", nil)
     button:SetAttribute("checkselfcast", nil)

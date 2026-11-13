@@ -1,0 +1,4 @@
+<Bindings>
+    <Binding name="CLICK WoWXTargetFriendly:LeftButton" header="WOWX" runOnUp="true"/>
+    <Binding name="CLICK WoWXTargetHostile:LeftButton" runOnUp="true"/>
+</Bindings>
