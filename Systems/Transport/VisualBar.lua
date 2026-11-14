@@ -393,8 +393,12 @@ local managedBlizzardBars = {
     "StanceBar",
     "PossessActionBar",
     "PetActionBar",
+    -- Blizzard's XP/Rep bar can only be moved in Edit Mode, not turned off; WoWX has its own.
+    "StatusTrackingBarManager",
+    "MainStatusTrackingBarContainer",
+    "SecondaryStatusTrackingBarContainer",
     -- MicroMenu is intentionally NOT managed: WoWX leaves Blizzard's micro menu (and its
-    -- Edit Mode layout) alone. BagsBar is native in keyboard mode, hidden in controller mode.
+    -- Edit Mode layout) alone. BagsBar is always native (Blizzard owns bags).
     "BagsBar",
     -- Legacy (3.3.5-era) frames.
     "MainMenuBar",

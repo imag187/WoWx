@@ -33,6 +33,16 @@ Primary goal: avoid retracing dead ends and preserve the actual discoveries from
 - ConsolePort license is Artistic-2.0 (verified on GitHub): reuse/modification is allowed with attribution, change notes and no use of the ConsolePort name. Still default to original code that follows its patterns; alternative is to coexist with ConsolePort modules rather than fork.
 - Release: ship WoWX-ABP as its own addon on CurseForge (Interface 16001, Forever only), separate from the future WoWX UI.
 
+### DS4 Probing Plan (next session, 2026-11-14)
+
+Goal: WoWX owns the bar in controller mode with native gamepad UI option ON. Prior WoWX attempt used a pseudo-macro method and failed; do NOT repeat it. Use secure `type=action` buttons (same as the kb path) bound to PAD keys.
+1. Pair DS4, `/dump C_GamePad.IsEnabled()`, `/dump C_GamePad.GetAllDeviceIDs()`; record which `PAD*` key names the DS4 emits (`PAD1..PAD6`, `PADLTRIGGER`, `PADRTRIGGER`, `PADLSHOULDER`, `PADRSHOULDER`, `PADDUP`..., `PADLSTICK`, `PADRSTICK`, `PADSYSTEM`, `PADSOCIAL`, `PADFORWARD`, `PADBACK`).
+2. Dump Blizzard defaults per key: `GetBindingAction("PAD1")` etc. Native buttons 5-8 map to `GAMEPADACTIONBUTTON5..8` (auto attack, cancel, jump...). List every PAD key and its command before changing anything.
+3. Find the native gamepad bar frames: `/fstack` over the bar (`GamepadMainActionBarFrame` is the current guess), record child button names/templates and where icons/hotkeys come from; confirm `Bar:UpdateNativeGamepadBar` hides it with the gamepad UI option on.
+4. Spike: strip `GAMEPADACTIONBUTTON*`/`GAMEPADLEFTMOD`/`GAMEPADRIGHTMOD` (in-memory, `SetBinding(key, nil)`), bind PAD keys to `CLICK WoWXActionButtonN:LeftButton`, check cast in and out of combat, and that `useOnKeyDown` timing matches.
+5. Check whether Forever stores gamepad slots separately (ConsolePort `db.Actionbar.Gamepad` BarOffset/Width/Stance) versus the kb pages; decide whether WoWX slots 1-12/13-60 are shared.
+6. Capture everything with `/wowx diag dump`; update this file with findings.
+
 ### North Star (user, 2026-11-13)
 
 Be the best lightweight controller UI that has ever existed. Old-school 3.3.5 operation was perfect and has been moved to a branch; the goal is to get that feel back on WoW Forever.
@@ -155,6 +165,7 @@ User decision: keyboard mode uses Blizzard's bags, bank, micro menu and Edit Mod
 - 2026-11-13 later: B / SHIFT-B / bag commands were still being CLEARED by `GamePadX.lua` (`blizzardDirectKeysToClear`, `blizzardBagCommandsToClear`, `suppressBlizzardBagBinds`) from the old "WoWX owns bags" era, so Blizzard's B did nothing. Removed all of it (bindings are in-memory only; `/reload` restores). Blizzard's combined bag WINDOW cannot be moved by WoWX/Edit Mode (user); only the bag bar (`BagsBar`) is movable.
 - Config General tab cleaned: Spellbook/Gridbook buttons and the "Spell Grid" system toggle removed (modules retired); XP checkbox no longer overlaps "Layout Profiles" (button grid re-laid out in 3 columns); new "Rows: n" button. Classes/resource editor tab is kept (possible future custom/new classes) but is not part of the ABP goal.
 - ROWS: `layoutDefaults.main.rows` (1-3, saved inside the layout profile). `GetMainLayoutMetrics` returns `rows`/`perRow`; rows are reduced until they divide the visible button count (keeps the shell rectangle correct: 12 -> 1/2/3, controller 8 -> 1/2). Button index order is row-major; width/height/placement in `Bar:UpdateAll`/`UpdateButton`. Also an "Rows" slider in the main bar Edit panel. UNVERIFIED in-game.
+- Blizzard XP/Rep bar (user: can only be moved, not toggled) is SUPPRESSED while WoWX replaces bars: `StatusTrackingBarManager`, `MainStatusTrackingBarContainer`, `SecondaryStatusTrackingBarContainer` are in `managedBlizzardBars` (reparented to the hidden parent out of combat). Frame names are retail-standard, UNVERIFIED on Forever; if the bar still shows, `/fstack` it and add the real name. 
 - Profiles: layout snapshot = layout table (incl. rows), all `*Point`, all `*Scale` (incl. `progressScale`), alignment grid. XP bar visibility (`showProgress`) is NOT in the snapshot. Save/load via the Profiles tab; `ApplyLayoutProfile` now re-places main/XP/bag/stance frames itself (they only read their stored point at creation before); still to verify in-game that load re-applies placement without reload.
 - Layout Edit is ONE mode (user: "make it like Bartender"): `/wowx unlock` / minimap Shift-click unlocks every element (bar, modifier indicator, stance, pet, vehicle, micro, XP/Rep bar) with drag, corner scale handle and an Edit panel. The XP/Rep bar now has a Scale (`progressScale`, saved in layout profiles) and corner scale handle like the rest, plus Width/Height/Opacity in its Edit panel. `/wowx bar progresslock` is just an alias of Layout Edit. The "Visible Buttons" slider was removed from the main bar Edit panel (button count is not user-editable; controller mode still uses its own 8-button count).
 
