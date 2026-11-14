@@ -3458,18 +3458,6 @@ local blizzardDirectKeysToClear = {
     -- Suppress stock Ctrl+Q/E audio toggles while controller modifiers are active.
     "CTRL-Q",
     "CTRL-E",
-    -- Suppress default bag toggles so WoWX owns bag UX.
-    "B",
-    "SHIFT-B",
-}
-
-local blizzardBagCommandsToClear = {
-    "TOGGLEBACKPACK",
-    "OPENALLBAGS",
-    "TOGGLEBAG1",
-    "TOGGLEBAG2",
-    "TOGGLEBAG3",
-    "TOGGLEBAG4",
 }
 
 function GPX:IsSpecialActionStateActive()
@@ -3968,25 +3956,6 @@ function GPX:ApplyBindings(silent)
         end
     end
 
-    local function suppressBlizzardBagBinds()
-        for _, command in ipairs(blizzardBagCommandsToClear) do
-            local keys = { GetBindingKey(command) }
-            for _, key in ipairs(keys) do
-                if key and key ~= "" then
-                    local currentAction = tostring(GetBindingAction(key) or "")
-                    if currentAction == "" then
-                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")", cleared = true }
-                    else
-                    rememberPrevious(key)
-                    if SetBinding(key, nil) then
-                        self.appliedBindings[key] = { mode = "binding", command = "(cleared " .. command .. ")", cleared = true }
-                    end
-                    end
-                end
-            end
-        end
-    end
-
     local function applySingleBinding(key, command, slotIndex)
         if not key or key == "" then
             return false
@@ -4135,7 +4104,6 @@ function GPX:ApplyBindings(silent)
 
     suppressBlizzardPageSwitchBinds()
     suppressBlizzardCombatUiBinds()
-    suppressBlizzardBagBinds()
     suppressBlizzardDirectKeys()
 
     local function applyLegacyProfileBindings()

@@ -121,7 +121,6 @@ local systemSpecs = {
     { id = "transport", label = "Action Transport", hint = "Click/proxy action execution layer.", locked = true },
     { id = "gamepad", label = "Gamepad Input", hint = "Controller mappings and mouselook tools." },
     { id = "keyboard", label = "Keyboard Input", hint = "Keyboard-focused mapping surfaces." },
-    { id = "spellgrid", label = "Spell Grid", hint = "Gridbook and spell-ring assignment surfaces." },
     { id = "cues", label = "Combat Cues", hint = "Dispel prompts and unit frame cue overlays." },
     { id = "unitframes", label = "Unit Frames", hint = "WoWX-owned unit frame system foundation." },
 }
@@ -980,21 +979,27 @@ function UI:CreateFrame()
 
     frame.buttons = {}
     local specs = {
-        { key = "init", label = "Init Wizard", x = 14, y = -42, width = 116, click = function() GPX:OpenSetupWizard("init") end },
-        { key = "recal", label = "Recalibrate", x = 140, y = -42, width = 116, click = function() GPX:OpenSetupWizard("recal") end },
-        { key = "toggleMode", label = "Enable / Disable", x = 266, y = -42, width = 140, click = function() GPX.db.enabled = not GPX.db.enabled if GPX.db.enabled then GPX:ApplyBindings() else GPX:ClearBindings() end UI:Refresh() end },
+        { key = "lockBar", label = "Layout Edit", x = 14, y = -42, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash(GPX.db.ui.visualBar.locked and "unlock" or "lock") end UI:Refresh() end },
+        { key = "buttonEdit", label = "Button Lock", x = 140, y = -42, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash((GPX.db.ui.visualBar.buttonLocked ~= false) and "buttonunlock" or "buttonlock") end UI:Refresh() end },
+        { key = "resetBar", label = "Reset Bar", x = 266, y = -42, width = 140, click = function() if GPX.VisualBar then GPX.VisualBar:Slash("reset") end UI:Refresh() end },
         { key = "toggleBar", label = "Show / Hide Bar", x = 14, y = -82, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash("toggle") end UI:Refresh() end },
-        { key = "lockBar", label = "Layout Edit", x = 140, y = -82, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash(GPX.db.ui.visualBar.locked and "unlock" or "lock") end UI:Refresh() end },
-        { key = "resetBar", label = "Reset Bar", x = 266, y = -82, width = 140, click = function() if GPX.VisualBar then GPX.VisualBar:Slash("reset") end UI:Refresh() end },
-        { key = "toggleMinimap", label = "Minimap Button", x = 14, y = -122, width = 116, click = function() if GPX.MinimapButton then GPX.MinimapButton:Toggle() end UI:Refresh() end },
-        { key = "reload", label = "Reapply Binds", x = 140, y = -122, width = 116, click = function() GPX:ClearBindings() GPX:ApplyBindings() UI:Refresh() end },
-        { key = "focusBar", label = "Focus Bar", x = 266, y = -122, width = 140, click = function() if GPX.UIMode then GPX.UIMode:Enter("bar", { returnContext = "settings" }) end end },
-        { key = "spellbook", label = "Open Spellbook", x = 14, y = -162, width = 116, click = function() if GPX.SpellbookUI then GPX.SpellbookUI:Open(nil, "settings") end end },
-        { key = "menuNav", label = "Menu Navigator", x = 140, y = -162, width = 140, click = function() GPX:OpenMenuNav("settings") end },
-        { key = "buttonEdit", label = "Button Lock", x = 290, y = -162, width = 116, click = function() if GPX.VisualBar then GPX.VisualBar:Slash((GPX.db.ui.visualBar.buttonLocked ~= false) and "buttonunlock" or "buttonlock") end UI:Refresh() end },
-        { key = "gridbook", label = "Open Gridbook", x = 14, y = -202, width = 116, click = function() GPX:Slash("gridbook") end },
-        { key = "layoutProfiles", label = "Layout Profiles", x = 266, y = -202, width = 140, click = function() if setTab then setTab("profiles") end end },
-        { key = "close", label = "Close", x = 290, y = -242, width = 116, click = function() frame:Hide() end },
+        { key = "rows", label = "Rows", x = 140, y = -82, width = 116, click = function()
+            if GPX.VisualBar then
+                local layout = GPX.VisualBar:GetLayoutConfig("main")
+                layout.rows = ((tonumber(layout.rows) or 1) % 3) + 1
+                GPX.VisualBar:UpdateAll()
+            end
+            UI:Refresh()
+        end },
+        { key = "toggleMode", label = "Enable / Disable", x = 14, y = -122, width = 116, click = function() GPX.db.enabled = not GPX.db.enabled if GPX.db.enabled then GPX:ApplyBindings() else GPX:ClearBindings() end UI:Refresh() end },
+        { key = "toggleMinimap", label = "Minimap Button", x = 140, y = -122, width = 116, click = function() if GPX.MinimapButton then GPX.MinimapButton:Toggle() end UI:Refresh() end },
+        { key = "layoutProfiles", label = "Layout Profiles", x = 266, y = -122, width = 140, click = function() if setTab then setTab("profiles") end end },
+        { key = "init", label = "Init Wizard", x = 14, y = -162, width = 116, click = function() GPX:OpenSetupWizard("init") end },
+        { key = "recal", label = "Recalibrate", x = 140, y = -162, width = 116, click = function() GPX:OpenSetupWizard("recal") end },
+        { key = "focusBar", label = "Focus Bar", x = 266, y = -162, width = 140, click = function() if GPX.UIMode then GPX.UIMode:Enter("bar", { returnContext = "settings" }) end end },
+        { key = "reload", label = "Reapply Binds", x = 14, y = -202, width = 116, click = function() GPX:ClearBindings() GPX:ApplyBindings() UI:Refresh() end },
+        { key = "menuNav", label = "Menu Navigator", x = 140, y = -202, width = 116, click = function() GPX:OpenMenuNav("settings") end },
+        { key = "close", label = "Close", x = 266, y = -202, width = 140, click = function() frame:Hide() end },
     }
 
     for _, spec in ipairs(specs) do
@@ -1264,7 +1269,7 @@ function UI:CreateFrame()
         local check = CreateFrame("CheckButton", nil, actionPanel, "UICheckButtonTemplate")
         check:SetWidth(24)
         check:SetHeight(24)
-        check:SetPoint("TOPLEFT", actionPanel, "TOPLEFT", 266, -204)
+        check:SetPoint("TOPLEFT", actionPanel, "TOPLEFT", 266, -85)
         local label = actionPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         label:SetPoint("LEFT", check, "RIGHT", 4, 0)
         label:SetText("Show XP/Rep Bar")
@@ -1466,6 +1471,11 @@ function UI:RefreshUtilityButtons()
         if self.frame.barOptions.toggleProgress then
             self.frame.barOptions.toggleProgress:SetChecked(cfg.showProgress ~= false)
         end
+    end
+
+    if self.frame.buttons and self.frame.buttons.rows and GPX.VisualBar then
+        local metrics = GPX.VisualBar:GetMainLayoutMetrics()
+        self.frame.buttons.rows:SetText("Rows: " .. tostring(metrics.rows))
     end
 end
 

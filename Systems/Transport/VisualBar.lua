@@ -59,6 +59,7 @@ local placementRows = {
 local layoutDefaults = {
     main = {
         buttonCount = 12,
+        rows = 1,
         buttonWidth = 56,
         buttonHeight = 90,
         buttonSpacing = 6,
@@ -265,6 +266,13 @@ function Bar:ApplyLayoutProfile(profileName)
     if snapshot.vehicleScale ~= nil then config.vehicleScale = snapshot.vehicleScale end
     if snapshot.progressScale ~= nil then config.progressScale = snapshot.progressScale end
     config.layoutProfile = name
+    -- Most frames only read their stored point at creation, so re-place them now.
+    if not InCombatLockdown() then
+        if self.frame then self:ApplyStoredPosition() end
+        self:ApplyStoredProgressPosition()
+        self:ApplyStoredBagPosition()
+        self:SyncStanceFramePositions()
+    end
     self:UpdateAll()
     return true
 end
@@ -1187,9 +1195,17 @@ end
 
 function Bar:GetMainLayoutMetrics()
     local layout = self:GetLayoutConfig("main")
+    local visibleCount = self:GetVisibleButtonCount()
+    -- Only row counts that divide the button count evenly keep the shell rectangular.
+    local rows = clamp(math.floor((tonumber(layout.rows) or 1) + 0.5), 1, 3)
+    while rows > 1 and visibleCount % rows ~= 0 do
+        rows = rows - 1
+    end
     return {
         layout = layout,
-        visibleCount = self:GetVisibleButtonCount(),
+        visibleCount = visibleCount,
+        rows = rows,
+        perRow = math.ceil(visibleCount / rows),
         buttonWidth = math.floor(tonumber(layout.buttonWidth) or layoutDefaults.main.buttonWidth),
         buttonHeight = math.floor(tonumber(layout.buttonHeight) or layoutDefaults.main.buttonHeight),
         spacing = math.floor(tonumber(layout.buttonSpacing) or layoutDefaults.main.buttonSpacing),
@@ -2009,6 +2025,9 @@ function Bar:GetEditorControls(kind)
         add("Opacity", 0.35, 1.0, 0.01,
             function() return tonumber(layout.alpha) or layoutDefaults.main.alpha end,
             function(value) layout.alpha = clamp(value, 0.35, 1.0) end)
+        add("Rows", 1, 3, 1,
+            function() return tonumber(layout.rows) or 1 end,
+            function(value) layout.rows = clamp(math.floor(value + 0.5), 1, 3) end)
     elseif kind == "bag" then
         add("Scale", 0.5, 2.0, 0.01,
             function() return select(1, self:GetScaleForKind("bag")) end,
@@ -4047,7 +4066,9 @@ function Bar:UpdateButton(index, state)
             button:SetWidth(buttonWidth)
             button:SetHeight(buttonHeight)
             button:ClearAllPoints()
-            button:SetPoint("TOPLEFT", self.frame, "TOPLEFT", padding + ((index - 1) * (buttonWidth + spacing)), -buttonTopOffset)
+            button:SetPoint("TOPLEFT", self.frame, "TOPLEFT",
+                padding + (((index - 1) % metrics.perRow) * (buttonWidth + spacing)),
+                -(buttonTopOffset + (math.floor((index - 1) / metrics.perRow) * (buttonHeight + spacing))))
             if hasAction then
                 ensureSlotWrapper(button)
                 if button.slotPanel then
@@ -4181,8 +4202,8 @@ function Bar:UpdateAll()
     local spacing = metrics.spacing
     local padding = metrics.padding
     local chromeAlpha = metrics.chromeAlpha
-    local width = (padding * 2) + (visibleCount * buttonWidth) + ((visibleCount - 1) * spacing)
-    if width < 460 then
+    local width = (padding * 2) + (metrics.perRow * buttonWidth) + ((metrics.perRow - 1) * spacing)
+    if metrics.rows == 1 and width < 460 then
         width = 460
     end
 
@@ -4205,7 +4226,7 @@ function Bar:UpdateAll()
     end
     self.frame._wowxButtonTopOffset = buttonTopOffset
     if not inCombat then
-        self.frame:SetHeight(buttonHeight + buttonTopOffset + bottomInset)
+        self.frame:SetHeight((metrics.rows * buttonHeight) + ((metrics.rows - 1) * spacing) + buttonTopOffset + bottomInset)
     end
     self.frame.title:SetText("Action Bar")
     self.frame.pageText:SetText(pageLabel)
