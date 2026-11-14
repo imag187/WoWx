@@ -3861,7 +3861,11 @@ function Bar:UpdateButtonVisualState(button)
         self:ApplyCooldown(button, display.slot, start, duration, enable)
 
         local usable, oom = IsUsableAction(display.slot)
-        local inRange = clean(IsActionInRange(display.slot))
+        local rangeRaw = IsActionInRange and IsActionInRange(display.slot)
+        local inRange = clean(rangeRaw)
+        -- Modern clients return true/false/nil; legacy returned 1/0/nil.
+        local outOfRange = (inRange == false or inRange == 0)
+        local rangeIsSecret = isSecret(rangeRaw)
         if isSecret(usable) then usable = true end
         oom = clean(oom)
         local actionType, actionID = nil, nil
@@ -3875,7 +3879,7 @@ function Bar:UpdateButtonVisualState(button)
         local red, green, blue = 1.0, 1.0, 1.0
         local finalAlpha = alpha
 
-        if inRange == 0 then
+        if outOfRange then
             red, green, blue = 0.95, 0.22, 0.22
             finalAlpha = math.max(0.35, alpha * 0.7)
             borderR, borderG, borderB, borderA = 0.9, 0.22, 0.22, 0.95
@@ -3890,6 +3894,10 @@ function Bar:UpdateButtonVisualState(button)
         end
 
         button.icon:SetVertexColor(red, green, blue)
+        if rangeIsSecret and button.icon.SetVertexColorFromBoolean and CreateColor then
+            -- Combat: the range result is opaque, so only the widget may branch on it.
+            pcall(button.icon.SetVertexColorFromBoolean, button.icon, rangeRaw, CreateColor(red, green, blue, 1), CreateColor(0.95, 0.22, 0.22, 1))
+        end
         button:SetAlpha(finalAlpha)
         if button.countText then
             local countToShow = stackCount

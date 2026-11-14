@@ -32,6 +32,7 @@ Primary goal: avoid retracing dead ends and preserve the actual discoveries from
 - Order: ABP kb+mouse -> ABP controller bindings (native-layout preset) -> targeting (`NativeTargeting.lua`) -> bags/bank -> spell presentation -> D-pad frame navigation (largest piece; ConsolePort_Cursor equivalent).
 - ConsolePort license is Artistic-2.0 (verified on GitHub): reuse/modification is allowed with attribution, change notes and no use of the ConsolePort name. Still default to original code that follows its patterns; alternative is to coexist with ConsolePort modules rather than fork.
 - Release: ship WoWX-ABP as its own addon on CurseForge (Interface 16001, Forever only), separate from the future WoWX UI.
+- Product positioning (user, 2026-11-13): "Bartender for the gamepad UI". WoWX-ABP should be an actual bar that fits the WoW look, with Bartender-style layout/profiles. Per-slot key assignment: any slot can take any PAD key (or kb key); the default order (d-pad group then face buttons) is only a preset. Design: a per-slot `slot -> key` map (the Keybinds tab `action1..N` fields / `GetSetupActionKey` already hold labels) must drive the REAL bindings (`CLICK WoWXActionButtonN:LeftButton`) and the on-bar hotkey/glyph text from one source, so labels can never disagree with what fires.
 
 ### DS4 Probing Plan (next session, 2026-11-14)
 
@@ -100,6 +101,7 @@ Superseded: the "Non-Negotiable Agent Rules (CoA Fork)" and all Ascension click/
 - Symptom that exposed it: bar icons stuck on the pre-combat/pre-modifier state until combat dropped (keys still fired correctly, because secure execution is unaffected). Cause: `Compat.lua` `CooldownFrame_SetTimer` compared `duration` -> error aborted `Bar:UpdateAll` mid-loop, leaving later buttons stale. 50 captured errors were all this or aura reads (`GetDebuffDataByIndex` in DispelPrompt/UnitFrameCues).
 - Fix: `WoWXIsSecret()` (Compat.lua, wraps `issecretvalue`); `CooldownFrame_SetTimer` passes secrets straight to the widget; VisualBar `isSecret/anySecret/clean` guard cooldown, GCD, charges, usable, range, count, equipped, queued, overlay reads; `UpdateAll` runs each `UpdateButton` in pcall (logged via `WoWXLogRuntimeError`); `UnitBuff/UnitDebuff` shims pcall and return nil when secret.
 - RULE: any new code reading cooldown/aura/charge/health-style API results must go through `WoWXIsSecret`/`clean` before comparing. Possible better path (untested): `C_ActionBar.GetActionCooldownDuration` + `Cooldown:SetCooldownFromDurationObject`.
+- Range (2026-11-13): `IsActionInRange` returns true/false/nil on this client, not 1/0; the old `== 0` check never fired, so out-of-range never turned red. `UpdateButtonVisualState` now treats `false` or `0` as out of range; if the value is secret (combat) it tries `icon:SetVertexColorFromBoolean` (pcall, UNVERIFIED that Forever has it).
 - Diag has an "Action slot probe" INFO line (skipped in combat) for per-slot action/spell cooldown + override IDs; added to investigate "new Forever spells don't show cooldown" (unresolved, may also be this issue).
 
 ## 2026-11-13 Confirmed in-game (Grell, Paladin, Forever)
